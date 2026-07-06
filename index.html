@@ -1,0 +1,3827 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8"/>
+<title>Cricket DCO Dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
+<style>
+/* ─── Design tokens ─────────────────────────────────────── */
+:root {
+  --bg:           #EEF2F6;
+  --card:         #FFFFFF;
+  --recess:       #F4F7FA;
+  --border:       #E8EDF2;
+  --border-s:     #D5DCE3;
+  --fg:           #0F1B2D;
+  --fg2:          #4A5568;
+  --muted:        #8A94A6;
+  --accent:       #5BC500;
+  --accent-dark:  #3F8D00;
+  --accent-soft:  #E9F8D8;
+  --blue:         #1E8AFF;
+  --blue-soft:    #E1EEFE;
+  --good:         #2E7D32;
+  --good-bg:      #E2F4D2;
+  --bad:          #C2185B;
+  --bad-bg:       #FCE0EC;
+  --purple:       #A050BE;
+  --orange:       #FF8200;
+  --font-d: "Poppins", "Work Sans", -apple-system, system-ui, sans-serif;
+  --font-b: "Work Sans", "Poppins", -apple-system, system-ui, sans-serif;
+  --font-m: "SF Mono", "JetBrains Mono", "Menlo", monospace;
+  --radius: 18px;
+}
+[data-theme="dark"] {
+  --bg:           #0E141C;
+  --card:         #161D27;
+  --recess:       #111821;
+  --border:       #1F2935;
+  --border-s:     #2D3947;
+  --fg:           #F4F7FA;
+  --fg2:          #B6C0CC;
+  --muted:        #7C8898;
+  --accent-soft:  rgba(91,197,0,.15);
+  --blue-soft:    rgba(30,138,255,.18);
+  --good:         #82E02E;
+  --good-bg:      rgba(91,197,0,.18);
+  --bad:          #FF8895;
+  --bad-bg:       rgba(229,32,46,.18);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font-b);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ─── Auth overlay ──────────────────────────────────────── */
+#authOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+/* Subtle animated grid backdrop */
+#authOverlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: .5;
+  pointer-events: none;
+}
+
+.auth-card {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 40px 44px 44px;
+  width: 420px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.08);
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+.auth-brand img {
+  height: 28px;
+  width: auto;
+}
+.auth-brand-fallback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-d);
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--accent);
+  letter-spacing: -.3px;
+}
+.auth-brand-fallback .dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.auth-title {
+  font-family: var(--font-d);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--fg);
+  letter-spacing: -.4px;
+  margin-bottom: 4px;
+}
+.auth-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 28px;
+}
+
+.auth-field {
+  margin-bottom: 16px;
+}
+.auth-field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg2);
+  margin-bottom: 6px;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+}
+.auth-field input {
+  width: 100%;
+  background: var(--recess);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 11px 14px;
+  font-size: 14px;
+  color: var(--fg);
+  font-family: var(--font-b);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.auth-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(91,197,0,.15);
+}
+.auth-field input::placeholder { color: var(--muted); }
+
+.auth-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+.auth-remember {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--fg2);
+  cursor: pointer;
+  user-select: none;
+}
+.auth-remember input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 15px; height: 15px;
+  cursor: pointer;
+}
+
+.auth-btn {
+  width: 100%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 13px;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--font-d);
+  cursor: pointer;
+  letter-spacing: -.1px;
+  transition: opacity .15s, transform .1s;
+}
+[data-theme="dark"] .auth-btn { color: #0a160a; }
+.auth-btn:hover  { opacity: .88; }
+.auth-btn:active { transform: scale(.98); }
+.auth-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.auth-error {
+  display: none;
+  background: var(--bad-bg);
+  border: 1px solid rgba(194,24,91,.2);
+  color: var(--bad);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+.auth-error.visible { display: block; }
+
+.auth-footer {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 22px;
+}
+
+/* ─── App shell (hidden until auth) ────────────────────── */
+#appLayout {
+  display: none;
+  height: 100vh;
+}
+
+/* ─── Shared utility ─────────────────────────────────────── */
+.btn-ghost {
+  background: var(--card); color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 9px 16px; border-radius: 999px;
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  font-family: var(--font-b);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-ghost:hover { background: var(--recess); }
+.btn-primary {
+  background: var(--accent); color: #fff;
+  border: 1px solid var(--accent-dark);
+  padding: 9px 18px; border-radius: 999px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  font-family: var(--font-b);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+[data-theme="dark"] .btn-primary { color: #0a160a; }
+.btn-primary:hover { opacity: .88; }
+.btn-sm {
+  padding: 6px 14px; font-size: 12px; border-radius: 999px;
+}
+svg { display: block; }
+
+/* ─── Module 2: App Shell ────────────────────────────────── */
+#appLayout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+.sidebar {
+  width: 224px;
+  flex-shrink: 0;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px;
+  gap: 2px;
+  overflow-y: auto;
+}
+.sidebar-logo {
+  padding: 4px 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sidebar-logo img {
+  height: 24px;
+  width: auto;
+  display: block;
+}
+.sidebar-logo-fallback {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-d);
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--accent);
+  letter-spacing: -.3px;
+}
+.sidebar-logo-fallback .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+[data-theme="dark"] .sidebar-logo img {
+  filter: brightness(0) invert(1);
+}
+
+.nav-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 14px 10px 6px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  color: var(--fg2);
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-b);
+  transition: background .12s, color .12s;
+}
+.nav-item:hover { background: var(--recess); color: var(--fg); }
+.nav-item.active {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-weight: 600;
+}
+[data-theme="dark"] .nav-item.active { color: var(--accent); }
+.nav-icon {
+  width: 20px; height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: .75;
+}
+.nav-item.active .nav-icon { opacity: 1; }
+
+.sidebar-spacer { flex: 1; min-height: 16px; }
+
+.sidebar-upload-box {
+  background: var(--blue-soft);
+  border-radius: 14px;
+  padding: 14px;
+  margin: 6px 0;
+}
+.sidebar-upload-box-title {
+  font-size: 12px; font-weight: 700;
+  color: #1E5DBF; font-family: var(--font-d);
+  margin-bottom: 3px;
+}
+[data-theme="dark"] .sidebar-upload-box-title { color: var(--blue); }
+.sidebar-upload-box-hint {
+  font-size: 11px; color: #3A6FB8; margin-bottom: 10px;
+}
+[data-theme="dark"] .sidebar-upload-box-hint { color: var(--muted); }
+.btn-blue {
+  background: #1E8AFF; color: #fff;
+  border: none; border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  font-family: var(--font-b); width: 100%;
+}
+.btn-blue:hover { opacity: .88; }
+
+/* ── Main column ─────────────────────────────────────────── */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 26px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.topbar-page-title {
+  font-family: var(--font-d);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.topbar-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--recess);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 16px;
+  max-width: 340px;
+  width: 100%;
+}
+.topbar-search input {
+  border: none; background: transparent; outline: none;
+  color: var(--fg); font-size: 13px; flex: 1;
+  font-family: var(--font-b);
+}
+.topbar-search input::placeholder { color: var(--muted); }
+.topbar-actions {
+  display: flex; gap: 8px; align-items: center;
+}
+.icon-btn {
+  background: var(--card); color: var(--fg2);
+  border: 1px solid var(--border);
+  width: 36px; height: 36px; border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.icon-btn:hover { background: var(--recess); }
+.user-chip {
+  display: flex; align-items: center; gap: 9px;
+  padding: 4px 14px 4px 4px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 999px; cursor: default;
+}
+.user-avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: linear-gradient(135deg,#5BC500,#1E8AFF);
+  display: grid; place-items: center;
+  color: #fff; font-weight: 700; font-size: 12px;
+  font-family: var(--font-d); flex-shrink: 0;
+}
+.user-name { font-size: 13px; font-weight: 600; color: var(--fg); font-family: var(--font-d); }
+.user-sub  { font-size: 10.5px; color: var(--muted); }
+
+/* ── Tab panels ──────────────────────────────────────────── */
+.tab-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 26px 28px 40px;
+  display: none;
+}
+.tab-panel.active { display: block; }
+
+/* ── Page title row ──────────────────────────────────────── */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 22px;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.page-header h1 {
+  font-size: 26px; font-weight: 700;
+  font-family: var(--font-d); letter-spacing: -.4px;
+}
+.page-header-sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.page-header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+/* ── Role badge ──────────────────────────────────────────── */
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+}
+.role-badge.admin  { background: var(--accent-soft); color: var(--accent-dark); }
+.role-badge.viewer { background: var(--blue-soft);   color: var(--blue); }
+[data-theme="dark"] .role-badge.admin  { color: var(--accent); }
+[data-theme="dark"] .role-badge.viewer { color: var(--blue); }
+
+/* ── Cards ───────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* ─── Module 3: Overview ─────────────────────────────────── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.kpi-tile {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.kpi-tile-green { background: var(--accent-soft); border-color: transparent; }
+.kpi-tile-blue  { background: var(--blue-soft);   border-color: transparent; }
+.kpi-tile-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.kpi-tile-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.kpi-icon {
+  width: 34px; height: 34px; border-radius: 10px;
+  background: var(--card);
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: var(--fg2);
+}
+.kpi-icon-green { background: var(--accent); color: #fff; }
+.kpi-icon-blue  { background: var(--blue);   color: #fff; }
+.kpi-label-text { font-size: 12.5px; font-weight: 500; color: var(--fg2); }
+.kpi-value {
+  font-size: 28px; font-weight: 700;
+  color: var(--fg); font-family: var(--font-d);
+  letter-spacing: -.5px; line-height: 1;
+}
+.kpi-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.kpi-sub  { font-size: 11px; color: var(--muted); }
+.delta {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 600;
+}
+.delta.pos { background: var(--good-bg); color: var(--good); }
+.delta.neg { background: var(--bad-bg);  color: var(--bad);  }
+
+/* two-col chart row */
+.chart-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.chart-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+}
+.chart-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+.chart-title {
+  font-size: 14px; font-weight: 600;
+  color: var(--fg); font-family: var(--font-d);
+}
+.chart-sub { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.chart-legend {
+  display: flex; gap: 14px;
+  font-size: 11.5px; color: var(--muted);
+  align-items: center;
+}
+.legend-dot {
+  display: inline-block;
+  width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 4px;
+}
+.chart-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px; color: var(--muted);
+  margin-top: 6px;
+}
+
+/* donut */
+.donut-wrap  { display: flex; justify-content: center; margin: 8px 0 14px; }
+.donut-legend { display: grid; gap: 8px; }
+.donut-row   { display: flex; align-items: center; gap: 9px; }
+.donut-dot   { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.donut-name  { flex: 1; font-size: 12.5px; color: var(--fg2); font-weight: 500; }
+.donut-pct   { font-size: 12.5px; color: var(--fg); font-weight: 600;
+               font-variant-numeric: tabular-nums; font-family: var(--font-d); }
+
+/* funnel table */
+.funnel-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+  overflow-x: auto;
+}
+.funnel-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 10px;
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table th {
+  text-align: left; padding: 9px 10px;
+  color: var(--muted); font-size: 11px; font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.data-table td {
+  padding: 11px 10px; color: var(--fg);
+  border-bottom: 1px solid var(--border);
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: var(--recess); }
+.data-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-d);
+}
+.stage-dot {
+  display: inline-block;
+  width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 7px; flex-shrink: 0;
+}
+.bar-cell { width: 90px; }
+.mini-bar-bg {
+  height: 6px; border-radius: 3px;
+  background: var(--recess);
+  overflow: hidden;
+}
+.mini-bar-fill {
+  height: 100%; border-radius: 3px;
+  transition: width .3s;
+}
+
+/* filter pills */
+.filter-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.seg-tabs {
+  display: inline-flex;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 999px; padding: 3px; gap: 2px;
+}
+.seg-tabs button {
+  border: none; padding: 5px 14px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  font-family: var(--font-b); background: transparent;
+  color: var(--muted);
+}
+.seg-tabs button.active { background: var(--fg); color: var(--card); }
+.seg-tabs.green button.active { background: var(--accent); color: #fff; }
+[data-theme="dark"] .seg-tabs button.active { color: var(--card); }
+
+/* ─── Module 4: Analytics ────────────────────────────────── */
+.mini-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.mini-kpi {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.mini-kpi-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: grid; place-items: center; flex-shrink: 0;
+  background: var(--recess); color: var(--fg2);
+}
+.mini-kpi-label { font-size: 11.5px; color: var(--muted); font-weight: 500; }
+.mini-kpi-val   { font-size: 20px; font-weight: 700; color: var(--fg);
+                  font-family: var(--font-d); letter-spacing: -.4px; line-height: 1.1; }
+
+.analytics-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.an-filter-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.an-select {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  font-family: var(--font-b);
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238A94A6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 28px;
+}
+.an-select:focus { border-color: var(--accent); }
+[data-theme="dark"] .an-select { background-color: var(--card); color: var(--fg); }
+.an-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  flex: 1;
+  min-width: 180px;
+  max-width: 280px;
+}
+.an-search input {
+  border: none; background: transparent; outline: none;
+  color: var(--fg); font-size: 12px; flex: 1;
+  font-family: var(--font-b);
+}
+.an-search input::placeholder { color: var(--muted); }
+
+.analytics-table-wrap {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: auto;
+  max-height: 520px;
+}
+.analytics-table { min-width: 900px; }
+.analytics-table th {
+  position: sticky; top: 0;
+  background: var(--card);
+  z-index: 1;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  padding-right: 18px;
+}
+.analytics-table th::after {
+  content: ' ↕';
+  opacity: .35;
+  font-size: 10px;
+}
+.analytics-table th.sort-asc::after  { content: ' ↑'; opacity: 1; color: var(--accent); }
+.analytics-table th.sort-desc::after { content: ' ↓'; opacity: 1; color: var(--accent); }
+.analytics-table th:hover { background: var(--recess); }
+.analytics-table td { white-space: nowrap; font-size: 12.5px; }
+.creative-name-cell {
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+.cvr-high { color: var(--bad); font-weight: 600; }
+.cvr-med  { color: var(--orange); font-weight: 500; }
+
+.hbar-svg text { font-family: var(--font-b); }
+.data-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 600;
+}
+.data-badge.gm  { background: var(--accent-soft); color: var(--accent-dark); }
+.data-badge.ush { background: var(--blue-soft);   color: var(--blue); }
+.data-badge.q1  { background: var(--recess); color: var(--fg2); }
+.data-badge.q2  { background: #FFF3E0; color: #E65100; }
+[data-theme="dark"] .data-badge.q2 { background: rgba(255,130,0,.15); color: var(--orange); }
+[data-theme="dark"] .data-badge.gm { color: var(--accent); }
+[data-theme="dark"] .data-badge.ush { color: var(--blue); }
+
+/* ─── Module 5: Creatives ────────────────────────────────── */
+.creatives-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 16px;
+}
+.creative-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow .18s, transform .18s;
+}
+.creative-card:hover {
+  box-shadow: 0 8px 32px rgba(0,0,0,.13);
+  transform: translateY(-2px);
+}
+.creative-card--add {
+  border: 2px dashed var(--border);
+  background: transparent;
+  min-height: 220px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color .18s, background .18s;
+}
+.creative-card--add:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  transform: translateY(-2px);
+}
+.creative-thumb {
+  /* Maintains true 300×250 ad unit ratio */
+  aspect-ratio: 300 / 250;
+  width: 100%;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+  background: #000;
+}
+.creative-thumb img { width:100%; height:100%; object-fit:contain; background:#000; }
+
+/* Iframe scaling wrapper — keeps 300×250 iframe scaled to card width */
+.cr-iframe-wrap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+}
+.cr-iframe-wrap iframe {
+  position: absolute;
+  top: 0; left: 0;
+  width: 300px;
+  height: 250px;
+  transform-origin: top left;
+  border: none;
+  display: block;
+  pointer-events: none; /* prevent accidental clicks inside preview */
+}
+.cr-iframe-error {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; color: rgba(255,255,255,.45); font-size: 11px; text-align: center;
+  padding: 12px;
+}
+.creative-thumb-placeholder {
+  width:100%; height:100%;
+  display:flex; align-items:center; justify-content:center;
+  flex-direction:column; gap:8px;
+}
+.creative-thumb-label {
+  font-size:10px; font-weight:600; letter-spacing:.08em;
+  text-transform:uppercase; opacity:.55; color:#fff;
+}
+.creative-card-body { padding: 14px 16px 16px; flex: 1; display:flex; flex-direction:column; gap:10px; }
+.creative-meta-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.creative-stage-label { font-size:11px; color:var(--muted); font-weight:500; }
+.creative-name {
+  font-size:13px; font-weight:600; color:var(--fg);
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  line-height:1.45;
+}
+.creative-stats-grid {
+  display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px 10px;
+  padding: 10px 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+}
+.cs-item { display:flex; flex-direction:column; gap:1px; }
+.cs-label { font-size:10px; color:var(--muted); font-weight:500; text-transform:uppercase; letter-spacing:.04em; }
+.cs-val   { font-size:13px; font-weight:700; color:var(--fg); font-family:var(--font-d); }
+
+.creative-innovid-row {
+  display:flex; align-items:center; gap:6px;
+  background:var(--recess); border-radius:8px; padding:6px 10px;
+}
+.cr-url-input {
+  flex:1; border:none; background:transparent; outline:none;
+  font-size:12px; color:var(--fg); font-family:var(--font-b);
+  min-width:0;
+}
+.cr-url-input::placeholder { color:var(--muted); }
+.cr-icon-btn {
+  width:28px; height:28px; border-radius:7px; border:none;
+  background:transparent; cursor:pointer; display:grid; place-items:center;
+  color:var(--fg2); transition:background .15s, color .15s; flex-shrink:0;
+  text-decoration:none;
+}
+.cr-icon-btn:hover { background:var(--border); color:var(--fg); }
+.cr-icon-btn--dim { opacity:.35; cursor:not-allowed; }
+.cr-upload-btn {
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:11.5px; font-weight:600; color:var(--muted);
+  cursor:pointer; padding:5px 0;
+  transition:color .15s;
+}
+.cr-upload-btn:hover { color:var(--accent); }
+
+/* Add / Edit modal */
+.cr-modal-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.55);
+  z-index:300; display:grid; place-items:center;
+  backdrop-filter:blur(3px);
+  opacity:0; pointer-events:none; transition:opacity .2s;
+}
+.cr-modal-overlay.open { opacity:1; pointer-events:all; }
+.cr-modal {
+  background:var(--card); border:1px solid var(--border);
+  border-radius:20px; padding:28px 28px 24px;
+  width:min(480px,92vw); max-height:88vh; overflow-y:auto;
+  box-shadow:0 24px 64px rgba(0,0,0,.3);
+  transform:translateY(16px); transition:transform .2s;
+}
+.cr-modal-overlay.open .cr-modal { transform:translateY(0); }
+.cr-modal-title { font-size:17px; font-weight:700; margin-bottom:18px; }
+.cr-form-group { display:flex; flex-direction:column; gap:5px; margin-bottom:14px; }
+.cr-form-label { font-size:12px; font-weight:600; color:var(--muted); }
+.cr-form-input, .cr-form-select {
+  background:var(--recess); border:1px solid var(--border);
+  border-radius:10px; padding:9px 12px; font-size:13px;
+  color:var(--fg); font-family:var(--font-b); outline:none;
+  width:100%; box-sizing:border-box;
+  transition:border-color .15s;
+}
+.cr-form-input:focus, .cr-form-select:focus { border-color:var(--accent); }
+.cr-form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.cr-modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+.cr-thumb-preview {
+  height:90px; border-radius:10px; overflow:hidden;
+  background:var(--recess); border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center;
+  margin-top:6px; cursor:pointer; position:relative;
+}
+.cr-thumb-preview img { width:100%; height:100%; object-fit:cover; }
+.cr-thumb-preview-hint { font-size:11px; color:var(--muted); font-weight:500; }
+
+/* ─── Module 6: Reports ──────────────────────────────────── */
+.rp-upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 40px 24px;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 10px;
+  cursor: pointer; transition: border-color .18s, background .18s;
+  text-align: center; margin-bottom: 28px;
+}
+.rp-upload-zone:hover, .rp-upload-zone.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.rp-upload-icon {
+  width: 56px; height: 56px; border-radius: 16px;
+  background: var(--recess); border: 1px solid var(--border);
+  display: grid; place-items: center; color: var(--fg2);
+  margin-bottom: 4px;
+}
+.rp-upload-title { font-size: 15px; font-weight: 700; color: var(--fg); }
+.rp-upload-sub   { font-size: 12px; color: var(--muted); }
+
+.rp-section { margin-bottom: 28px; }
+.rp-section-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px;
+}
+.rp-section-title { font-size: 14px; font-weight: 700; color: var(--fg); }
+.rp-section-count {
+  font-size: 11px; font-weight: 600; padding: 2px 8px;
+  border-radius: 999px; background: var(--recess); color: var(--muted);
+}
+.rp-empty {
+  text-align: center; padding: 32px 16px;
+  color: var(--muted); font-size: 13px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.rp-list { display: flex; flex-direction: column; gap: 8px; }
+.rp-item {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 14px;
+  transition: box-shadow .15s;
+}
+.rp-item:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+.rp-item-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: grid; place-items: center; flex-shrink: 0;
+  font-size: 11px; font-weight: 800; letter-spacing: .03em;
+}
+.rp-icon-csv  { background: #E8F5E9; color: #2E7D32; }
+.rp-icon-xlsx { background: #E3F2FD; color: #1565C0; }
+.rp-icon-zip  { background: #FFF3E0; color: #E65100; }
+.rp-icon-snap { background: var(--accent-soft); color: var(--accent-dark); }
+[data-theme="dark"] .rp-icon-csv  { background: rgba(46,125,50,.2);  color: #81C784; }
+[data-theme="dark"] .rp-icon-xlsx { background: rgba(21,101,192,.2);  color: #64B5F6; }
+[data-theme="dark"] .rp-icon-zip  { background: rgba(230,81,0,.2);    color: #FFB74D; }
+[data-theme="dark"] .rp-icon-snap { color: var(--accent); }
+.rp-item-body { flex: 1; min-width: 0; }
+.rp-item-name {
+  font-size: 13px; font-weight: 600; color: var(--fg);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rp-item-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.rp-item-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.rp-action-btn {
+  width: 32px; height: 32px; border-radius: 8px; border: none;
+  background: transparent; cursor: pointer; display: grid; place-items: center;
+  color: var(--fg2); transition: background .15s, color .15s;
+}
+.rp-action-btn:hover { background: var(--recess); color: var(--fg); }
+.rp-action-btn.danger:hover { background: rgba(220,53,53,.1); color: #dc3535; }
+.rp-rows-badge {
+  font-size: 11px; font-weight: 600; padding: 2px 8px;
+  border-radius: 999px; background: var(--recess); color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Preview modal */
+.rp-preview-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55);
+  z-index: 400; display: grid; place-items: center;
+  backdrop-filter: blur(3px);
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.rp-preview-overlay.open { opacity: 1; pointer-events: all; }
+.rp-preview-modal {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 20px; width: min(900px, 96vw);
+  max-height: 88vh; display: flex; flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0,0,0,.3);
+  transform: translateY(16px); transition: transform .2s;
+  overflow: hidden;
+}
+.rp-preview-overlay.open .rp-preview-modal { transform: translateY(0); }
+.rp-preview-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 18px 22px 16px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.rp-preview-title { font-size: 15px; font-weight: 700; flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-preview-close {
+  width: 32px; height: 32px; border-radius: 8px; border: none;
+  background: var(--recess); cursor: pointer; display: grid;
+  place-items: center; color: var(--fg2); font-size: 18px; flex-shrink: 0;
+}
+.rp-preview-close:hover { background: var(--border); }
+.rp-preview-table-wrap { overflow: auto; flex: 1; padding: 0; }
+.rp-preview-table { min-width: 600px; }
+.rp-preview-footer {
+  padding: 12px 22px; border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  font-size: 12px; color: var(--muted);
+}
+
+/* ─── Module 7: Settings ─────────────────────────────────── */
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.settings-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  margin-bottom: 16px;
+}
+.settings-card-title {
+  font-size: 13px; font-weight: 700; color: var(--fg);
+  text-transform: uppercase; letter-spacing: .06em;
+  margin-bottom: 16px; padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-row {
+  display: flex; align-items: center; gap: 16px;
+  padding: 11px 0; border-bottom: 1px solid var(--border);
+}
+.settings-row:last-child { border-bottom: none; padding-bottom: 0; }
+.settings-row-label { flex: 1; min-width: 0; }
+.settings-row-title { font-size: 13px; font-weight: 600; color: var(--fg); }
+.settings-row-desc  { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.settings-row-control { flex-shrink: 0; display: flex; align-items: center; }
+
+/* iOS toggle */
+.toggle-switch {
+  width: 46px; height: 26px; border-radius: 13px;
+  background: var(--border); border: none; cursor: pointer;
+  position: relative; transition: background .2s; flex-shrink: 0;
+  outline: none;
+}
+.toggle-switch.on { background: var(--accent); }
+.toggle-switch::after {
+  content: ''; position: absolute;
+  width: 22px; height: 22px; border-radius: 11px;
+  background: #fff; top: 2px; left: 2px;
+  transition: left .18s; box-shadow: 0 1px 4px rgba(0,0,0,.25);
+}
+.toggle-switch.on::after { left: 22px; }
+
+/* Accent color swatches */
+.color-swatch {
+  width: 26px; height: 26px; border-radius: 999px;
+  border: 3px solid transparent; cursor: pointer;
+  transition: border-color .15s, transform .15s; outline: none;
+}
+.color-swatch.active { border-color: var(--fg); transform: scale(1.18); }
+
+/* User rows */
+.st-user-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.st-user-row:last-child { border-bottom: none; }
+.st-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-weight: 700; font-size: 13px; flex-shrink: 0; color: #fff;
+}
+.st-role-badge {
+  padding: 3px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.st-role-admin  { background: var(--accent-soft); color: var(--accent-dark); }
+.st-role-viewer { background: var(--blue-soft);   color: var(--blue); }
+[data-theme="dark"] .st-role-admin  { color: var(--accent); }
+[data-theme="dark"] .st-role-viewer { color: var(--blue); }
+.st-status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:4px; }
+.st-status-active  { background: var(--accent); }
+.st-status-invited { background: var(--orange); }
+
+/* Compact mode overrides */
+body.compact .kpi-tile        { padding: 14px 16px; }
+body.compact .settings-card   { padding: 16px 18px; }
+body.compact .settings-row    { padding: 8px 0; }
+body.compact .content-area    { padding: 16px; }
+body.compact h1               { font-size: 20px; }
+body.compact .chart-card      { padding: 14px 16px; }
+
+/* ── Responsive collapse ─────────────────────────────────── */
+@media (max-width: 960px) {
+  .sidebar { width: 60px; padding: 16px 8px; }
+  .sidebar-logo img,
+  .sidebar-logo-fallback,
+  .nav-section-label,
+  .nav-item span:not(.nav-icon),
+  .sidebar-upload-box { display: none; }
+  .nav-item { justify-content: center; padding: 10px; }
+  .nav-icon { opacity: 1; }
+  .settings-grid { grid-template-columns: 1fr; }
+  .mini-kpi-row  { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODULE 1 — AUTH OVERLAY
+     Shows before the main app. Hidden on successful login.
+     ═══════════════════════════════════════════════════════════ -->
+<div id="authOverlay">
+  <div class="auth-card">
+
+    <div class="auth-brand">
+      <img src="cricket-logo.png" alt="Cricket Wireless"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
+      <div class="auth-brand-fallback" style="display:none">
+        <div class="dot"></div>Cricket DCO
+      </div>
+    </div>
+
+    <div class="auth-title">Welcome back</div>
+    <div class="auth-sub">Sign in to the Cricket DCO Dashboard · Argonaut</div>
+
+    <div class="auth-error" id="loginError"></div>
+
+    <button type="button" class="auth-btn" id="googleSignInBtn" style="display:flex;align-items:center;justify-content:center;gap:10px;">
+      <svg width="18" height="18" viewBox="0 0 18 18" style="flex-shrink:0">
+        <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"/>
+        <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"/>
+        <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"/>
+        <path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"/>
+      </svg>
+      Sign in with Google
+    </button>
+
+    <div class="auth-footer">
+      Argonaut · Cricket Wireless DCO<br/>
+      Sign in with your @argonautinc.com Google account.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MAIN APP SHELL — Module 2
+     ═══════════════════════════════════════════════════════════ -->
+<div id="appLayout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="cricket-logo.png" alt="Cricket"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
+      <div class="sidebar-logo-fallback">
+        <div class="dot"></div>Cricket
+      </div>
+    </div>
+
+    <div class="nav-section-label">Main</div>
+
+    <button class="nav-item active" data-tab="overview">
+      <span class="nav-icon"><svg-icon name="grid" size="17"></svg-icon></span>
+      <span>Overview</span>
+    </button>
+
+    <button class="nav-item" data-tab="analytics">
+      <span class="nav-icon"><svg-icon name="chart" size="17"></svg-icon></span>
+      <span>Analytics</span>
+    </button>
+
+    <button class="nav-item" data-tab="creatives">
+      <span class="nav-icon"><svg-icon name="img" size="17"></svg-icon></span>
+      <span>Creatives</span>
+    </button>
+
+    <button class="nav-item" data-tab="reports">
+      <span class="nav-icon"><svg-icon name="file" size="17"></svg-icon></span>
+      <span>Reports</span>
+    </button>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="nav-section-label">Account</div>
+
+    <button class="nav-item" data-tab="settings">
+      <span class="nav-icon"><svg-icon name="gear" size="17"></svg-icon></span>
+      <span>Settings</span>
+    </button>
+
+    <!-- Upload widget (admin only, shown by JS) -->
+    <div class="sidebar-upload-box" id="sidebarUploadBox" style="display:none">
+      <div class="sidebar-upload-box-title">Weekly upload</div>
+      <div class="sidebar-upload-box-hint">Drop latest Flashtalking export</div>
+      <button class="btn-blue" id="sidebarUploadBtn">Upload CSV</button>
+    </div>
+
+    <button class="nav-item" id="signOutBtn" style="margin-top:4px">
+      <span class="nav-icon"><svg-icon name="out" size="17"></svg-icon></span>
+      <span>Sign Out</span>
+    </button>
+  </aside>
+
+  <!-- ── Main column ── -->
+  <div class="main">
+
+    <!-- Topbar -->
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-page-title" id="topbarTitle">Overview</div>
+        <div class="topbar-search">
+          <svg-icon name="search" size="14" color="var(--muted)"></svg-icon>
+          <input type="text" id="globalSearch" placeholder="Search creatives, segments…"/>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" id="themeBtn" title="Toggle theme">
+          <svg-icon name="sun" size="15"></svg-icon>
+        </button>
+        <button class="icon-btn" title="Notifications">
+          <svg-icon name="bell" size="15"></svg-icon>
+        </button>
+        <div class="user-chip">
+          <div class="user-avatar" id="userAvatarEl">EM</div>
+          <div>
+            <div class="user-name" id="userNameEl">—</div>
+            <div class="user-sub" id="userRoleEl">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tab panels (modules 3–7 will populate these) ── -->
+    <div class="tab-panel active" id="tab-overview">
+      <div class="page-header">
+        <div>
+          <h1>Overview</h1>
+          <div class="page-header-sub" id="ovSubtitle">Q1 + Q2 · All markets · Flashtalking DCO</div>
+        </div>
+        <div class="page-header-actions">
+          <!-- Market filter -->
+          <div class="seg-tabs green" id="ovMarketFilter">
+            <button class="active" data-mkt="all">All</button>
+            <button data-mkt="GM">GM</button>
+            <button data-mkt="USH">USH</button>
+          </div>
+          <!-- Quarter filter -->
+          <div class="seg-tabs" id="ovQFilter">
+            <button data-q="all" class="active">All</button>
+            <button data-q="Q1">Q1</button>
+            <button data-q="Q2">Q2</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI tiles injected here -->
+      <div class="kpi-grid" id="ovKpiGrid"></div>
+
+      <!-- Trend + Donut -->
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <div class="chart-title">Daily Impressions</div>
+              <div class="chart-sub" id="ovTrendSub">Jan – Apr 2026</div>
+            </div>
+            <div class="chart-legend">
+              <span><span class="legend-dot" style="background:#5BC500"></span>Impressions</span>
+            </div>
+          </div>
+          <div id="ovTrendChart"></div>
+          <div class="chart-axis" id="ovTrendAxis"></div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-title">Market Split</div>
+          </div>
+          <div class="donut-wrap"  id="ovDonutChart"></div>
+          <div class="donut-legend" id="ovDonutLegend"></div>
+        </div>
+      </div>
+
+      <!-- Funnel stage table -->
+      <div class="funnel-card">
+        <div class="funnel-card-header">
+          <div>
+            <div class="chart-title">Funnel Stage Breakdown</div>
+            <div class="chart-sub" id="ovTableSub">Performance by DCO journey stage</div>
+          </div>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Stage</th>
+              <th class="num">Impressions</th>
+              <th class="num">Clicks</th>
+              <th class="num">CTR</th>
+              <th class="num">GM Orders</th>
+              <th class="num">GM LPVR</th>
+              <th class="num">GM CVR</th>
+              <th class="bar-cell">Share</th>
+            </tr>
+          </thead>
+          <tbody id="ovFunnelTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-analytics">
+      <div class="page-header">
+        <div>
+          <h1>Analytics</h1>
+          <div class="page-header-sub">All 12 pivot metrics · Full creative breakdown · Flashtalking DCO</div>
+        </div>
+        <div class="page-header-actions">
+          <label class="btn-ghost btn-sm" style="cursor:pointer">
+            <svg-icon name="upload" size="13"></svg-icon> Import CSV / XLSX
+            <input type="file" id="anFileInput" accept=".csv,.xlsx,.xls" style="display:none"/>
+          </label>
+          <button class="btn-ghost btn-sm" id="anExportBtn">
+            <svg-icon name="download" size="13"></svg-icon> Export CSV
+          </button>
+          <button class="btn-ghost btn-sm" id="anSaveSnapBtn">
+            <svg-icon name="bookmark" size="13"></svg-icon> Save Snapshot
+          </button>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="an-filter-row">
+        <div class="seg-tabs green" id="anMarketFilter">
+          <button class="active" data-mkt="all">All</button>
+          <button data-mkt="GM">GM</button>
+          <button data-mkt="USH">USH</button>
+        </div>
+        <div class="seg-tabs" id="anQFilter">
+          <button class="active" data-q="all">All Quarters</button>
+          <button data-q="Q1">Q1</button>
+          <button data-q="Q2">Q2</button>
+        </div>
+        <select class="an-select" id="anStageFilter">
+          <option value="all">All Stages</option>
+          <option>1 - Mid Funnel</option>
+          <option>2 - Prospecting</option>
+          <option>3 - Homepage Visitor</option>
+          <option>4 - BYOD Visitor</option>
+          <option>4 - Deals Research</option>
+          <option>5 - Plan Research</option>
+          <option>6 - Multi Month Plan Research</option>
+          <option>7 - Device Page Visitor</option>
+          <option>8 - Cart Abandoner</option>
+          <option>9 - Order/Checkout</option>
+        </select>
+        <div class="an-search">
+          <svg-icon name="search" size="13" color="var(--muted)"></svg-icon>
+          <input id="anSearch" type="text" placeholder="Search creative…"/>
+        </div>
+      </div>
+
+      <!-- Mini KPIs -->
+      <div class="mini-kpi-row" id="anKpiRow"></div>
+
+      <!-- Charts -->
+      <div class="chart-row" style="grid-template-columns:1fr 1fr;margin-bottom:16px">
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <div class="chart-title">CTR by Funnel Stage</div>
+              <div class="chart-sub">Click-through rate comparison</div>
+            </div>
+          </div>
+          <div id="anCtrBar"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <div class="chart-title">Impressions by Stage</div>
+              <div class="chart-sub">Volume distribution</div>
+            </div>
+          </div>
+          <div id="anImpsBar"></div>
+        </div>
+      </div>
+
+      <!-- Table toolbar -->
+      <div class="analytics-toolbar">
+        <div class="seg-tabs" id="anViewToggle">
+          <button class="active" data-view="stage">By Stage</button>
+          <button data-view="creative">By Creative</button>
+        </div>
+        <span id="anRowCount" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+
+      <!-- Scrollable table -->
+      <div class="analytics-table-wrap">
+        <table class="data-table analytics-table">
+          <thead id="anThead"></thead>
+          <tbody id="anTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-creatives">
+      <div class="page-header">
+        <div>
+          <h1>Creatives</h1>
+          <div class="page-header-sub">All active creative versions · Link Innovid · Upload previews</div>
+        </div>
+        <div class="page-header-actions">
+          <button class="btn-primary btn-sm" id="crAddBtnTop">
+            <svg-icon name="plus" size="13"></svg-icon> Add Creative
+          </button>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="an-filter-row">
+        <div class="seg-tabs green" id="crMarketFilter">
+          <button class="active" data-mkt="all">All</button>
+          <button data-mkt="GM">GM</button>
+          <button data-mkt="USH">USH</button>
+        </div>
+        <div class="seg-tabs" id="crQFilter">
+          <button class="active" data-q="all">All Quarters</button>
+          <button data-q="Q1">Q1</button>
+          <button data-q="Q2">Q2</button>
+        </div>
+        <select class="an-select" id="crStageFilter">
+          <option value="all">All Stages</option>
+          <option>1 - Mid Funnel</option>
+          <option>2 - Prospecting</option>
+          <option>3 - Homepage Visitor</option>
+          <option>4 - BYOD Visitor</option>
+          <option>4 - Deals Research</option>
+          <option>5 - Plan Research</option>
+          <option>6 - Multi Month Plan Research</option>
+          <option>7 - Device Page Visitor</option>
+          <option>8 - Cart Abandoner</option>
+          <option>9 - Order/Checkout</option>
+        </select>
+        <div class="an-search">
+          <svg-icon name="search" size="13" color="var(--muted)"></svg-icon>
+          <input id="crSearch" type="text" placeholder="Search creative…"/>
+        </div>
+        <span id="crCount" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
+      </div>
+
+      <!-- Grid -->
+      <div class="creatives-grid" id="creativesGrid"></div>
+    </div>
+
+    <!-- Add / Edit Creative modal -->
+    <div class="cr-modal-overlay" id="crModalOverlay">
+      <div class="cr-modal" id="crModal">
+        <div class="cr-modal-title" id="crModalTitle">Add Creative</div>
+        <input type="hidden" id="crEditId"/>
+
+        <div class="cr-form-group">
+          <div class="cr-form-label">Creative Name *</div>
+          <input class="cr-form-input" id="crFName" type="text" placeholder="e.g. Standard Template – Cricket pricing = simple…"/>
+        </div>
+
+        <div class="cr-form-row">
+          <div class="cr-form-group">
+            <div class="cr-form-label">Quarter</div>
+            <select class="cr-form-select" id="crFQ">
+              <option value="Q1">Q1</option>
+              <option value="Q2">Q2</option>
+            </select>
+          </div>
+          <div class="cr-form-group">
+            <div class="cr-form-label">Market</div>
+            <select class="cr-form-select" id="crFMkt">
+              <option value="GM">GM</option>
+              <option value="USH">USH</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="cr-form-group">
+          <div class="cr-form-label">Funnel Stage</div>
+          <select class="cr-form-select" id="crFStage">
+            <option>1 - Mid Funnel</option>
+            <option>2 - Prospecting</option>
+            <option>3 - Homepage Visitor</option>
+            <option>4 - BYOD Visitor</option>
+            <option>4 - Deals Research</option>
+            <option>5 - Plan Research</option>
+            <option>6 - Multi Month Plan Research</option>
+            <option>7 - Device Page Visitor</option>
+            <option>8 - Cart Abandoner</option>
+            <option>9 - Order/Checkout</option>
+          </select>
+        </div>
+
+        <div class="cr-form-group">
+          <div class="cr-form-label">Innovid URL</div>
+          <input class="cr-form-input" id="crFUrl" type="url" placeholder="https://…"/>
+        </div>
+
+        <div class="cr-form-row">
+          <div class="cr-form-group">
+            <div class="cr-form-label">Impressions</div>
+            <input class="cr-form-input" id="crFImps" type="number" placeholder="0"/>
+          </div>
+          <div class="cr-form-group">
+            <div class="cr-form-label">Clicks</div>
+            <input class="cr-form-input" id="crFClicks" type="number" placeholder="0"/>
+          </div>
+        </div>
+
+        <div class="cr-form-row">
+          <div class="cr-form-group">
+            <div class="cr-form-label">GM Orders</div>
+            <input class="cr-form-input" id="crFOrd" type="number" placeholder="0"/>
+          </div>
+          <div class="cr-form-group">
+            <div class="cr-form-label">CTR</div>
+            <input class="cr-form-input" id="crFCtr" type="number" step="0.000001" placeholder="e.g. 0.000701"/>
+          </div>
+        </div>
+
+        <div class="cr-form-group">
+          <div class="cr-form-label">Preview Image</div>
+          <label class="cr-thumb-preview" id="crThumbPreview" for="crFThumb">
+            <span class="cr-thumb-preview-hint">Click to upload image</span>
+            <input type="file" id="crFThumb" accept="image/*" style="display:none"/>
+          </label>
+        </div>
+
+        <div class="cr-modal-actions">
+          <button class="btn-ghost btn-sm" id="crModalCancel">Cancel</button>
+          <button class="btn-primary btn-sm" id="crModalSave">Save Creative</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-reports">
+      <div class="page-header">
+        <div>
+          <h1>Reports</h1>
+          <div class="page-header-sub">Upload delivery exports · View saved analytics snapshots</div>
+        </div>
+        <div class="page-header-actions">
+          <label class="btn-primary btn-sm" style="cursor:pointer" for="rpFileInput">
+            <svg-icon name="upload" size="13"></svg-icon> Upload Report
+          </label>
+        </div>
+      </div>
+
+      <!-- Drop zone -->
+      <div class="rp-upload-zone" id="rpUploadZone">
+        <div class="rp-upload-icon">
+          <svg-icon name="file-text" size="24"></svg-icon>
+        </div>
+        <div class="rp-upload-title">Drop delivery reports here</div>
+        <div class="rp-upload-sub">CSV, XLSX, XLS, ZIP &nbsp;·&nbsp; max 50 MB per file</div>
+        <label class="btn-ghost btn-sm" style="cursor:pointer;margin-top:4px" for="rpFileInput">
+          Browse files
+        </label>
+        <input type="file" id="rpFileInput" multiple accept=".csv,.xlsx,.xls,.zip" style="display:none"/>
+      </div>
+
+      <!-- Uploaded Reports -->
+      <div class="rp-section">
+        <div class="rp-section-header">
+          <div class="rp-section-title">Uploaded Reports</div>
+          <div class="rp-section-count" id="rpReportCount">0</div>
+        </div>
+        <div class="rp-list" id="rpReportList">
+          <div class="rp-empty">No reports uploaded yet. Drop a file above to get started.</div>
+        </div>
+      </div>
+
+      <!-- Saved Snapshots -->
+      <div class="rp-section">
+        <div class="rp-section-header">
+          <div class="rp-section-title">Saved Snapshots</div>
+          <div class="rp-section-count" id="rpSnapCount">0</div>
+          <span style="font-size:11.5px;color:var(--muted);margin-left:4px">— saved from the Analytics tab</span>
+        </div>
+        <div class="rp-list" id="rpSnapList">
+          <div class="rp-empty">No snapshots saved yet. Use <strong>Save Snapshot</strong> in the Analytics tab.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Report Preview Modal -->
+    <div class="rp-preview-overlay" id="rpPreviewOverlay">
+      <div class="rp-preview-modal">
+        <div class="rp-preview-header">
+          <div class="rp-preview-title" id="rpPreviewTitle"></div>
+          <button class="rp-preview-close" id="rpPreviewClose">×</button>
+        </div>
+        <div class="rp-preview-table-wrap">
+          <table class="data-table rp-preview-table" id="rpPreviewTable"></table>
+        </div>
+        <div class="rp-preview-footer">
+          <span id="rpPreviewMeta"></span>
+          <div style="flex:1"></div>
+          <button class="btn-ghost btn-sm" id="rpPreviewDownload">
+            <svg-icon name="download" size="13"></svg-icon> Download CSV
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-settings">
+      <div class="page-header">
+        <div>
+          <h1>Settings</h1>
+          <div class="page-header-sub">Appearance · Account · Team & Access · Dashboard Defaults</div>
+        </div>
+      </div>
+
+      <div class="settings-grid">
+
+        <!-- ── Left column ── -->
+        <div>
+
+          <!-- Appearance -->
+          <div class="settings-card">
+            <div class="settings-card-title">Appearance</div>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-row-title">Theme</div>
+                <div class="settings-row-desc">Light, dark, or follow system preference</div>
+              </div>
+              <div class="settings-row-control">
+                <div class="seg-tabs" id="stThemeTabs">
+                  <button data-theme-btn="light">Light</button>
+                  <button data-theme-btn="dark">Dark</button>
+                  <button data-theme-btn="system">System</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-row-title">Accent Color</div>
+                <div class="settings-row-desc">Highlights, buttons, and active states</div>
+              </div>
+              <div class="settings-row-control" style="gap:8px;display:flex">
+                <button class="color-swatch" data-accent="#5BC500" style="background:#5BC500" title="Cricket Green"></button>
+                <button class="color-swatch" data-accent="#0094FF" style="background:#0094FF" title="Blue"></button>
+                <button class="color-swatch" data-accent="#8B5CF6" style="background:#8B5CF6" title="Purple"></button>
+                <button class="color-swatch" data-accent="#F59E0B" style="background:#F59E0B" title="Gold"></button>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-row-title">Compact Mode</div>
+                <div class="settings-row-desc">Reduces padding and font sizes throughout</div>
+              </div>
+              <div class="settings-row-control">
+                <button class="toggle-switch" id="stCompactToggle"></button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dashboard Defaults -->
+          <div class="settings-card">
+            <div class="settings-card-title">Dashboard Defaults</div>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-row-title">Landing Tab</div>
+                <div class="settings-row-desc">Tab shown after login</div>
+              </div>
+              <div class="settings-row-control">
+                <select class="an-select" id="stDefaultTab">
+                  <option value="overview">Overview</option>
+                  <option value="analytics">Analytics</option>
+                  <option value="creatives">Creatives</option>
+                  <option value="reports">Reports</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-row-title">Default Quarter</div>
+              </div>
+              <div class="settings-row-control">
+                <select class="an-select" id="stDefaultQ">
+                  <option value="all">All Quarters</option>
+                  <option value="Q1">Q1</option>
+                  <option value="Q2">Q2</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-row-title">Default Market</div>
+              </div>
+              <div class="settings-row-control">
+                <select class="an-select" id="stDefaultMkt">
+                  <option value="all">All Markets</option>
+                  <option value="GM">GM</option>
+                  <option value="USH">USH</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /left -->
+
+        <!-- ── Right column ── -->
+        <div>
+
+          <!-- Account -->
+          <div class="settings-card">
+            <div class="settings-card-title">Account</div>
+            <div id="stCurrentUser" style="margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)"></div>
+
+            <div style="font-size:13px;font-weight:600;color:var(--fg);margin-bottom:12px">Change Password</div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <input class="cr-form-input" id="stOldPw"  type="password" placeholder="Current password" autocomplete="current-password"/>
+              <input class="cr-form-input" id="stNewPw"  type="password" placeholder="New password (min 6 chars)" autocomplete="new-password"/>
+              <input class="cr-form-input" id="stConfPw" type="password" placeholder="Confirm new password" autocomplete="new-password"/>
+              <div style="display:flex;align-items:center;gap:12px;margin-top:2px">
+                <button class="btn-primary btn-sm" id="stChangePwBtn">Update Password</button>
+                <span id="stPwConfirm" style="font-size:12px;color:var(--accent)"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Team & Access -->
+          <div class="settings-card">
+            <div class="settings-card-title">Team &amp; Access</div>
+
+            <div style="background:var(--recess);border-radius:10px;padding:11px 14px;margin-bottom:16px;font-size:12px;color:var(--muted);line-height:1.6">
+              <strong style="color:var(--fg)">@argonautinc.com</strong> addresses are automatically granted
+              <span class="st-role-badge st-role-admin" style="display:inline;padding:1px 7px">Admin</span> access.
+              All other addresses receive
+              <span class="st-role-badge st-role-viewer" style="display:inline;padding:1px 7px">Viewer</span> access by default.
+            </div>
+
+            <!-- Invite row -->
+            <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center">
+              <input class="cr-form-input" id="stInviteEmail" type="email"
+                     placeholder="Invite by email address" style="flex:1;min-width:180px"/>
+              <select class="cr-form-select" id="stInviteRole" style="width:110px;flex-shrink:0">
+                <option value="viewer">Viewer</option>
+                <option value="admin">Admin</option>
+              </select>
+              <button class="btn-primary btn-sm" id="stInviteBtn" style="flex-shrink:0">
+                <svg-icon name="user-plus" size="13"></svg-icon> Invite
+              </button>
+            </div>
+            <div id="stInviteConfirm" style="font-size:12px;color:var(--accent);min-height:18px;margin-bottom:10px"></div>
+
+            <!-- Users list -->
+            <div id="stUserList"></div>
+          </div>
+
+        </div><!-- /right -->
+      </div><!-- /settings-grid -->
+    </div>
+
+  </div><!-- .main -->
+</div><!-- #appLayout -->
+
+
+<!-- ─── Inline SVG icons (shared across all modules) ──────── -->
+<svg style="display:none" id="icon-defs">
+  <symbol id="ico-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+    <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+    <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+    <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+  </symbol>
+  <symbol id="ico-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <path d="M3 3v18h18" stroke-linecap="round"/>
+    <path d="M7 14l4-4 3 3 5-6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="ico-img" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <rect x="3" y="3" width="18" height="18" rx="2"/>
+    <circle cx="9" cy="9" r="2"/>
+    <path d="M21 15l-5-5-9 9" fill="none"/>
+  </symbol>
+  <symbol id="ico-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9z"/>
+    <path d="M14 3v6h6" fill="none"/>
+  </symbol>
+  <symbol id="ico-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+  </symbol>
+  <symbol id="ico-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" fill="none"/>
+  </symbol>
+  <symbol id="ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <circle cx="11" cy="11" r="7"/>
+    <path d="M21 21l-4.5-4.5" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="ico-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <path d="M18 16v-5a6 6 0 10-12 0v5l-2 3h16z" stroke-linejoin="round"/>
+    <path d="M10 21a2 2 0 004 0" fill="none"/>
+  </symbol>
+  <symbol id="ico-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </symbol>
+  <symbol id="ico-dots" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <circle cx="5" cy="12" r="1.5"/>
+    <circle cx="12" cy="12" r="1.5"/>
+    <circle cx="19" cy="12" r="1.5"/>
+  </symbol>
+  <symbol id="ico-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <path d="M12 4v12M6 12l6 6 6-6M4 20h16" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="ico-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <path d="M12 20V8M6 14l6-6 6 6M4 4h16" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="ico-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <circle cx="9" cy="8" r="3.5"/>
+    <path d="M2 21c0-3.5 3-6 7-6s7 2.5 7 6" fill="none"/>
+    <circle cx="17" cy="7" r="2.5"/>
+    <path d="M22 18c0-2.5-2-4-5-4" fill="none"/>
+  </symbol>
+  <symbol id="ico-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <path d="M12 5v14M5 12h14" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="ico-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <path d="M10 13a5 5 0 007 0l3-3a5 5 0 00-7-7l-1 1" fill="none"/>
+    <path d="M14 11a5 5 0 00-7 0l-3 3a5 5 0 007 7l1-1" fill="none"/>
+  </symbol>
+  <symbol id="ico-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <polyline points="3 6 5 6 21 6"/>
+    <path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2"/>
+  </symbol>
+  <symbol id="ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <rect x="5" y="11" width="14" height="10" rx="2"/>
+    <path d="M8 11V7a4 4 0 018 0v4"/>
+  </symbol>
+  <symbol id="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <circle cx="12" cy="12" r="5"/>
+    <line x1="12" y1="1" x2="12" y2="3"/>
+    <line x1="12" y1="21" x2="12" y2="23"/>
+    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+    <line x1="1" y1="12" x2="3" y2="12"/>
+    <line x1="21" y1="12" x2="23" y2="12"/>
+    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+  </symbol>
+  <symbol id="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/>
+  </symbol>
+</svg>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODULE 1 JS — Auth / Session
+     ═══════════════════════════════════════════════════════════ -->
+<script>
+/* ── Icon web component ──────────────────────────────────── */
+class SvgIcon extends HTMLElement {
+  connectedCallback() { this._r(); }
+  static get observedAttributes() { return ['name','size','color']; }
+  attributeChangedCallback() { this._r(); }
+  _r() {
+    const n = this.getAttribute('name') || 'dots';
+    const s = this.getAttribute('size') || '18';
+    const c = this.getAttribute('color') || 'currentColor';
+    this.innerHTML = `<svg width="${s}" height="${s}" viewBox="0 0 24 24"
+      fill="none" stroke="${c}" stroke-width="1.7" style="display:block">
+      <use href="#ico-${n}"/></svg>`;
+  }
+}
+customElements.define('svg-icon', SvgIcon);
+
+/* ── Google OAuth + BigQuery config ─────────────────────── */
+const GOOGLE_CLIENT_ID = '625036036670-tk3t8mmoah5l9gjq1a6rkl0vqbtqj0od.apps.googleusercontent.com';
+const BQ_PROJECT       = 'crk-dco-dash';
+const BQ_SCOPE         = 'https://www.googleapis.com/auth/bigquery.readonly';
+const SESSION_KEY      = 'crkt_gsession';
+
+let ACCESS_TOKEN = null;
+let tokenClient  = null;
+
+/* ── Global: current user accessible to all modules ─────── */
+let CURRENT_USER = null;
+
+/* ── Auth UI helpers ─────────────────────────────────────── */
+function showAuthError(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+function hideAuthError() {
+  document.getElementById('loginError').classList.remove('visible');
+}
+
+/** Called after successful auth — hides overlay, shows app */
+function onAuthSuccess(user) {
+  document.getElementById('authOverlay').style.display = 'none';
+  document.getElementById('appLayout').style.display   = 'flex';
+  if (typeof window.__onAuth === 'function') window.__onAuth(user);
+}
+
+/** Sign out */
+function signOut() {
+  sessionStorage.removeItem(SESSION_KEY);
+  if (ACCESS_TOKEN && typeof google !== 'undefined') {
+    google.accounts.oauth2.revoke(ACCESS_TOKEN);
+  }
+  location.reload();
+}
+
+/* ── BigQuery query helper ───────────────────────────────── */
+async function bqQuery(sql) {
+  const res = await fetch(
+    `https://bigquery.googleapis.com/bigquery/v2/projects/${BQ_PROJECT}/queries`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: sql, useLegacySql: false, location: 'US', timeoutMs: 30000 })
+    }
+  );
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  if (!data.rows) return [];
+  const fields = data.schema.fields.map(f => f.name);
+  return data.rows.map(row => {
+    const obj = {};
+    row.f.forEach((cell, i) => { obj[fields[i]] = cell.v; });
+    return obj;
+  });
+}
+
+/* ── Load live data from BigQuery ────────────────────────── */
+async function loadBigQueryData() {
+  try {
+    const [qRows, sRows] = await Promise.all([
+      bqQuery(`
+        SELECT \`Flight\` as quarter,
+          SUM(\`Total Ads Requested\`) as imps,
+          SUM(\`Clicks\`) as clicks,
+          SAFE_DIVIDE(SUM(\`Clicks\`), SUM(\`Total Ads Requested\`)) as ctr
+        FROM \`crk-dco-dash.reporting_data.deliveries_view\`
+        WHERE \`Flight\` IN ('Q1','Q2')
+        GROUP BY \`Flight\`
+      `),
+      bqQuery(`
+        SELECT \`Flight\` as quarter, \`Segment\` as stage,
+          SUM(\`Total Ads Requested\`) as imps,
+          SUM(\`Clicks\`) as clicks,
+          SAFE_DIVIDE(SUM(\`Clicks\`), SUM(\`Total Ads Requested\`)) as ctr
+        FROM \`crk-dco-dash.reporting_data.deliveries_view\`
+        WHERE \`Flight\` IN ('Q1','Q2') AND \`Segment\` IS NOT NULL
+        GROUP BY \`Flight\`, \`Segment\`
+        ORDER BY \`Flight\`, imps DESC
+      `)
+    ]);
+
+    // Rebuild quarter totals
+    const newQ = {};
+    qRows.forEach(r => {
+      newQ[r.quarter] = {
+        GM:  { imps: Number(r.imps)||0, clicks: Number(r.clicks)||0, gmOrd:0, hmOrd:0, ctr: Number(r.ctr)||0, gmLpvr:0, gmCvr:0 },
+        USH: { imps: 0, clicks: 0, gmOrd:0, hmOrd:0, ctr:0, gmLpvr:0, gmCvr:0 }
+      };
+    });
+    if (Object.keys(newQ).length) PIVOT_DATA.quarters = newQ;
+
+    // Rebuild stages
+    const newS = sRows.map(r => ({
+      q: r.quarter, mkt: 'GM', stage: r.stage,
+      imps: Number(r.imps)||0, clicks: Number(r.clicks)||0,
+      gmOrd: 0, ctr: Number(r.ctr)||0, gmLpvr: 0, gmCvr: 0
+    }));
+    if (newS.length) PIVOT_DATA.stages = newS;
+
+    // Re-render if dashboard is already visible
+    if (typeof renderOverview  === 'function') renderOverview();
+    if (typeof renderAnalytics === 'function') renderAnalytics();
+
+  } catch(e) {
+    console.warn('BigQuery load failed, using static data:', e);
+  }
+}
+
+/* ── Google OAuth token handler ─────────────────────────── */
+async function handleGoogleToken(resp) {
+  if (resp.error) {
+    showAuthError('Google sign-in failed. Please try again.');
+    return;
+  }
+  ACCESS_TOKEN = resp.access_token;
+
+  let info;
+  try {
+    info = await fetch('https://www.googleapis.com/oauth2/v3/userinfo',
+      { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }}).then(r => r.json());
+  } catch(e) {
+    showAuthError('Could not retrieve user info. Please try again.');
+    return;
+  }
+
+  const user = {
+    email:    info.email,
+    name:     info.name || info.email,
+    initials: (info.name||'??').split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase(),
+    role:     (info.email||'').toLowerCase().endsWith('@argonautinc.com') ? 'admin' : 'viewer',
+  };
+
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+    ...user, token: ACCESS_TOKEN,
+    expires: Date.now() + ((resp.expires_in || 3600) * 1000)
+  }));
+
+  CURRENT_USER = user;
+  onAuthSuccess(user);
+  loadBigQueryData();
+}
+
+/* ── Init Google OAuth token client ─────────────────────── */
+function initGoogleAuth() {
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope:     BQ_SCOPE,
+    callback:  handleGoogleToken,
+  });
+  document.getElementById('googleSignInBtn').addEventListener('click', () => {
+    hideAuthError();
+    tokenClient.requestAccessToken({ prompt: 'select_account' });
+  });
+}
+
+/* ── Bootstrap: check existing session or wait for GSI ──── */
+(function bootstrap() {
+  const raw = sessionStorage.getItem(SESSION_KEY);
+  if (raw) {
+    try {
+      const sess = JSON.parse(raw);
+      if (sess.expires > Date.now()) {
+        ACCESS_TOKEN = sess.token;
+        const user = { email: sess.email, name: sess.name, initials: sess.initials, role: sess.role };
+        CURRENT_USER = user;
+        loadBigQueryData().then(() => onAuthSuccess(user));
+        return;
+      }
+    } catch(e) {}
+    sessionStorage.removeItem(SESSION_KEY);
+  }
+
+  // GSI may load async — retry a few times
+  let attempts = 0;
+  const waitForGSI = setInterval(() => {
+    attempts++;
+    if (typeof google !== 'undefined' && google.accounts) {
+      clearInterval(waitForGSI);
+      initGoogleAuth();
+    } else if (attempts > 20) {
+      clearInterval(waitForGSI);
+      showAuthError('Google Sign-In could not load. Please refresh the page.');
+    }
+  }, 200);
+})();
+
+/* ═══════════════════════════════════════════════════════════
+   MODULE 2 JS — App Shell: routing, topbar, theme
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Tab titles ──────────────────────────────────────────── */
+const TAB_TITLES = {
+  overview:  'Overview',
+  analytics: 'Analytics',
+  creatives: 'Creatives',
+  reports:   'Reports',
+  settings:  'Settings',
+};
+
+/* ── Active tab state ────────────────────────────────────── */
+let activeTab = 'overview';
+
+/** Switch visible tab and update sidebar highlight */
+function switchTab(name) {
+  if (!TAB_TITLES[name]) return;
+  activeTab = name;
+
+  // Panel visibility
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+
+  // Sidebar highlight
+  document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === name);
+  });
+
+  // Topbar title
+  document.getElementById('topbarTitle').textContent = TAB_TITLES[name];
+
+  // Notify modules that care about activation
+  if (typeof window.__onTabSwitch === 'function') window.__onTabSwitch(name);
+}
+
+/* ── Shell init (called after auth succeeds) ─────────────── */
+window.__onAuth = function(user) {
+
+  /* Populate user chip */
+  document.getElementById('userAvatarEl').textContent = user.initials || '??';
+  document.getElementById('userNameEl').textContent   = user.name;
+  document.getElementById('userRoleEl').textContent   =
+    user.role === 'admin' ? 'Admin · Argonaut' : 'Viewer';
+
+  /* Show upload box for admins */
+  if (user.role === 'admin') {
+    document.getElementById('sidebarUploadBox').style.display = 'block';
+  }
+
+  /* Wire sidebar nav */
+  document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  /* Sign out */
+  document.getElementById('signOutBtn').addEventListener('click', signOut);
+
+  /* Sidebar quick-upload → navigate to Reports tab */
+  const uploadBtn = document.getElementById('sidebarUploadBtn');
+  if (uploadBtn) {
+    uploadBtn.addEventListener('click', () => switchTab('reports'));
+  }
+
+  /* Theme toggle */
+  document.getElementById('themeBtn').addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === 'dark'
+      ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('crkt_theme', next);
+    // swap icon
+    document.getElementById('themeBtn').innerHTML =
+      next === 'dark'
+        ? '<svg-icon name="sun" size="15"></svg-icon>'
+        : '<svg-icon name="moon" size="15"></svg-icon>';
+  });
+
+  /* Restore saved theme */
+  const savedTheme = localStorage.getItem('crkt_theme');
+  if (savedTheme) {
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.getElementById('themeBtn').innerHTML =
+      savedTheme === 'dark'
+        ? '<svg-icon name="sun" size="15"></svg-icon>'
+        : '<svg-icon name="moon" size="15"></svg-icon>';
+  }
+
+  /* Notify module chain */
+  if (typeof window.__onShellReady === 'function') window.__onShellReady(user);
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODULE 3 JS — Overview Tab
+     ═══════════════════════════════════════════════════════════ -->
+<script>
+/* ── Format helpers ─────────────────────────────────────── */
+const FMT = {
+  num:  n => new Intl.NumberFormat('en-US').format(Math.round(n)),
+  abbr: n => n >= 1e9 ? (n/1e9).toFixed(2)+'B'
+           : n >= 1e6 ? (n/1e6).toFixed(2)+'M'
+           : n >= 1e3 ? (n/1e3).toFixed(1)+'K'
+           : String(Math.round(n)),
+  pct:  n => (n * 100).toFixed(3) + '%',
+  pct2: n => (n * 100).toFixed(2) + '%',
+  pct1: n => (n * 100).toFixed(1) + '%',
+};
+
+function deltaPill(val) {
+  const pos = val >= 0;
+  return `<span class="delta ${pos?'pos':'neg'}">${pos?'↗':'↘'} ${Math.abs(val*100).toFixed(1)}%</span>`;
+}
+
+/* ── SVG chart helpers ──────────────────────────────────── */
+function svgLine(data, { w=600,h=200,color='#5BC500',stroke=2.2 }={}) {
+  if (!data.length) return '';
+  const pad={l:4,r:4,t:10,b:8};
+  const max=Math.max(...data)*1.05, min=Math.min(...data)*0.96;
+  const rng=max-min||1;
+  const xs=data.map((_,i)=>pad.l+(i/(data.length-1||1))*(w-pad.l-pad.r));
+  const ys=data.map(v=>pad.t+(1-(v-min)/rng)*(h-pad.t-pad.b));
+  const path=xs.map((x,i)=>`${i?'L':'M'}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
+  const area=`${path} L${xs.at(-1).toFixed(1)},${h-pad.b} L${xs[0].toFixed(1)},${h-pad.b} Z`;
+  const gid=`lg${color.replace('#','')}`;
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px;display:block" preserveAspectRatio="none">
+    <defs><linearGradient id="${gid}" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="${color}" stop-opacity=".28"/>
+      <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <path d="${area}" fill="url(#${gid})"/>
+    <path d="${path}" stroke="${color}" stroke-width="${stroke}" fill="none"
+      stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+function svgDonut(segs, {size=140,thick=22,label='',val=''}={}) {
+  const total=segs.reduce((s,x)=>s+x.v,0)||1;
+  const r=size/2-thick/2, circ=2*Math.PI*r;
+  let off=0;
+  const arcs=segs.map(s=>{
+    const len=(s.v/total)*circ;
+    const el=`<circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none"
+      stroke="${s.c}" stroke-width="${thick}" stroke-linecap="butt"
+      stroke-dasharray="${len.toFixed(2)} ${(circ-len).toFixed(2)}"
+      stroke-dashoffset="${(-off).toFixed(2)}"/>`;
+    off+=len; return el;
+  }).join('');
+  return `<div style="position:relative;width:${size}px;height:${size}px">
+    <svg width="${size}" height="${size}" style="transform:rotate(-90deg)">
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none"
+        stroke="var(--recess)" stroke-width="${thick}"/>
+      ${arcs}
+    </svg>
+    <div style="position:absolute;inset:0;display:grid;place-items:center;text-align:center">
+      <div>
+        <div style="font-size:11px;color:var(--muted);font-weight:500">${label}</div>
+        <div style="font-size:20px;font-weight:700;color:var(--fg);font-family:var(--font-d);letter-spacing:-.5px">${val}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ── Pivot data (real Q1/Q2 from CRKT_Q226 Excel) ────────── */
+const PIVOT_DATA = {
+  quarters: {
+    Q1: {
+      GM:  { imps:197545437, clicks:134999, gmOrd:3633, hmOrd:6,  ctr:0.000683, gmLpvr:0.017372, gmCvr:0.026911 },
+      USH: { imps: 30153756, clicks: 31502, gmOrd:  99, hmOrd:14, ctr:0.001045, gmLpvr:0.006076, gmCvr:0.003143 },
+    },
+    Q2: {
+      GM:  { imps: 49147465, clicks: 37330, gmOrd: 262, hmOrd:0,  ctr:0.000760, gmLpvr:0.017754, gmCvr:0.007018 },
+      USH: { imps: 11220736, clicks:  7642, gmOrd:  16, hmOrd:0,  ctr:0.000681, gmLpvr:0.007595, gmCvr:0.002094 },
+    },
+  },
+  stages: [
+    // ── Q1 GM ──────────────────────────────────────────────
+    {q:'Q1',mkt:'GM',stage:'1 - Mid Funnel',               imps:163419123,clicks:114133,gmOrd:1462,ctr:0.000698,gmLpvr:0.011515,gmCvr:0.012810},
+    {q:'Q1',mkt:'GM',stage:'2 - Prospecting',              imps: 30837755,clicks: 19040,gmOrd: 595,ctr:0.000617,gmLpvr:0.017034,gmCvr:0.031250},
+    {q:'Q1',mkt:'GM',stage:'3 - Homepage Visitor',         imps:  1034952,clicks:   402,gmOrd: 116,ctr:0.000388,gmLpvr:0.186578,gmCvr:0.288557},
+    {q:'Q1',mkt:'GM',stage:'4 - BYOD Visitor',             imps:    25137,clicks:     9,gmOrd:   1,ctr:0.000358,gmLpvr:0.292040,gmCvr:0.111111},
+    {q:'Q1',mkt:'GM',stage:'4 - Deals Research',           imps:   313770,clicks:   243,gmOrd:  66,ctr:0.000774,gmLpvr:0.283019,gmCvr:0.271605},
+    {q:'Q1',mkt:'GM',stage:'5 - Plan Research',            imps:   970761,clicks:   640,gmOrd: 119,ctr:0.000659,gmLpvr:0.251598,gmCvr:0.185938},
+    {q:'Q1',mkt:'GM',stage:'6 - Multi Month Plan Research',imps:   298158,clicks:   154,gmOrd:  90,ctr:0.000517,gmLpvr:0.318221,gmCvr:0.584416},
+    {q:'Q1',mkt:'GM',stage:'7 - Device Page Visitor',      imps:   270804,clicks:   153,gmOrd:  36,ctr:0.000565,gmLpvr:0.387919,gmCvr:0.235294},
+    {q:'Q1',mkt:'GM',stage:'8 - Cart Abandoner',           imps:   292499,clicks:   173,gmOrd: 699,ctr:0.000591,gmLpvr:0.713561,gmCvr:4.040462},
+    {q:'Q1',mkt:'GM',stage:'9 - Order/Checkout',           imps:    82267,clicks:    52,gmOrd: 449,ctr:0.000632,gmLpvr:1.003306,gmCvr:8.634615},
+    // ── Q1 USH ─────────────────────────────────────────────
+    {q:'Q1',mkt:'USH',stage:'1 - Mid Funnel',     imps:28732276,clicks:30312,gmOrd: 95,ctr:0.001055,gmLpvr:0.006234,gmCvr:0.003134},
+    {q:'Q1',mkt:'USH',stage:'2 - Prospecting',    imps: 1411614,clicks: 1186,gmOrd:  4,ctr:0.000840,gmLpvr:0.002161,gmCvr:0.003373},
+    {q:'Q1',mkt:'USH',stage:'3 - Homepage Visitor',imps:   8303,clicks:    4,gmOrd:  0,ctr:0.000482,gmLpvr:0.095628,gmCvr:0},
+    {q:'Q1',mkt:'USH',stage:'5 - Plan Research',   imps:   1068,clicks:    0,gmOrd:  0,ctr:0,        gmLpvr:0.130150,gmCvr:0},
+    {q:'Q1',mkt:'USH',stage:'8 - Cart Abandoner',  imps:    370,clicks:    0,gmOrd:  0,ctr:0,        gmLpvr:0.300000,gmCvr:0},
+    // ── Q2 GM ──────────────────────────────────────────────
+    {q:'Q2',mkt:'GM',stage:'1 - Mid Funnel',               imps: 47038610,clicks:35862,gmOrd:177,ctr:0.000762,gmLpvr:0.014066,gmCvr:0.004936},
+    {q:'Q2',mkt:'GM',stage:'2 - Prospecting',              imps:  1519370,clicks: 1044,gmOrd: 15,ctr:0.000687,gmLpvr:0.032444,gmCvr:0.014368},
+    {q:'Q2',mkt:'GM',stage:'3 - Homepage Visitor',         imps:   145827,clicks:   71,gmOrd:  5,ctr:0.000487,gmLpvr:0.151933,gmCvr:0.070423},
+    {q:'Q2',mkt:'GM',stage:'4 - BYOD Visitor',             imps:    12896,clicks:   14,gmOrd:  0,ctr:0.001086,gmLpvr:0.236740,gmCvr:0},
+    {q:'Q2',mkt:'GM',stage:'4 - Deals Research',           imps:    35677,clicks:   26,gmOrd:  1,ctr:0.000729,gmLpvr:0.210752,gmCvr:0.038462},
+    {q:'Q2',mkt:'GM',stage:'5 - Plan Research',            imps:   128062,clicks:   70,gmOrd:  5,ctr:0.000547,gmLpvr:0.241672,gmCvr:0.071429},
+    {q:'Q2',mkt:'GM',stage:'6 - Multi Month Plan Research',imps:    40063,clicks:   26,gmOrd:  3,ctr:0.000649,gmLpvr:0.250830,gmCvr:0.115385},
+    {q:'Q2',mkt:'GM',stage:'7 - Device Page Visitor',      imps:   160451,clicks:  166,gmOrd: 15,ctr:0.001035,gmLpvr:0.319331,gmCvr:0.090361},
+    {q:'Q2',mkt:'GM',stage:'8 - Cart Abandoner',           imps:    51137,clicks:   39,gmOrd: 25,ctr:0.000763,gmLpvr:0.525432,gmCvr:0.641026},
+    {q:'Q2',mkt:'GM',stage:'9 - Order/Checkout',           imps:    15348,clicks:   12,gmOrd: 16,ctr:0.000782,gmLpvr:0.639953,gmCvr:1.333333},
+    // ── Q2 USH ─────────────────────────────────────────────
+    {q:'Q2',mkt:'USH',stage:'1 - Mid Funnel',    imps:10875979,clicks:7532,gmOrd:16,ctr:0.000693,gmLpvr:0.007746,gmCvr:0.002124},
+    {q:'Q2',mkt:'USH',stage:'2 - Prospecting',   imps:  341076,clicks: 110,gmOrd: 0,ctr:0.000323,gmLpvr:0.002439,gmCvr:0},
+    {q:'Q2',mkt:'USH',stage:'3 - Homepage Visitor',imps:  2893,clicks:   0,gmOrd: 0,ctr:0,        gmLpvr:0.035949,gmCvr:0},
+    {q:'Q2',mkt:'USH',stage:'8 - Cart Abandoner', imps:    160,clicks:   0,gmOrd: 0,ctr:0,        gmLpvr:0.056250,gmCvr:0},
+  ],
+};
+
+const STAGE_COLORS = {
+  '1 - Mid Funnel':               '#5BC500',
+  '2 - Prospecting':              '#82E02E',
+  '3 - Homepage Visitor':         '#1E8AFF',
+  '4 - BYOD Visitor':             '#00C2E0',
+  '4 - Deals Research':           '#FF8200',
+  '5 - Plan Research':            '#A050BE',
+  '6 - Multi Month Plan Research':'#E5202E',
+  '7 - Device Page Visitor':      '#FF6B35',
+  '8 - Cart Abandoner':           '#FFB800',
+  '9 - Order/Checkout':           '#2E7D32',
+};
+
+/* ── Synthetic daily trend (based on real quarterly totals) ─ */
+function buildDailyData() {
+  const rows = [];
+  // Q1: Jan 1 – Mar 31, 2026 (91 days), total GM+USH ~227.7M
+  const q1Total = 227699193, q1Days = 91;
+  const q1Avg   = q1Total / q1Days;
+  for (let i = 0; i < q1Days; i++) {
+    const d   = new Date(2026, 0, 1 + i);
+    const dow = d.getDay();
+    const wkd = (dow === 0 || dow === 6) ? 0.77 : 1.0;
+    const trend = 1 + (i / q1Days) * 0.14;
+    const noise = 0.88 + Math.sin(i * 0.72) * 0.09 + Math.cos(i * 1.31) * 0.04;
+    rows.push({ q:'Q1', d, label: d.toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+                imps: Math.round(q1Avg * wkd * trend * noise) });
+  }
+  // Q2: Apr 1 – Apr 28, 2026 (28 days), total ~60.4M
+  const q2Total = 60368201, q2Days = 28;
+  const q2Avg   = q2Total / q2Days;
+  for (let i = 0; i < q2Days; i++) {
+    const d   = new Date(2026, 3, 1 + i);
+    const dow = d.getDay();
+    const wkd = (dow === 0 || dow === 6) ? 0.79 : 1.0;
+    const trend = 1 + (i / q2Days) * 0.08;
+    const noise = 0.89 + Math.sin(i * 0.81) * 0.07 + Math.cos(i * 1.1) * 0.04;
+    rows.push({ q:'Q2', d, label: d.toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+                imps: Math.round(q2Avg * wkd * trend * noise) });
+  }
+  return rows;
+}
+const DAILY_DATA = buildDailyData();
+
+/* ── Data aggregation helpers ───────────────────────────── */
+function filterQuarters(qSel) {
+  const qs = PIVOT_DATA.quarters;
+  const mkts = ['GM','USH'];
+  const result = {};
+  const qKeys = qSel === 'all' ? ['Q1','Q2'] : [qSel];
+  mkts.forEach(m => {
+    result[m] = { imps:0, clicks:0, gmOrd:0, hmOrd:0, ctr:0, gmLpvr:0, gmCvr:0, _n:0 };
+    qKeys.forEach(q => {
+      if (!qs[q]?.[m]) return;
+      const r = qs[q][m];
+      result[m].imps   += r.imps;
+      result[m].clicks += r.clicks;
+      result[m].gmOrd  += r.gmOrd;
+      result[m].hmOrd  += r.hmOrd;
+    });
+    if (result[m].imps) {
+      result[m].ctr    = result[m].clicks / result[m].imps;
+      result[m].gmLpvr = qKeys.reduce((s,q)=>s+(qs[q]?.[m]?.gmLpvr||0),0) / qKeys.filter(q=>qs[q]?.[m]).length;
+      result[m].gmCvr  = result[m].gmOrd / result[m].clicks || 0;
+    }
+  });
+  return result;
+}
+
+function computeTotals(qSel, mktSel) {
+  const byMkt = filterQuarters(qSel);
+  const mkts  = mktSel === 'all' ? ['GM','USH'] : [mktSel];
+  const t = { imps:0, clicks:0, gmOrd:0, hmOrd:0 };
+  mkts.forEach(m => {
+    t.imps   += byMkt[m].imps;
+    t.clicks += byMkt[m].clicks;
+    t.gmOrd  += byMkt[m].gmOrd;
+    t.hmOrd  += byMkt[m].hmOrd;
+  });
+  t.ctr    = t.imps   ? t.clicks / t.imps : 0;
+  t.gmLpvr = mkts.reduce((s,m)=>s+(byMkt[m].gmLpvr||0),0) / mkts.length;
+  t.gmCvr  = t.clicks ? t.gmOrd  / t.clicks : 0;
+  t.byMkt  = byMkt;
+  return t;
+}
+
+function computeStages(qSel, mktSel) {
+  const rows = PIVOT_DATA.stages.filter(r =>
+    (qSel  === 'all' || r.q   === qSel)  &&
+    (mktSel === 'all' || r.mkt === mktSel)
+  );
+  // Aggregate by stage name
+  const map = {};
+  rows.forEach(r => {
+    if (!map[r.stage]) map[r.stage] = { stage:r.stage, imps:0, clicks:0, gmOrd:0, _lpvrN:0, _lpvrS:0 };
+    map[r.stage].imps    += r.imps;
+    map[r.stage].clicks  += r.clicks;
+    map[r.stage].gmOrd   += r.gmOrd;
+    map[r.stage]._lpvrS  += r.gmLpvr;
+    map[r.stage]._lpvrN  += 1;
+  });
+  return Object.values(map).map(s => ({
+    ...s,
+    ctr:    s.imps   ? s.clicks / s.imps : 0,
+    gmLpvr: s._lpvrN ? s._lpvrS / s._lpvrN : 0,
+    gmCvr:  s.clicks ? s.gmOrd  / s.clicks : 0,
+  })).sort((a,b) => b.imps - a.imps);
+}
+
+/* ── KPI render ─────────────────────────────────────────── */
+function renderOvKpis(t, qSel, prevQ) {
+  // Simple period delta: compare single quarters if possible
+  let deltas = { imps:0, clicks:0, ctr:0, gmOrd:0, gmLpvr:0, gmCvr:0 };
+  if (qSel === 'Q2') {
+    const p = computeTotals('Q1', 'all');
+    deltas.imps   = (t.imps   - p.imps)   / p.imps;
+    deltas.clicks = (t.clicks - p.clicks)  / p.clicks;
+    deltas.ctr    = (t.ctr    - p.ctr)     / p.ctr;
+    deltas.gmOrd  = (t.gmOrd  - p.gmOrd)   / p.gmOrd;
+  }
+
+  const tiles = [
+    { label:'Total Impressions', val:FMT.abbr(t.imps),    delta:deltas.imps,   icon:'eye',  tint:'green', sub:'GM + USH combined' },
+    { label:'Total Clicks',      val:FMT.abbr(t.clicks),  delta:deltas.clicks, icon:'chart', tint:'blue',  sub:'All placements' },
+    { label:'CTR',               val:FMT.pct(t.ctr),      delta:deltas.ctr,    icon:'dots',  tint:'',      sub:'Click-through rate' },
+    { label:'GM Orders',         val:FMT.num(t.gmOrd),    delta:deltas.gmOrd,  icon:'check', tint:'',      sub:'Total order floodlights' },
+    { label:'GM LPVR',           val:FMT.pct1(t.gmLpvr),  delta:0,             icon:'link',  tint:'',      sub:'Landing page view rate' },
+    { label:'GM CVR',            val:FMT.pct2(t.gmCvr),   delta:0,             icon:'lock',  tint:'',      sub:'Click-to-order rate' },
+  ];
+  document.getElementById('ovKpiGrid').innerHTML = tiles.map(tile => {
+    const tileClass = tile.tint === 'green' ? 'kpi-tile-green' : tile.tint === 'blue' ? 'kpi-tile-blue' : '';
+    const iconClass = tile.tint === 'green' ? 'kpi-icon-green' : tile.tint === 'blue' ? 'kpi-icon-blue' : '';
+    const showDelta = tile.delta !== 0;
+    return `<div class="kpi-tile ${tileClass}">
+      <div class="kpi-tile-top">
+        <div class="kpi-tile-label">
+          <span class="kpi-icon ${iconClass}"><svg-icon name="${tile.icon}" size="16"></svg-icon></span>
+          <span class="kpi-label-text">${tile.label}</span>
+        </div>
+      </div>
+      <div class="kpi-value">${tile.val}</div>
+      <div class="kpi-meta">
+        ${showDelta ? deltaPill(tile.delta) : ''}
+        <span class="kpi-sub">${tile.sub}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ── Trend chart render ─────────────────────────────────── */
+function renderOvTrend(qSel) {
+  const days = DAILY_DATA.filter(d => qSel === 'all' || d.q === qSel);
+  const vals = days.map(d => d.imps);
+  document.getElementById('ovTrendChart').innerHTML = svgLine(vals, {h:190,color:'#5BC500'});
+
+  // Axis labels: first, middle, last
+  const picks = [days[0], days[Math.floor(days.length/2)], days.at(-1)].filter(Boolean);
+  document.getElementById('ovTrendAxis').innerHTML =
+    picks.map(d => `<span>${d.label}</span>`).join('');
+
+  const label = qSel === 'all' ? 'Jan – Apr 2026 (Q1 + Q2)' : qSel === 'Q1' ? 'Jan – Mar 2026' : 'Apr 2026';
+  document.getElementById('ovTrendSub').textContent = label;
+}
+
+/* ── Market split donut ─────────────────────────────────── */
+function renderOvDonut(totals) {
+  const gm  = totals.byMkt.GM.imps;
+  const ush = totals.byMkt.USH.imps;
+  const tot = gm + ush || 1;
+  document.getElementById('ovDonutChart').innerHTML = svgDonut(
+    [{v:gm,c:'#5BC500'},{v:ush,c:'#1E8AFF'}],
+    {label:'Impressions', val: FMT.abbr(tot)}
+  );
+  document.getElementById('ovDonutLegend').innerHTML = [
+    {label:'GM',  imps:gm,  color:'#5BC500'},
+    {label:'USH', imps:ush, color:'#1E8AFF'},
+  ].map(s => `<div class="donut-row">
+    <span class="donut-dot" style="background:${s.color}"></span>
+    <span class="donut-name">${s.label}</span>
+    <span class="donut-pct">${((s.imps/tot)*100).toFixed(1)}%</span>
+  </div>`).join('');
+}
+
+/* ── Funnel table render ────────────────────────────────── */
+function renderOvFunnelTable(stages) {
+  const maxImps = stages[0]?.imps || 1;
+  document.getElementById('ovTableSub').textContent =
+    `${stages.length} stage${stages.length !== 1 ? 's' : ''} · Performance by DCO journey stage`;
+  document.getElementById('ovFunnelTbody').innerHTML = stages.map(s => {
+    const color = STAGE_COLORS[s.stage] || '#8A94A6';
+    const barW  = ((s.imps / maxImps) * 100).toFixed(1);
+    const cvrFmt = s.gmCvr > 1
+      ? `<span style="color:var(--bad)">${FMT.pct1(s.gmCvr)}</span>`
+      : FMT.pct2(s.gmCvr);
+    return `<tr>
+      <td style="font-weight:500;white-space:nowrap">
+        <span class="stage-dot" style="background:${color}"></span>${s.stage}
+      </td>
+      <td class="num">${FMT.abbr(s.imps)}</td>
+      <td class="num">${FMT.abbr(s.clicks)}</td>
+      <td class="num">${FMT.pct(s.ctr)}</td>
+      <td class="num">${FMT.num(s.gmOrd)}</td>
+      <td class="num">${FMT.pct1(s.gmLpvr)}</td>
+      <td class="num">${cvrFmt}</td>
+      <td class="bar-cell">
+        <div class="mini-bar-bg">
+          <div class="mini-bar-fill" style="width:${barW}%;background:${color}"></div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── Top-level overview render ──────────────────────────── */
+let ovQ   = 'all';
+let ovMkt = 'all';
+
+function renderOverview() {
+  const totals = computeTotals(ovQ, ovMkt);
+  const stages = computeStages(ovQ, ovMkt);
+  const mktLabel = ovMkt === 'all' ? 'GM + USH' : ovMkt;
+  const qLabel   = ovQ   === 'all' ? 'Q1 + Q2' : ovQ;
+  document.getElementById('ovSubtitle').textContent =
+    `${qLabel} · ${mktLabel} · Flashtalking DCO`;
+  renderOvKpis(totals, ovQ);
+  renderOvTrend(ovQ);
+  if (ovMkt !== 'all') {
+    // When a single market is selected, show stage donut instead
+    const stagePalette = stages.slice(0,4).map((s,i)=>({
+      v: s.imps, c: STAGE_COLORS[s.stage] || '#8A94A6'
+    }));
+    document.getElementById('ovDonutChart').innerHTML =
+      svgDonut(stagePalette, {label:'Impressions', val:FMT.abbr(totals.imps)});
+    document.getElementById('ovDonutLegend').innerHTML =
+      stages.slice(0,4).map(s=>`<div class="donut-row">
+        <span class="donut-dot" style="background:${STAGE_COLORS[s.stage]||'#8A94A6'}"></span>
+        <span class="donut-name" style="font-size:11.5px">${s.stage.replace(/^\d+ - /,'')}</span>
+        <span class="donut-pct">${((s.imps/totals.imps)*100).toFixed(0)}%</span>
+      </div>`).join('');
+  } else {
+    renderOvDonut(totals);
+  }
+  renderOvFunnelTable(stages);
+}
+
+/* ── Wire filters ───────────────────────────────────────── */
+function wireOverviewFilters() {
+  document.getElementById('ovQFilter').addEventListener('click', e => {
+    const btn = e.target.closest('button[data-q]');
+    if (!btn) return;
+    ovQ = btn.dataset.q;
+    document.querySelectorAll('#ovQFilter button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    renderOverview();
+  });
+  document.getElementById('ovMarketFilter').addEventListener('click', e => {
+    const btn = e.target.closest('button[data-mkt]');
+    if (!btn) return;
+    ovMkt = btn.dataset.mkt;
+    document.querySelectorAll('#ovMarketFilter button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    renderOverview();
+  });
+}
+
+/* ── Register with shell ────────────────────────────────── */
+window.__onShellReady = function(user) {
+  wireOverviewFilters();
+  renderOverview();
+  // Re-render when tab becomes active (in case data changes)
+  const prev = window.__onTabSwitch;
+  window.__onTabSwitch = function(tab) {
+    if (tab === 'overview') renderOverview();
+    if (typeof prev === 'function') prev(tab);
+  };
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODULE 4 · ANALYTICS TAB
+     ═══════════════════════════════════════════════════════ -->
+<script>
+/* ── Embedded pivot data (all 12 metrics) ────────────────── */
+const AN_STAGES = [
+  // Q1 GM
+  {q:'Q1',mkt:'GM',stage:'1 - Mid Funnel',       imps:163419123,freq:1.062,clicks:114133,ctr:0.000698,gmOrd:1462,hmOrd:2,   gmLpvr:0.01152,hmLpvr:0.00030,gmTdor:0.0000090,hmTdor:0,gmCvr:0.01281,hmCvr:0.000018},
+  {q:'Q1',mkt:'GM',stage:'2 - Prospecting',       imps:30837755, freq:1.098,clicks:19040, ctr:0.000617,gmOrd:595, hmOrd:2,   gmLpvr:0.01703,hmLpvr:0.00037,gmTdor:0.0000193,hmTdor:0,gmCvr:0.03125,hmCvr:0.000105},
+  {q:'Q1',mkt:'GM',stage:'3 - Homepage Visitor',  imps:1034952,  freq:1.257,clicks:402,   ctr:0.000388,gmOrd:116, hmOrd:0,   gmLpvr:0.18658,hmLpvr:0.00210,gmTdor:0.0001121,hmTdor:0,gmCvr:0.28856,hmCvr:0},
+  {q:'Q1',mkt:'GM',stage:'4 - BYOD Visitor',      imps:25137,    freq:2.300,clicks:9,     ctr:0.000358,gmOrd:1,   hmOrd:0,   gmLpvr:0.29204,hmLpvr:0.00251,gmTdor:0.0000398,hmTdor:0,gmCvr:0.11111,hmCvr:0},
+  {q:'Q1',mkt:'GM',stage:'4 - Deals Research',    imps:313770,   freq:1.779,clicks:243,   ctr:0.000774,gmOrd:66,  hmOrd:0,   gmLpvr:0.28302,hmLpvr:0.00337,gmTdor:0.0002103,hmTdor:0,gmCvr:0.27160,hmCvr:0},
+  {q:'Q1',mkt:'GM',stage:'5 - Plan Research',     imps:970761,   freq:1.100,clicks:640,   ctr:0.000659,gmOrd:119, hmOrd:0,   gmLpvr:0.25160,hmLpvr:0,      gmTdor:0,        hmTdor:0,gmCvr:0.18594,hmCvr:0},
+  {q:'Q1',mkt:'GM',stage:'6 - Multi Month Plan Research', imps:298158, freq:1.100,clicks:154,ctr:0.000517,gmOrd:90,hmOrd:0, gmLpvr:0.31822,hmLpvr:0,      gmTdor:0,        hmTdor:0,gmCvr:0.58442,hmCvr:0},
+  {q:'Q1',mkt:'GM',stage:'7 - Device Page Visitor',imps:270804,  freq:1.100,clicks:153,   ctr:0.000565,gmOrd:36,  hmOrd:0,   gmLpvr:0.38792,hmLpvr:0,      gmTdor:0,        hmTdor:0,gmCvr:0.23529,hmCvr:0},
+  {q:'Q1',mkt:'GM',stage:'8 - Cart Abandoner',    imps:292499,   freq:1.100,clicks:173,   ctr:0.000591,gmOrd:699, hmOrd:0,   gmLpvr:0.71356,hmLpvr:0,      gmTdor:0,        hmTdor:0,gmCvr:4.04046,hmCvr:0},
+  {q:'Q1',mkt:'GM',stage:'9 - Order/Checkout',    imps:82267,    freq:1.100,clicks:52,    ctr:0.000632,gmOrd:449, hmOrd:0,   gmLpvr:1.00331,hmLpvr:0,      gmTdor:0,        hmTdor:0,gmCvr:8.63462,hmCvr:0},
+  // Q1 USH
+  {q:'Q1',mkt:'USH',stage:'1 - Mid Funnel',       imps:28732276, freq:1.100,clicks:30312, ctr:0.001055,gmOrd:95,  hmOrd:14,  gmLpvr:0.00623,hmLpvr:0.00067,gmTdor:0.0000033,hmTdor:0,gmCvr:0.00313,hmCvr:0.000084},
+  {q:'Q1',mkt:'USH',stage:'2 - Prospecting',      imps:1411614,  freq:1.050,clicks:1186,  ctr:0.000840,gmOrd:4,   hmOrd:0,   gmLpvr:0.00216,hmLpvr:0,      gmTdor:0,        hmTdor:0,gmCvr:0.00337,hmCvr:0},
+  {q:'Q1',mkt:'USH',stage:'3 - Homepage Visitor', imps:8303,     freq:1.100,clicks:4,     ctr:0.000482,gmOrd:0,   hmOrd:0,   gmLpvr:0.09563,hmLpvr:0,      gmTdor:0,        hmTdor:0,gmCvr:0,      hmCvr:0},
+  // Q2 GM
+  {q:'Q2',mkt:'GM',stage:'1 - Mid Funnel',        imps:47038610, freq:1.050,clicks:35862, ctr:0.000762,gmOrd:177, hmOrd:0,   gmLpvr:0.01407,hmLpvr:0,      gmTdor:0.0000038,hmTdor:0,gmCvr:0.00494,hmCvr:0},
+  {q:'Q2',mkt:'GM',stage:'2 - Prospecting',       imps:1519370,  freq:1.050,clicks:1044,  ctr:0.000687,gmOrd:15,  hmOrd:0,   gmLpvr:0.03244,hmLpvr:0,      gmTdor:0.0000099,hmTdor:0,gmCvr:0.01437,hmCvr:0},
+  {q:'Q2',mkt:'GM',stage:'3 - Homepage Visitor',  imps:145827,   freq:1.100,clicks:71,    ctr:0.000487,gmOrd:5,   hmOrd:0,   gmLpvr:0.15193,hmLpvr:0,      gmTdor:0.0000343,hmTdor:0,gmCvr:0.07042,hmCvr:0},
+  {q:'Q2',mkt:'GM',stage:'4 - BYOD Visitor',      imps:12896,    freq:1.100,clicks:14,    ctr:0.001086,gmOrd:0,   hmOrd:0,   gmLpvr:0.23674,hmLpvr:0,      gmTdor:0,        hmTdor:0,gmCvr:0,      hmCvr:0},
+  {q:'Q2',mkt:'GM',stage:'4 - Deals Research',    imps:35677,    freq:1.100,clicks:26,    ctr:0.000729,gmOrd:1,   hmOrd:0,   gmLpvr:0.21075,hmLpvr:0,      gmTdor:0.0000280,hmTdor:0,gmCvr:0.03846,hmCvr:0},
+  {q:'Q2',mkt:'GM',stage:'5 - Plan Research',     imps:128062,   freq:1.100,clicks:70,    ctr:0.000547,gmOrd:5,   hmOrd:0,   gmLpvr:0.24167,hmLpvr:0,      gmTdor:0.0000390,hmTdor:0,gmCvr:0.07143,hmCvr:0},
+  {q:'Q2',mkt:'GM',stage:'6 - Multi Month Plan Research', imps:40063, freq:1.100,clicks:26,ctr:0.000649,gmOrd:3, hmOrd:0,   gmLpvr:0.25083,hmLpvr:0,      gmTdor:0.0000749,hmTdor:0,gmCvr:0.11538,hmCvr:0},
+  {q:'Q2',mkt:'GM',stage:'7 - Device Page Visitor',imps:160451,  freq:1.100,clicks:166,   ctr:0.001035,gmOrd:15,  hmOrd:0,   gmLpvr:0.31933,hmLpvr:0,      gmTdor:0.0000935,hmTdor:0,gmCvr:0.09036,hmCvr:0},
+  {q:'Q2',mkt:'GM',stage:'8 - Cart Abandoner',    imps:51137,    freq:1.100,clicks:39,    ctr:0.000763,gmOrd:25,  hmOrd:0,   gmLpvr:0.52543,hmLpvr:0,      gmTdor:0.0004889,hmTdor:0,gmCvr:0.64103,hmCvr:0},
+  {q:'Q2',mkt:'GM',stage:'9 - Order/Checkout',    imps:15348,    freq:1.100,clicks:12,    ctr:0.000782,gmOrd:16,  hmOrd:0,   gmLpvr:0.63995,hmLpvr:0,      gmTdor:0.0010424,hmTdor:0,gmCvr:1.33333,hmCvr:0},
+  // Q2 USH
+  {q:'Q2',mkt:'USH',stage:'1 - Mid Funnel',       imps:10875979, freq:1.050,clicks:7532,  ctr:0.000693,gmOrd:16,  hmOrd:0,   gmLpvr:0.00775,hmLpvr:0,      gmTdor:0.0000015,hmTdor:0,gmCvr:0.00212,hmCvr:0},
+  {q:'Q2',mkt:'USH',stage:'2 - Prospecting',      imps:341076,   freq:1.050,clicks:110,   ctr:0.000323,gmOrd:0,   hmOrd:0,   gmLpvr:0.00244,hmLpvr:0,      gmTdor:0,        hmTdor:0,gmCvr:0,      hmCvr:0},
+];
+
+const AN_CREATIVES = [
+  // Q1 GM · Mid Funnel
+  {q:'Q1',mkt:'GM',stage:'1 - Mid Funnel',creative:'Standard Template – Cricket pricing = simple, transparent.',           imps:18416029,clicks:12256,gmOrd:150,ctr:0.000666,gmLpvr:0.01283,gmCvr:0.01224},
+  {q:'Q1',mkt:'GM',stage:'1 - Mid Funnel',creative:'Standard Template – Get the moto razr Swarovski from Cricket.',        imps:24189644,clicks:17101,gmOrd:226,ctr:0.000707,gmLpvr:0.01113,gmCvr:0.01322},
+  {q:'Q1',mkt:'GM',stage:'1 - Mid Funnel',creative:'Standard Template – See the world. Stay Connected. Add Cricket Passport.',imps:24307188,clicks:16585,gmOrd:240,ctr:0.000682,gmLpvr:0.01151,gmCvr:0.01447},
+  {q:'Q1',mkt:'GM',stage:'1 - Mid Funnel',creative:'Standard Template – Upgrade to one of the latest, greatest devices.',  imps:24346697,clicks:17076,gmOrd:202,ctr:0.000701,gmLpvr:0.01125,gmCvr:0.01183},
+  {q:'Q1',mkt:'GM',stage:'1 - Mid Funnel',creative:'Static – Clear pricing, clear mind. Join Cricket Nation.',             imps:23411319,clicks:16698,gmOrd:224,ctr:0.000713,gmLpvr:0.01159,gmCvr:0.01342},
+  {q:'Q1',mkt:'GM',stage:'1 - Mid Funnel',creative:'Static – Premium phones without the luxury price tag – Samsung S25 FE.',imps:24320836,clicks:17204,gmOrd:196,ctr:0.000707,gmLpvr:0.01139,gmCvr:0.01139},
+  {q:'Q1',mkt:'GM',stage:'1 - Mid Funnel',creative:'Static – Spa vibes, couch edition. Our $55 Unlimited plan w/ HBO Max.',imps:24427410,clicks:17213,gmOrd:224,ctr:0.000705,gmLpvr:0.01122,gmCvr:0.01301},
+  // Q1 GM · Prospecting
+  {q:'Q1',mkt:'GM',stage:'2 - Prospecting',creative:"Standard Template – 4 lines for $25 each? That's Cricket Nation.",   imps:4481870, clicks:2705, gmOrd:69, ctr:0.000604,gmLpvr:0.01698,gmCvr:0.02551},
+  {q:'Q1',mkt:'GM',stage:'2 - Prospecting',creative:'Standard Template – Change your network not your phone.',            imps:4363460, clicks:2870, gmOrd:107,ctr:0.000658,gmLpvr:0.01690,gmCvr:0.03728},
+  {q:'Q1',mkt:'GM',stage:'2 - Prospecting',creative:'Standard Template – Get the moto razr Swarovski from Cricket.',      imps:4382893, clicks:2730, gmOrd:92, ctr:0.000623,gmLpvr:0.01730,gmCvr:0.03370},
+  {q:'Q1',mkt:'GM',stage:'2 - Prospecting',creative:'Standard Template – Join Cricket Nation & get 2 lines for $65/mo.',  imps:4523069, clicks:2734, gmOrd:93, ctr:0.000604,gmLpvr:0.01690,gmCvr:0.03402},
+  {q:'Q1',mkt:'GM',stage:'2 - Prospecting',creative:'Standard Template – Join Cricket Nation, get a FREE Samsung Galaxy A16 5G.',imps:4255946,clicks:2603,gmOrd:74,ctr:0.000612,gmLpvr:0.01690,gmCvr:0.02843},
+  {q:'Q1',mkt:'GM',stage:'2 - Prospecting',creative:'Standard Template – Join Cricket Nation, get a single line for $35/mo.',imps:4509985,clicks:2744,gmOrd:93,ctr:0.000608,gmLpvr:0.01680,gmCvr:0.03389},
+  {q:'Q1',mkt:'GM',stage:'2 - Prospecting',creative:'Standard Template – Multi-month savings up to $300/yr.',             imps:4320532, clicks:2654, gmOrd:67, ctr:0.000614,gmLpvr:0.01747,gmCvr:0.02525},
+  // Q1 GM · Retargeting
+  {q:'Q1',mkt:'GM',stage:'7 - Device Page Visitor',creative:"White RTG Template – Don't forget! Add this phone to cart.", imps:270804, clicks:153,gmOrd:36, ctr:0.000565,gmLpvr:0.38792,gmCvr:0.23529},
+  {q:'Q1',mkt:'GM',stage:'8 - Cart Abandoner',    creative:"White RTG Template – Hearts what's in your cart?",           imps:292499, clicks:173,gmOrd:699,ctr:0.000591,gmLpvr:0.71356,gmCvr:4.04046},
+  {q:'Q1',mkt:'GM',stage:'9 - Order/Checkout',    creative:'Standard Template – Upgrade to one of the latest (Swarovski Razr).', imps:41177,clicks:21,gmOrd:204,ctr:0.000510,gmLpvr:0.98582,gmCvr:9.71429},
+  {q:'Q1',mkt:'GM',stage:'9 - Order/Checkout',    creative:'Static – Premium phones – Samsung S25 FE $0 Down.',          imps:41090, clicks:31,gmOrd:245,ctr:0.000754,gmLpvr:1.02083,gmCvr:7.90323},
+  // Q2 GM · Mid Funnel
+  {q:'Q2',mkt:'GM',stage:'1 - Mid Funnel',creative:"Standard Template – Passport – See the world. Stay Connected.",       imps:9431712, clicks:6987,gmOrd:35,ctr:0.000741,gmLpvr:0.01490,gmCvr:0.00501},
+  {q:'Q2',mkt:'GM',stage:'1 - Mid Funnel',creative:'Standard Template – Premium Phones – Join Cricket for the best.',     imps:9376044, clicks:6982,gmOrd:43,ctr:0.000745,gmLpvr:0.01373,gmCvr:0.00616},
+  {q:'Q2',mkt:'GM',stage:'1 - Mid Funnel',creative:'Static – 55 UNL – Book a staycation: Cricket $55 Unlimited + HBO.',  imps:9379565, clicks:7247,gmOrd:46,ctr:0.000773,gmLpvr:0.01372,gmCvr:0.00635},
+  {q:'Q2',mkt:'GM',stage:'1 - Mid Funnel',creative:"Static – Device Financing – This deal's got 'Yes!' written all over it.",imps:9442206,clicks:7423,gmOrd:21,ctr:0.000786,gmLpvr:0.01411,gmCvr:0.00283},
+  {q:'Q2',mkt:'GM',stage:'1 - Mid Funnel',creative:'Static – Transparency – Fewer fees = more fun. Join Cricket Nation.', imps:9409083, clicks:7223,gmOrd:32,ctr:0.000768,gmLpvr:0.01387,gmCvr:0.00443},
+  // Q1 USH · Mid Funnel
+  {q:'Q1',mkt:'USH',stage:'1 - Mid Funnel',creative:'Static-55UNL-HBO',                                                   imps:7115142, clicks:5953,gmOrd:17,ctr:0.000837,gmLpvr:0.00610,gmCvr:0.00286},
+  {q:'Q1',mkt:'USH',stage:'1 - Mid Funnel',creative:'Static-PremiumDevice-SamS25FE',                                      imps:7190663, clicks:9188,gmOrd:33,ctr:0.001278,gmLpvr:0.00631,gmCvr:0.00359},
+  {q:'Q1',mkt:'USH',stage:'1 - Mid Funnel',creative:'Template-PremiumDevice',                                             imps:7194302, clicks:8601,gmOrd:27,ctr:0.001196,gmLpvr:0.00636,gmCvr:0.00314},
+  {q:'Q1',mkt:'USH',stage:'1 - Mid Funnel',creative:'Template-Transparency-Simplicity',                                   imps:7232169, clicks:6570,gmOrd:18,ctr:0.000908,gmLpvr:0.00616,gmCvr:0.00274},
+  // Q2 USH · Mid Funnel
+  {q:'Q2',mkt:'USH',stage:'1 - Mid Funnel',creative:'Static-55UNL-HBO',                                                   imps:3682879, clicks:2074,gmOrd:5, ctr:0.000563,gmLpvr:0.00763,gmCvr:0.00241},
+  {q:'Q2',mkt:'USH',stage:'1 - Mid Funnel',creative:'Template-PremiumDevice',                                             imps:3541780, clicks:2822,gmOrd:4, ctr:0.000797,gmLpvr:0.00797,gmCvr:0.00142},
+  {q:'Q2',mkt:'USH',stage:'1 - Mid Funnel',creative:'Template-Transparency-Simplicity',                                   imps:3651320, clicks:2636,gmOrd:7, ctr:0.000722,gmLpvr:0.00764,gmCvr:0.00266},
+];
+
+/* ── Filter state ────────────────────────────────────────── */
+const anState = { q:'all', mkt:'all', stage:'all', view:'stage', search:'', sortCol:'imps', sortDir:-1 };
+
+function anFilter(rows) {
+  return rows.filter(r =>
+    (anState.q    === 'all' || r.q    === anState.q)    &&
+    (anState.mkt  === 'all' || r.mkt  === anState.mkt)  &&
+    (anState.stage === 'all' || r.stage === anState.stage) &&
+    (!anState.search || (r.creative || r.stage || '').toLowerCase().includes(anState.search.toLowerCase()))
+  );
+}
+
+/* ── Aggregate KPIs across a row set ────────────────────── */
+function anAgg(rows) {
+  return rows.reduce((a,r) => ({
+    imps:   a.imps   + r.imps,
+    clicks: a.clicks + r.clicks,
+    gmOrd:  a.gmOrd  + r.gmOrd,
+    hmOrd:  a.hmOrd  + (r.hmOrd||0),
+  }), {imps:0, clicks:0, gmOrd:0, hmOrd:0});
+}
+
+/* ── Number formatters ───────────────────────────────────── */
+const fmtM  = v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v;
+const fmtPct = v => (v*100).toFixed(3)+'%';
+const fmtN   = v => v == null ? '—' : Number(v).toLocaleString();
+
+/* ── Mini KPI tiles ─────────────────────────────────────── */
+function renderAnKpis(rows) {
+  const agg = anAgg(rows);
+  const ctr   = agg.clicks / (agg.imps || 1);
+  const cvr   = agg.gmOrd  / (agg.clicks || 1);
+  const lpvr  = rows.reduce((a,r)=>a + r.imps*(r.gmLpvr||0),0) / (agg.imps||1);
+
+  const tiles = [
+    { label:'Total Impressions', val: fmtM(agg.imps),           icon:'bar-chart-2', color:'var(--accent)' },
+    { label:'Avg CTR',           val: fmtPct(ctr),               icon:'mouse-pointer', color:'var(--blue)' },
+    { label:'GM Orders',         val: fmtN(agg.gmOrd),           icon:'shopping-cart', color:'var(--purple)' },
+    { label:'Avg GM LPVR',       val: (lpvr*100).toFixed(2)+'%', icon:'trending-up', color:'var(--orange)' },
+  ];
+  document.getElementById('anKpiRow').innerHTML = tiles.map(t => `
+    <div class="mini-kpi">
+      <div class="mini-kpi-icon" style="color:${t.color}">
+        <svg-icon name="${t.icon}" size="18" color="${t.color}"></svg-icon>
+      </div>
+      <div>
+        <div class="mini-kpi-label">${t.label}</div>
+        <div class="mini-kpi-val">${t.val}</div>
+      </div>
+    </div>`).join('');
+}
+
+/* ── Horizontal bar SVG ──────────────────────────────────── */
+function svgHBar(data, color='#5BC500') {
+  if (!data.length) return '<p style="color:var(--muted);font-size:12px;padding:8px 0">No data</p>';
+  const BAR_H = 22, GAP = 10, LABEL_W = 160, NUM_W = 60;
+  const W = 380;
+  const max = Math.max(...data.map(d=>d.v)) * 1.05 || 1;
+  const h = data.length * (BAR_H + GAP) + 8;
+  const bars = data.map((d,i) => {
+    const y  = i * (BAR_H + GAP) + 4;
+    const bw = ((d.v / max) * (W - LABEL_W - NUM_W - 8)).toFixed(1);
+    const lbl= String(d.label).length > 22 ? String(d.label).slice(0,21)+'…' : d.label;
+    return `<text x="0" y="${y+BAR_H*.72}" font-size="11" fill="var(--fg2)">${lbl}</text>
+    <rect x="${LABEL_W}" y="${y}" width="${bw}" height="${BAR_H}" rx="5" fill="${d.c||color}" opacity=".88"/>
+    <text x="${LABEL_W + parseFloat(bw) + 5}" y="${y+BAR_H*.72}" font-size="11" fill="var(--muted)">${d.vLabel}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${h}" class="hbar-svg" style="width:100%;height:${h}px;display:block;overflow:visible">${bars}</svg>`;
+}
+
+/* ── Charts ──────────────────────────────────────────────── */
+function renderAnCharts(stages) {
+  // CTR chart — top 8 stages by impressions
+  const sorted = [...stages].sort((a,b)=>b.imps-a.imps).slice(0,8);
+  document.getElementById('anCtrBar').innerHTML = svgHBar(
+    sorted.map(r=>({ label:r.stage.replace(/^\d+ - /,''), v:r.ctr, vLabel:fmtPct(r.ctr), c:'var(--accent)' })),
+    'var(--accent)'
+  );
+  // Imps chart
+  document.getElementById('anImpsBar').innerHTML = svgHBar(
+    sorted.map(r=>({ label:r.stage.replace(/^\d+ - /,''), v:r.imps, vLabel:fmtM(r.imps), c:'var(--blue)' })),
+    'var(--blue)'
+  );
+}
+
+/* ── Stage table ─────────────────────────────────────────── */
+const STAGE_COLS = [
+  {key:'q',      label:'Qtr',      fmt:v=>`<span class="data-badge ${v.toLowerCase()}">${v}</span>`},
+  {key:'mkt',    label:'Market',   fmt:v=>`<span class="data-badge ${v.toLowerCase()}">${v}</span>`},
+  {key:'stage',  label:'Stage',    fmt:v=>v},
+  {key:'imps',   label:'Imps',     fmt:fmtN},
+  {key:'freq',   label:'Freq',     fmt:v=>v.toFixed(2)},
+  {key:'clicks', label:'Clicks',   fmt:fmtN},
+  {key:'ctr',    label:'CTR',      fmt:fmtPct},
+  {key:'gmOrd',  label:'GM Ord',   fmt:fmtN},
+  {key:'hmOrd',  label:'HM Ord',   fmt:fmtN},
+  {key:'gmLpvr', label:'GM LPVR',  fmt:fmtPct},
+  {key:'hmLpvr', label:'HM LPVR',  fmt:fmtPct},
+  {key:'gmTdor', label:'GM TDOR',  fmt:v=>(v*100).toFixed(4)+'%'},
+  {key:'hmTdor', label:'HM TDOR',  fmt:v=>(v*100).toFixed(4)+'%'},
+  {key:'gmCvr',  label:'GM CVR',   fmt:v=>{ const p=(v*100).toFixed(3)+'%'; return v>1?`<span class="cvr-high">${p}</span>`:v>.05?`<span class="cvr-med">${p}</span>`:p; }},
+  {key:'hmCvr',  label:'HM CVR',   fmt:fmtPct},
+];
+
+const CREATIVE_COLS = [
+  {key:'q',       label:'Qtr',    fmt:v=>`<span class="data-badge ${v.toLowerCase()}">${v}</span>`},
+  {key:'mkt',     label:'Market', fmt:v=>`<span class="data-badge ${v.toLowerCase()}">${v}</span>`},
+  {key:'stage',   label:'Stage',  fmt:v=>v},
+  {key:'creative',label:'Creative',fmt:v=>`<div class="creative-name-cell" title="${v}">${v}</div>`},
+  {key:'imps',    label:'Imps',   fmt:fmtN},
+  {key:'clicks',  label:'Clicks', fmt:fmtN},
+  {key:'ctr',     label:'CTR',    fmt:fmtPct},
+  {key:'gmOrd',   label:'GM Ord', fmt:fmtN},
+  {key:'gmLpvr',  label:'GM LPVR',fmt:fmtPct},
+  {key:'gmCvr',   label:'GM CVR', fmt:v=>{ const p=(v*100).toFixed(3)+'%'; return v>1?`<span class="cvr-high">${p}</span>`:v>.05?`<span class="cvr-med">${p}</span>`:p; }},
+];
+
+function renderAnTable(rows, cols) {
+  const sorted = [...rows].sort((a,b)=>(a[anState.sortCol]>b[anState.sortCol]?1:-1)*anState.sortDir);
+  const thead = document.getElementById('anThead');
+  const tbody = document.getElementById('anTbody');
+  thead.innerHTML = `<tr>${cols.map(c=>`<th data-col="${c.key}" class="${c.key===anState.sortCol?(anState.sortDir===1?'sort-asc':'sort-desc'):''}">${c.label}</th>`).join('')}</tr>`;
+  tbody.innerHTML = sorted.map(r=>`<tr>${cols.map(c=>`<td>${c.fmt(r[c.key]??0)}</td>`).join('')}</tr>`).join('') ||
+    `<tr><td colspan="${cols.length}" style="text-align:center;padding:32px;color:var(--muted)">No data matches current filters</td></tr>`;
+  document.getElementById('anRowCount').textContent = `${sorted.length} row${sorted.length!==1?'s':''}`;
+  // Sort click handlers
+  thead.querySelectorAll('th').forEach(th=>{
+    th.addEventListener('click',()=>{
+      const col = th.dataset.col;
+      if (anState.sortCol === col) anState.sortDir *= -1;
+      else { anState.sortCol = col; anState.sortDir = -1; }
+      renderAnalytics();
+    });
+  });
+}
+
+/* ── Top-level render ────────────────────────────────────── */
+function renderAnalytics() {
+  const isCreative = anState.view === 'creative';
+  const pool  = isCreative ? AN_CREATIVES : AN_STAGES;
+  const rows  = anFilter(pool);
+  renderAnKpis(anFilter(AN_STAGES));     // KPIs always from stage data
+  renderAnCharts(anFilter(AN_STAGES));   // Charts always from stage data
+  renderAnTable(rows, isCreative ? CREATIVE_COLS : STAGE_COLS);
+}
+
+/* ── CSV export ──────────────────────────────────────────── */
+function exportAnCsv() {
+  const isCreative = anState.view === 'creative';
+  const cols = isCreative ? CREATIVE_COLS : STAGE_COLS;
+  const rows = anFilter(isCreative ? AN_CREATIVES : AN_STAGES);
+  const header = cols.map(c=>c.label).join(',');
+  const body   = rows.map(r=>cols.map(c=>{
+    const v = r[c.key] ?? 0;
+    return typeof v === 'string' ? `"${v.replace(/"/g,'""')}"` : v;
+  }).join(',')).join('\n');
+  const blob = new Blob([header+'\n'+body], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `CRKT_Analytics_${anState.q}_${anState.mkt}_${Date.now()}.csv`;
+  a.click();
+}
+
+/* ── CSV/XLSX import ─────────────────────────────────────── */
+document.getElementById('anFileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'csv') {
+    Papa.parse(file, { header:true, skipEmptyLines:true, complete(res) { console.log('[Analytics] Loaded CSV:', res.data.length, 'rows'); alert(`Loaded ${res.data.length} rows. Custom import rendering coming in a future update.`); } });
+  } else {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const wb = XLSX.read(ev.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws);
+      console.log('[Analytics] Loaded XLSX:', data.length, 'rows');
+      alert(`Loaded ${data.length} rows from "${wb.SheetNames[0]}". Custom import rendering coming in a future update.`);
+    };
+    reader.readAsArrayBuffer(file);
+  }
+  e.target.value = '';
+});
+
+/* ── Wire controls ───────────────────────────────────────── */
+document.getElementById('anExportBtn').addEventListener('click', exportAnCsv);
+
+document.getElementById('anMarketFilter').addEventListener('click', e => {
+  const btn = e.target.closest('[data-mkt]');
+  if (!btn) return;
+  anState.mkt = btn.dataset.mkt;
+  document.querySelectorAll('#anMarketFilter button').forEach(b=>b.classList.toggle('active', b===btn));
+  renderAnalytics();
+});
+
+document.getElementById('anQFilter').addEventListener('click', e => {
+  const btn = e.target.closest('[data-q]');
+  if (!btn) return;
+  anState.q = btn.dataset.q;
+  document.querySelectorAll('#anQFilter button').forEach(b=>b.classList.toggle('active', b===btn));
+  renderAnalytics();
+});
+
+document.getElementById('anStageFilter').addEventListener('change', e => {
+  anState.stage = e.target.value;
+  renderAnalytics();
+});
+
+document.getElementById('anSearch').addEventListener('input', e => {
+  anState.search = e.target.value;
+  renderAnalytics();
+});
+
+document.getElementById('anViewToggle').addEventListener('click', e => {
+  const btn = e.target.closest('[data-view]');
+  if (!btn) return;
+  anState.view = btn.dataset.view;
+  document.querySelectorAll('#anViewToggle button').forEach(b=>b.classList.toggle('active', b===btn));
+  anState.sortCol = 'imps'; anState.sortDir = -1;
+  renderAnalytics();
+});
+
+/* ── Hook into tab activation ────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════
+     MODULE 7 · SETTINGS TAB
+     ═══════════════════════════════════════════════════════ */
+
+/* ── Persistence ─────────────────────────────────────────── */
+const ST_KEY    = 'crkt_settings_v1';
+const USERS_KEY = 'crkt_users_v1';
+
+const ACCENT_MAP = {
+  '#5BC500': { soft:'rgba(91,197,0,.12)',    dark:'#3d8a00' },
+  '#0094FF': { soft:'rgba(0,148,255,.12)',   dark:'#0070cc' },
+  '#8B5CF6': { soft:'rgba(139,92,246,.12)',  dark:'#6d38d9' },
+  '#F59E0B': { soft:'rgba(245,158,11,.12)',  dark:'#c47c00' },
+};
+
+const ST_DEFAULTS = {
+  theme:'dark', accent:'#5BC500', compact:false,
+  defaultTab:'overview', defaultQ:'all', defaultMkt:'all',
+};
+
+let stSettings = (() => {
+  try { return { ...ST_DEFAULTS, ...JSON.parse(localStorage.getItem(ST_KEY)||'{}') }; }
+  catch { return { ...ST_DEFAULTS }; }
+})();
+function stPersist() { localStorage.setItem(ST_KEY, JSON.stringify(stSettings)); }
+
+const ST_DEFAULT_USERS = [
+  { id:'u_emily', email:'emily.mcandrew@argonautinc.com', name:'Emily McAndrew', role:'admin', status:'active', joinedAt:Date.now() },
+];
+let stUsers = (() => {
+  try { return JSON.parse(localStorage.getItem(USERS_KEY)||'null') || ST_DEFAULT_USERS; }
+  catch { return ST_DEFAULT_USERS; }
+})();
+function stSaveUsers() { localStorage.setItem(USERS_KEY, JSON.stringify(stUsers)); }
+
+function stRoleForEmail(email) {
+  return email.toLowerCase().endsWith('@argonautinc.com') ? 'admin' : 'viewer';
+}
+
+/* ── Apply settings to DOM ───────────────────────────────── */
+function applySettings(s) {
+  // Theme
+  const resolved = s.theme === 'system'
+    ? (window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light')
+    : s.theme;
+  document.documentElement.dataset.theme = resolved;
+  localStorage.setItem('crkt_theme', resolved);
+
+  // Accent
+  document.documentElement.style.setProperty('--accent', s.accent);
+  const av = ACCENT_MAP[s.accent] || ACCENT_MAP['#5BC500'];
+  document.documentElement.style.setProperty('--accent-soft', av.soft);
+  document.documentElement.style.setProperty('--accent-dark', av.dark);
+
+  // Compact
+  document.body.classList.toggle('compact', !!s.compact);
+}
+
+/* ── Avatar helpers ──────────────────────────────────────── */
+const AV_COLORS = ['#5BC500','#0094FF','#8B5CF6','#F59E0B','#E91E63','#00BCD4','#FF5722'];
+function avatarColor(str) {
+  let h = 0; for (const c of str) h = (h*31 + c.charCodeAt(0)) % AV_COLORS.length;
+  return AV_COLORS[h];
+}
+function avatarInitials(name) {
+  const p = name.trim().split(/\s+/);
+  return (p[0][0] + (p[1]?.[0]||'')).toUpperCase();
+}
+
+/* ── Render ──────────────────────────────────────────────── */
+function renderSettings() {
+  const s = stSettings;
+
+  // Theme tabs
+  document.querySelectorAll('[data-theme-btn]').forEach(b =>
+    b.classList.toggle('active', b.dataset.themeBtn === s.theme));
+
+  // Accent swatches
+  document.querySelectorAll('.color-swatch').forEach(sw =>
+    sw.classList.toggle('active', sw.dataset.accent === s.accent));
+
+  // Compact toggle
+  document.getElementById('stCompactToggle')?.classList.toggle('on', !!s.compact);
+
+  // Selects
+  const dt = document.getElementById('stDefaultTab');  if (dt) dt.value = s.defaultTab;
+  const dq = document.getElementById('stDefaultQ');    if (dq) dq.value = s.defaultQ;
+  const dm = document.getElementById('stDefaultMkt');  if (dm) dm.value = s.defaultMkt;
+
+  renderCurrentUser();
+  renderUsersTable();
+}
+
+function renderCurrentUser() {
+  const el = document.getElementById('stCurrentUser');
+  if (!el) return;
+  const session = (() => { try { return JSON.parse(sessionStorage.getItem('crkt_session')||'{}'); } catch { return {}; } })();
+  const email = session.email || stUsers[0]?.email || '';
+  const user  = stUsers.find(u => u.email === email) || stUsers[0] || {};
+  const roleLabel = user.role === 'admin' ? 'Admin' : 'Viewer';
+  const roleClass = user.role === 'admin' ? 'st-role-admin' : 'st-role-viewer';
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:14px">
+      <div class="st-avatar" style="background:${avatarColor(user.email||'x')}">
+        ${avatarInitials(user.name || user.email || '?')}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:700">${user.name||user.email||'Unknown'}</div>
+        <div style="font-size:12px;color:var(--muted)">${user.email||''}</div>
+      </div>
+      <span class="st-role-badge ${roleClass}">${roleLabel}</span>
+    </div>`;
+}
+
+function renderUsersTable() {
+  const el = document.getElementById('stUserList');
+  if (!el) return;
+  if (!stUsers.length) {
+    el.innerHTML = '<div style="padding:12px 0;color:var(--muted);font-size:13px">No users yet.</div>';
+    return;
+  }
+  el.innerHTML = stUsers.map(u => {
+    const rc = u.role === 'admin' ? 'st-role-admin' : 'st-role-viewer';
+    const rl = u.role === 'admin' ? 'Admin' : 'Viewer';
+    const dc = u.status === 'active' ? 'st-status-active' : 'st-status-invited';
+    const sl = u.status === 'active' ? 'Active' : 'Invited';
+    const removeBtn = u.id !== 'u_emily'
+      ? `<button class="rp-action-btn danger st-remove-btn" data-uid="${u.id}" title="Remove">
+           <svg-icon name="trash-2" size="14"></svg-icon></button>`
+      : `<div style="width:32px"></div>`;
+    return `
+    <div class="st-user-row">
+      <div class="st-avatar" style="background:${avatarColor(u.email)}">${avatarInitials(u.name||u.email)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.name||u.email}</div>
+        ${u.name ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.email}</div>` : ''}
+      </div>
+      <span class="st-role-badge ${rc}">${rl}</span>
+      <span style="font-size:11px;color:var(--muted);white-space:nowrap">
+        <span class="st-status-dot ${dc}"></span>${sl}
+      </span>
+      ${removeBtn}
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.st-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!confirm('Remove this user?')) return;
+      stUsers = stUsers.filter(u => u.id !== btn.dataset.uid);
+      stSaveUsers(); renderUsersTable();
+    });
+  });
+}
+
+/* ── Wire controls ───────────────────────────────────────── */
+document.querySelectorAll('[data-theme-btn]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    stSettings.theme = btn.dataset.themeBtn;
+    stPersist(); applySettings(stSettings); renderSettings();
+  });
+});
+
+document.querySelectorAll('.color-swatch').forEach(sw => {
+  sw.addEventListener('click', () => {
+    stSettings.accent = sw.dataset.accent;
+    stPersist(); applySettings(stSettings); renderSettings();
+  });
+});
+
+document.getElementById('stCompactToggle')?.addEventListener('click', () => {
+  stSettings.compact = !stSettings.compact;
+  stPersist(); applySettings(stSettings); renderSettings();
+});
+
+document.getElementById('stDefaultTab')?.addEventListener('change', e => {
+  stSettings.defaultTab = e.target.value; stPersist();
+});
+document.getElementById('stDefaultQ')?.addEventListener('change', e => {
+  stSettings.defaultQ = e.target.value; stPersist();
+});
+document.getElementById('stDefaultMkt')?.addEventListener('change', e => {
+  stSettings.defaultMkt = e.target.value; stPersist();
+});
+
+// Invite — auto-detect role on email input
+document.getElementById('stInviteEmail')?.addEventListener('input', e => {
+  const email = e.target.value.toLowerCase();
+  const sel   = document.getElementById('stInviteRole');
+  if (sel && email.includes('@')) sel.value = stRoleForEmail(email);
+});
+
+document.getElementById('stInviteBtn')?.addEventListener('click', () => {
+  const emailEl = document.getElementById('stInviteEmail');
+  const roleEl  = document.getElementById('stInviteRole');
+  const email   = emailEl.value.trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { emailEl.focus(); return; }
+  if (stUsers.find(u => u.email === email)) { alert('This user is already in your team.'); return; }
+  const role = roleEl.value || stRoleForEmail(email);
+  const name = email.split('@')[0].replace(/[._-]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  stUsers.push({ id:'u_'+Date.now(), email, name, role, status:'invited', joinedAt:Date.now() });
+  stSaveUsers(); emailEl.value = ''; renderUsersTable();
+  const conf = document.getElementById('stInviteConfirm');
+  if (conf) { conf.textContent = `Invite sent to ${email}`; setTimeout(()=>conf.textContent='', 3500); }
+});
+
+// Change password
+document.getElementById('stChangePwBtn')?.addEventListener('click', () => {
+  const oldPw  = document.getElementById('stOldPw').value;
+  const newPw  = document.getElementById('stNewPw').value;
+  const confPw = document.getElementById('stConfPw').value;
+  if (!oldPw || !newPw || !confPw) return;
+  if (newPw !== confPw) { alert('New passwords do not match.'); return; }
+  if (newPw.length < 6) { alert('Password must be at least 6 characters.'); return; }
+  const stored = localStorage.getItem('crkt_pw_hash');
+  if (stored && stored !== btoa(oldPw)) { alert('Current password is incorrect.'); return; }
+  localStorage.setItem('crkt_pw_hash', btoa(newPw));
+  ['stOldPw','stNewPw','stConfPw'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  const conf = document.getElementById('stPwConfirm');
+  if (conf) { conf.textContent = 'Password updated.'; setTimeout(()=>conf.textContent='', 3500); }
+});
+
+// Tab activation
+const _prevTabSwitch7 = window.__onTabSwitch;
+window.__onTabSwitch = tab => {
+  if (tab === 'settings') renderSettings();
+  if (typeof _prevTabSwitch7 === 'function') _prevTabSwitch7(tab);
+};
+
+// Apply settings on load (handles saved theme + accent + compact)
+applySettings(stSettings);
+
+/* ── Save Snapshot (wired here, used by Reports) ─────────── */
+document.getElementById('anSaveSnapBtn').addEventListener('click', () => {
+  if (typeof rpSaveSnapshot === 'function') rpSaveSnapshot();
+  else alert('Reports module not loaded yet.');
+});
+
+/* ═══════════════════════════════════════════════════════════
+     MODULE 5 · CREATIVES TAB
+     ═══════════════════════════════════════════════════════ */
+
+/* ── Persistence ─────────────────────────────────────────── */
+const CR_KEY = 'crkt_creatives_v1';
+function crLoadSaved() { try { return JSON.parse(localStorage.getItem(CR_KEY)||'{}'); } catch { return {}; } }
+function crPersist(saved) { localStorage.setItem(CR_KEY, JSON.stringify(saved)); }
+let crSaved = crLoadSaved();
+
+/* ── User-added creatives list ───────────────────────────── */
+let crUserList = (() => { try { return JSON.parse(localStorage.getItem(CR_KEY+'_user')||'[]'); } catch { return []; } })();
+function crSaveUserList() { localStorage.setItem(CR_KEY+'_user', JSON.stringify(crUserList)); }
+
+/* ── Merge base + user creatives ─────────────────────────── */
+function crGetAll() {
+  const base = (typeof AN_CREATIVES !== 'undefined' ? AN_CREATIVES : []).map((c, i) => {
+    const id = 'base_' + i;
+    const ov = crSaved[id] || {};
+    return { ...c, id, innovidUrl: ov.innovidUrl ?? '', thumbDataUrl: ov.thumbDataUrl ?? null };
+  });
+  return [...base, ...crUserList];
+}
+
+/* ── Filter state ────────────────────────────────────────── */
+const crState = { q:'all', mkt:'all', stage:'all', search:'' };
+
+function crFilter(rows) {
+  return rows.filter(r =>
+    (crState.q     === 'all' || r.q     === crState.q)     &&
+    (crState.mkt   === 'all' || r.mkt   === crState.mkt)   &&
+    (crState.stage === 'all' || r.stage === crState.stage) &&
+    (!crState.search || (r.creative||'').toLowerCase().includes(crState.search.toLowerCase()))
+  );
+}
+
+/* ── Thumbnail gradient (by stage) ──────────────────────── */
+const STAGE_GRADS = {
+  '1 - Mid Funnel':              ['#052b05','#0f5c12','#1a9c1e'],
+  '2 - Prospecting':             ['#05152b','#0f315c','#1a5c9c'],
+  '3 - Homepage Visitor':        ['#1a0a2e','#3d1577','#7b3fc4'],
+  '4 - BYOD Visitor':            ['#2b1505','#5c310f','#9c5e1a'],
+  '4 - Deals Research':          ['#2b1505','#5c310f','#9c6e1a'],
+  '5 - Plan Research':           ['#052b2b','#0f5c5c','#1a9c9c'],
+  '6 - Multi Month Plan Research':['#2b2b05','#5c5c0f','#9c9c1a'],
+  '7 - Device Page Visitor':     ['#2b0514','#5c0f2e','#9c1a52'],
+  '8 - Cart Abandoner':          ['#2b0f00','#7a2e00','#cc5200'],
+  '9 - Order/Checkout':          ['#2b0000','#7a0000','#cc1a00'],
+};
+function thumbGradient(stage) {
+  const [a,b,c2] = STAGE_GRADS[stage] || ['#111','#1e1e1e','#2d2d2d'];
+  return `linear-gradient(135deg,${a} 0%,${b} 50%,${c2} 100%)`;
+}
+function stageShort(s) { return s.replace(/^\d+ - /,''); }
+
+/* ── Thumbnail content resolver ──────────────────────────── */
+function crThumbContent(c) {
+  // Uploaded image takes top priority
+  if (c.thumbDataUrl) {
+    return `<img src="${c.thumbDataUrl}" style="width:100%;height:100%;object-fit:contain;background:#000">`;
+  }
+  // Creative link provided — detect type
+  if (c.innovidUrl) {
+    const url = c.innovidUrl.trim();
+    const isImage = /\.(jpe?g|png|gif|webp|svg)(\?|#|$)/i.test(url);
+    if (isImage) {
+      return `<img src="${url}" style="width:100%;height:100%;object-fit:contain;background:#000"
+               onerror="this.parentElement.innerHTML=crThumbFallback('${c.mkt}','${c.q}','${encodeURIComponent(c.stage)}','Link error — image not accessible')">`;
+    }
+    // HTML / iframe creative (Innovid, VAST redirect, hosted HTML ad, etc.)
+    return `<div class="cr-iframe-wrap" data-crid="${c.id}">
+      <iframe src="${url}" width="300" height="250" scrolling="no" frameborder="0"
+              allow="autoplay" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              title="${c.creative}"
+              onerror="this.parentElement.innerHTML=crThumbFallback('${c.mkt}','${c.q}','${encodeURIComponent(c.stage)}','Could not load — check URL or CORS policy')">
+      </iframe>
+    </div>`;
+  }
+  // No link — gradient placeholder
+  return crThumbFallback(c.mkt, c.q, c.stage, null);
+}
+
+function crThumbFallback(mkt, q, stage, msg) {
+  const decodedStage = decodeURIComponent(stage);
+  return `<div class="creative-thumb-placeholder" style="background:${thumbGradient(decodedStage)}">
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="1.2">
+      <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+    </svg>
+    ${msg ? `<span style="font-size:10px;color:rgba(255,255,255,.4);text-align:center;padding:0 8px">${msg}</span>` : ''}
+    <span class="creative-thumb-label">${mkt} · ${q}</span>
+  </div>`;
+}
+
+/* ── Card HTML ───────────────────────────────────────────── */
+function crCardHTML(c) {
+  const thumb = crThumbContent(c);
+
+  const linkBtn = c.innovidUrl
+    ? `<a class="cr-icon-btn" href="${c.innovidUrl}" target="_blank" title="Open in Innovid">
+         <svg-icon name="external-link" size="14"></svg-icon></a>`
+    : `<span class="cr-icon-btn cr-icon-btn--dim" title="Enter Innovid URL first">
+         <svg-icon name="external-link" size="14"></svg-icon></span>`;
+
+  const imps   = c.imps   ? fmtM(c.imps)       : '—';
+  const clicks = c.clicks ? fmtN(c.clicks)      : '—';
+  const ctr    = c.ctr    ? fmtPct(c.ctr)       : '—';
+  const gmOrd  = c.gmOrd  ? fmtN(c.gmOrd)       : '—';
+  const gmLpvr = c.gmLpvr ? fmtPct(c.gmLpvr)    : '—';
+  const gmCvr  = c.gmCvr  ? fmtPct(c.gmCvr)     : '—';
+
+  return `
+  <div class="creative-card" data-id="${c.id}">
+    <div class="creative-thumb">${thumb}</div>
+    <div class="creative-card-body">
+      <div class="creative-meta-row">
+        <span class="data-badge ${c.mkt.toLowerCase()}">${c.mkt}</span>
+        <span class="data-badge ${c.q.toLowerCase()}">${c.q}</span>
+        <button class="cr-icon-btn cr-edit-btn" data-id="${c.id}" title="Edit" style="margin-left:auto">
+          <svg-icon name="edit-2" size="13"></svg-icon>
+        </button>
+      </div>
+      <div class="creative-stage-label">${stageShort(c.stage)}</div>
+      <div class="creative-name" title="${c.creative}">${c.creative}</div>
+      <div class="creative-stats-grid">
+        <div class="cs-item"><div class="cs-label">Impressions</div><div class="cs-val">${imps}</div></div>
+        <div class="cs-item"><div class="cs-label">Clicks</div><div class="cs-val">${clicks}</div></div>
+        <div class="cs-item"><div class="cs-label">CTR</div><div class="cs-val">${ctr}</div></div>
+        <div class="cs-item"><div class="cs-label">GM Orders</div><div class="cs-val">${gmOrd}</div></div>
+        <div class="cs-item"><div class="cs-label">GM LPVR</div><div class="cs-val">${gmLpvr}</div></div>
+        <div class="cs-item"><div class="cs-label">GM CVR</div><div class="cs-val">${gmCvr}</div></div>
+      </div>
+      <div class="creative-innovid-row">
+        <svg-icon name="link" size="13" color="var(--muted)" style="flex-shrink:0"></svg-icon>
+        <input class="cr-url-input" data-id="${c.id}" type="url"
+               placeholder="Innovid URL…" value="${c.innovidUrl || ''}"/>
+        ${linkBtn}
+      </div>
+      <label class="cr-upload-btn" for="crThumb_${c.id}">
+        <svg-icon name="image" size="13"></svg-icon> Upload Preview
+        <input type="file" id="crThumb_${c.id}" data-id="${c.id}"
+               accept="image/*" class="cr-thumb-input" style="display:none"/>
+      </label>
+    </div>
+  </div>`;
+}
+
+function crAddCardHTML() {
+  return `<div class="creative-card creative-card--add" id="crAddCardBtn">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--muted)">
+      <div style="width:52px;height:52px;border-radius:14px;border:2px dashed var(--border);display:grid;place-items:center">
+        <svg-icon name="plus" size="24" color="var(--muted)"></svg-icon>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:var(--fg2)">Add Creative</div>
+      <div style="font-size:11.5px;text-align:center;max-width:180px">Link an Innovid creative or upload a preview image</div>
+    </div>
+  </div>`;
+}
+
+/* ── Render ──────────────────────────────────────────────── */
+/* ── Scale iframes to fit card width (300×250 → card width) ─ */
+const _crIframeObserver = new ResizeObserver(entries => {
+  entries.forEach(entry => {
+    const iframe = entry.target.querySelector('iframe');
+    if (!iframe) return;
+    const scale = entry.contentRect.width / 300;
+    iframe.style.transform = `scale(${scale})`;
+  });
+});
+
+function crScaleIframes() {
+  document.querySelectorAll('.cr-iframe-wrap').forEach(wrap => {
+    _crIframeObserver.observe(wrap);
+    // Also scale immediately
+    const iframe = wrap.querySelector('iframe');
+    if (iframe) iframe.style.transform = `scale(${wrap.offsetWidth / 300})`;
+  });
+}
+
+function renderCreatives() {
+  const all      = crGetAll();
+  const filtered = crFilter(all);
+  const grid     = document.getElementById('creativesGrid');
+  if (!grid) return;
+  grid.innerHTML = filtered.map(c => crCardHTML(c)).join('') + crAddCardHTML();
+  document.getElementById('crCount').textContent = `${filtered.length} creative${filtered.length!==1?'s':''}`;
+  crWireCards();
+  crScaleIframes();
+}
+
+/* ── Wire card controls ──────────────────────────────────── */
+function crWireCards() {
+  // Innovid URL save on blur
+  document.querySelectorAll('.cr-url-input').forEach(input => {
+    input.addEventListener('change', () => {
+      const id  = input.dataset.id;
+      crSaved[id] = { ...(crSaved[id]||{}), innovidUrl: input.value.trim() };
+      // also update userList if applicable
+      const u = crUserList.find(c=>c.id===id);
+      if (u) { u.innovidUrl = input.value.trim(); crSaveUserList(); }
+      crPersist(crSaved);
+      renderCreatives();
+    });
+  });
+
+  // Thumbnail upload
+  document.querySelectorAll('.cr-thumb-input').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const id   = inp.dataset.id;
+      const file = inp.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        crSaved[id] = { ...(crSaved[id]||{}), thumbDataUrl: ev.target.result };
+        const u = crUserList.find(c=>c.id===id);
+        if (u) { u.thumbDataUrl = ev.target.result; crSaveUserList(); }
+        crPersist(crSaved);
+        renderCreatives();
+      };
+      reader.readAsDataURL(file);
+    });
+  });
+
+  // Edit buttons
+  document.querySelectorAll('.cr-edit-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      crOpenModal(btn.dataset.id);
+    });
+  });
+
+  // Add card
+  const addCard = document.getElementById('crAddCardBtn');
+  if (addCard) addCard.addEventListener('click', () => crOpenModal(null));
+}
+
+/* ── Modal ───────────────────────────────────────────────── */
+let crModalThumbDataUrl = null;
+
+function crOpenModal(id) {
+  const overlay = document.getElementById('crModalOverlay');
+  const title   = document.getElementById('crModalTitle');
+  const editId  = document.getElementById('crEditId');
+  crModalThumbDataUrl = null;
+  document.getElementById('crThumbPreview').innerHTML =
+    '<span class="cr-thumb-preview-hint">Click to upload image</span>' +
+    '<input type="file" id="crFThumb" accept="image/*" style="display:none"/>';
+  crWireThumbPreview();
+
+  if (id) {
+    // Edit existing
+    const all = crGetAll();
+    const c   = all.find(x => x.id === id);
+    if (!c) return;
+    title.textContent = 'Edit Creative';
+    editId.value = id;
+    document.getElementById('crFName').value    = c.creative || '';
+    document.getElementById('crFQ').value       = c.q || 'Q1';
+    document.getElementById('crFMkt').value     = c.mkt || 'GM';
+    document.getElementById('crFStage').value   = c.stage || '1 - Mid Funnel';
+    document.getElementById('crFUrl').value     = c.innovidUrl || '';
+    document.getElementById('crFImps').value    = c.imps || '';
+    document.getElementById('crFClicks').value  = c.clicks || '';
+    document.getElementById('crFOrd').value     = c.gmOrd || '';
+    document.getElementById('crFCtr').value     = c.ctr || '';
+    if (c.thumbDataUrl) {
+      crModalThumbDataUrl = c.thumbDataUrl;
+      document.getElementById('crThumbPreview').innerHTML =
+        `<img src="${c.thumbDataUrl}" style="width:100%;height:100%;object-fit:cover"/>` +
+        '<input type="file" id="crFThumb" accept="image/*" style="display:none"/>';
+      crWireThumbPreview();
+    }
+  } else {
+    // New
+    title.textContent = 'Add Creative';
+    editId.value = '';
+    ['crFName','crFUrl','crFImps','crFClicks','crFOrd','crFCtr'].forEach(id2=>document.getElementById(id2).value='');
+    document.getElementById('crFQ').value     = 'Q2';
+    document.getElementById('crFMkt').value   = 'GM';
+    document.getElementById('crFStage').value = '1 - Mid Funnel';
+  }
+  overlay.classList.add('open');
+}
+
+function crCloseModal() {
+  document.getElementById('crModalOverlay').classList.remove('open');
+}
+
+function crWireThumbPreview() {
+  const preview = document.getElementById('crThumbPreview');
+  const input   = document.getElementById('crFThumb');
+  if (!preview || !input) return;
+  preview.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      crModalThumbDataUrl = ev.target.result;
+      preview.innerHTML = `<img src="${ev.target.result}" style="width:100%;height:100%;object-fit:cover"/>` +
+        '<input type="file" id="crFThumb" accept="image/*" style="display:none"/>';
+      crWireThumbPreview();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function crSaveModal() {
+  const name = document.getElementById('crFName').value.trim();
+  if (!name) { document.getElementById('crFName').focus(); return; }
+  const id       = document.getElementById('crEditId').value;
+  const newData  = {
+    creative:    name,
+    q:           document.getElementById('crFQ').value,
+    mkt:         document.getElementById('crFMkt').value,
+    stage:       document.getElementById('crFStage').value,
+    innovidUrl:  document.getElementById('crFUrl').value.trim(),
+    imps:        Number(document.getElementById('crFImps').value)  || 0,
+    clicks:      Number(document.getElementById('crFClicks').value) || 0,
+    gmOrd:       Number(document.getElementById('crFOrd').value)   || 0,
+    ctr:         Number(document.getElementById('crFCtr').value)   || 0,
+    gmLpvr:      0, gmCvr: 0,
+    thumbDataUrl: crModalThumbDataUrl,
+  };
+
+  if (id) {
+    // Update saved overrides
+    crSaved[id] = { ...(crSaved[id]||{}), ...newData };
+    const u = crUserList.find(c=>c.id===id);
+    if (u) { Object.assign(u, newData); crSaveUserList(); }
+    crPersist(crSaved);
+  } else {
+    const newId = 'user_' + Date.now();
+    const entry = { id:newId, ...newData };
+    crUserList.push(entry);
+    crSaveUserList();
+  }
+  crCloseModal();
+  renderCreatives();
+}
+
+/* ── Wire modal & top-level controls ────────────────────── */
+document.getElementById('crAddBtnTop').addEventListener('click', () => crOpenModal(null));
+document.getElementById('crModalCancel').addEventListener('click', crCloseModal);
+document.getElementById('crModalSave').addEventListener('click', crSaveModal);
+document.getElementById('crModalOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('crModalOverlay')) crCloseModal();
+});
+
+document.getElementById('crMarketFilter').addEventListener('click', e => {
+  const btn = e.target.closest('[data-mkt]'); if (!btn) return;
+  crState.mkt = btn.dataset.mkt;
+  document.querySelectorAll('#crMarketFilter button').forEach(b=>b.classList.toggle('active',b===btn));
+  renderCreatives();
+});
+document.getElementById('crQFilter').addEventListener('click', e => {
+  const btn = e.target.closest('[data-q]'); if (!btn) return;
+  crState.q = btn.dataset.q;
+  document.querySelectorAll('#crQFilter button').forEach(b=>b.classList.toggle('active',b===btn));
+  renderCreatives();
+});
+document.getElementById('crStageFilter').addEventListener('change', e => {
+  crState.stage = e.target.value; renderCreatives();
+});
+document.getElementById('crSearch').addEventListener('input', e => {
+  crState.search = e.target.value; renderCreatives();
+});
+crWireThumbPreview();
+
+const _prevTabSwitch = window.__onTabSwitch;
+window.__onTabSwitch = tab => {
+  if (tab === 'analytics')  renderAnalytics();
+  if (tab === 'creatives')  renderCreatives();
+  if (typeof _prevTabSwitch === 'function') _prevTabSwitch(tab);
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODULE 6 · REPORTS TAB
+     ═══════════════════════════════════════════════════════ -->
+<script>
+/* ── Persistence ─────────────────────────────────────────── */
+const RP_KEY   = 'crkt_reports_v1';
+const SNAP_KEY = 'crkt_snaps_v1';
+let rpReports = (() => { try { return JSON.parse(localStorage.getItem(RP_KEY)  || '[]'); } catch { return []; } })();
+let rpSnaps   = (() => { try { return JSON.parse(localStorage.getItem(SNAP_KEY)|| '[]'); } catch { return []; } })();
+function rpPersist()   { localStorage.setItem(RP_KEY,   JSON.stringify(rpReports)); }
+function snapPersist() { localStorage.setItem(SNAP_KEY, JSON.stringify(rpSnaps));  }
+
+/* ── Formatters ──────────────────────────────────────────── */
+function fmtBytes(b) {
+  if (b < 1024)    return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+function fmtDate2(ts) {
+  return new Date(ts).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+}
+
+/* ── Parse uploaded file ─────────────────────────────────── */
+function rpParseFile(file, cb) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'csv') {
+    Papa.parse(file, { header:true, skipEmptyLines:true,
+      complete(res) { cb(res.meta.fields||[], res.data, null); },
+      error(err)    { cb([], [], err.message); }
+    });
+  } else if (['xlsx','xls'].includes(ext)) {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const wb   = XLSX.read(ev.target.result, {type:'array'});
+        const ws   = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws, {defval:''});
+        const cols = data.length ? Object.keys(data[0]) : [];
+        cb(cols, data, null);
+      } catch(e) { cb([], [], e.message); }
+    };
+    reader.readAsArrayBuffer(file);
+  } else if (ext === 'zip') {
+    cb(['Note'], [{Note:'ZIP preview not supported. Extract and upload the CSV directly.'}], null);
+  } else {
+    cb([], [], 'Unsupported file type: ' + ext);
+  }
+}
+
+/* ── Add report from file ────────────────────────────────── */
+function rpAddFile(file) {
+  rpParseFile(file, (cols, rows, err) => {
+    const id = 'rp_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+    rpReports.unshift({
+      id, name: file.name, size: file.size,
+      type: file.name.split('.').pop().toUpperCase(),
+      date: Date.now(), cols,
+      preview: rows.slice(0, 500),
+      total: rows.length,
+      error: err || null,
+    });
+    rpPersist();
+    renderReports();
+  });
+}
+
+/* ── Save snapshot from Analytics ───────────────────────────*/
+function rpSaveSnapshot() {
+  if (typeof AN_STAGES === 'undefined') return;
+  const isCreative = (typeof anState !== 'undefined') && anState.view === 'creative';
+  const pool   = isCreative ? AN_CREATIVES : AN_STAGES;
+  const rows   = (typeof anFilter === 'function') ? anFilter(pool) : pool;
+  const cols   = isCreative
+    ? ['q','mkt','stage','creative','imps','clicks','ctr','gmOrd','gmLpvr','gmCvr']
+    : ['q','mkt','stage','imps','freq','clicks','ctr','gmOrd','hmOrd','gmLpvr','hmLpvr','gmTdor','hmTdor','gmCvr','hmCvr'];
+
+  const label = [
+    anState?.q    !== 'all' ? anState.q    : 'All Quarters',
+    anState?.mkt  !== 'all' ? anState.mkt  : 'All Markets',
+    anState?.stage!== 'all' ? anState.stage: '',
+    isCreative ? 'Creatives' : 'By Stage',
+  ].filter(Boolean).join(' · ');
+
+  const id = 'snap_' + Date.now();
+  rpSnaps.unshift({
+    id,
+    name:    label,
+    date:    Date.now(),
+    filters: { ...(anState || {}) },
+    cols,
+    preview: rows,
+    total:   rows.length,
+  });
+  snapPersist();
+  renderReports();
+  // Switch to Reports tab to confirm
+  if (typeof switchTab === 'function') switchTab('reports');
+}
+
+/* ── CSV download from stored data ──────────────────────────*/
+function rpDownloadCsv(entry) {
+  const cols = entry.cols || [];
+  const rows = entry.preview || [];
+  const header = cols.join(',');
+  const body = rows.map(r => cols.map(k => {
+    const v = r[k] ?? '';
+    return typeof v === 'string' && (v.includes(',') || v.includes('"'))
+      ? `"${v.replace(/"/g,'""')}"` : v;
+  }).join(',')).join('\n');
+  const blob = new Blob([header + '\n' + body], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = entry.name.replace(/\.(xlsx|xls|zip)$/i, '.csv');
+  a.click();
+}
+
+/* ── Preview modal ───────────────────────────────────────── */
+let rpActiveEntry = null;
+
+function rpOpenPreview(entry) {
+  rpActiveEntry = entry;
+  const overlay = document.getElementById('rpPreviewOverlay');
+  document.getElementById('rpPreviewTitle').textContent = entry.name;
+
+  const cols = entry.cols || [];
+  const rows = (entry.preview || []).slice(0, 200);
+  const thead = `<thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>`;
+  const tbody = `<tbody>${rows.map(r=>`<tr>${cols.map(c=>`<td>${r[c]??''}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  document.getElementById('rpPreviewTable').innerHTML = thead + tbody;
+
+  const shown = Math.min(rows.length, 200);
+  document.getElementById('rpPreviewMeta').textContent =
+    `Showing ${shown.toLocaleString()} of ${(entry.total||rows.length).toLocaleString()} rows`;
+
+  overlay.classList.add('open');
+}
+
+function rpClosePreview() {
+  document.getElementById('rpPreviewOverlay').classList.remove('open');
+  rpActiveEntry = null;
+}
+
+/* ── Render list items ───────────────────────────────────── */
+function rpItemHTML(entry, isSnap) {
+  const iconClass = isSnap ? 'rp-icon-snap'
+    : entry.type === 'CSV'  ? 'rp-icon-csv'
+    : entry.type === 'XLSX' || entry.type === 'XLS' ? 'rp-icon-xlsx'
+    : 'rp-icon-zip';
+  const iconLabel = isSnap ? '📊' : entry.type;
+
+  const meta = isSnap
+    ? `${fmtDate2(entry.date)} · ${entry.total} rows · Filters: ${[entry.filters?.q, entry.filters?.mkt].filter(v=>v&&v!=='all').join(', ')||'All'}`
+    : `${fmtDate2(entry.date)} · ${fmtBytes(entry.size)} · ${entry.total?.toLocaleString()||'?'} rows${entry.error ? ' · ⚠ '+entry.error : ''}`;
+
+  return `
+  <div class="rp-item" data-id="${entry.id}">
+    <div class="rp-item-icon ${iconClass}">${iconLabel}</div>
+    <div class="rp-item-body">
+      <div class="rp-item-name">${entry.name}</div>
+      <div class="rp-item-meta">${meta}</div>
+    </div>
+    <div class="rp-item-actions">
+      <button class="rp-action-btn rp-preview-btn" data-id="${entry.id}" data-snap="${isSnap?1:0}" title="Preview">
+        <svg-icon name="eye" size="15"></svg-icon>
+      </button>
+      <button class="rp-action-btn rp-dl-btn" data-id="${entry.id}" data-snap="${isSnap?1:0}" title="Download CSV">
+        <svg-icon name="download" size="15"></svg-icon>
+      </button>
+      <button class="rp-action-btn danger rp-del-btn" data-id="${entry.id}" data-snap="${isSnap?1:0}" title="Delete">
+        <svg-icon name="trash-2" size="15"></svg-icon>
+      </button>
+    </div>
+  </div>`;
+}
+
+/* ── Top-level render ────────────────────────────────────── */
+function renderReports() {
+  // Reports
+  const rList = document.getElementById('rpReportList');
+  const rCount = document.getElementById('rpReportCount');
+  if (rList) {
+    rList.innerHTML = rpReports.length
+      ? rpReports.map(r => rpItemHTML(r, false)).join('')
+      : '<div class="rp-empty">No reports uploaded yet. Drop a file above to get started.</div>';
+  }
+  if (rCount) rCount.textContent = rpReports.length;
+
+  // Snapshots
+  const sList  = document.getElementById('rpSnapList');
+  const sCount = document.getElementById('rpSnapCount');
+  if (sList) {
+    sList.innerHTML = rpSnaps.length
+      ? rpSnaps.map(s => rpItemHTML(s, true)).join('')
+      : '<div class="rp-empty">No snapshots saved yet. Use <strong>Save Snapshot</strong> in the Analytics tab.</div>';
+  }
+  if (sCount) sCount.textContent = rpSnaps.length;
+
+  rpWireListActions();
+}
+
+/* ── Wire list buttons ───────────────────────────────────── */
+function rpWireListActions() {
+  document.querySelectorAll('.rp-preview-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const isSnap = btn.dataset.snap === '1';
+      const list   = isSnap ? rpSnaps : rpReports;
+      const entry  = list.find(e => e.id === btn.dataset.id);
+      if (entry) rpOpenPreview(entry);
+    });
+  });
+  document.querySelectorAll('.rp-dl-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const isSnap = btn.dataset.snap === '1';
+      const list   = isSnap ? rpSnaps : rpReports;
+      const entry  = list.find(e => e.id === btn.dataset.id);
+      if (entry) rpDownloadCsv(entry);
+    });
+  });
+  document.querySelectorAll('.rp-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const isSnap = btn.dataset.snap === '1';
+      if (!confirm('Delete this ' + (isSnap ? 'snapshot' : 'report') + '?')) return;
+      if (isSnap) {
+        rpSnaps = rpSnaps.filter(e => e.id !== btn.dataset.id);
+        snapPersist();
+      } else {
+        rpReports = rpReports.filter(e => e.id !== btn.dataset.id);
+        rpPersist();
+      }
+      renderReports();
+    });
+  });
+}
+
+/* ── Upload zone wiring ──────────────────────────────────── */
+const rpZone = document.getElementById('rpUploadZone');
+const rpInput = document.getElementById('rpFileInput');
+
+function rpHandleFiles(files) {
+  Array.from(files).forEach(f => rpAddFile(f));
+}
+
+rpInput.addEventListener('change', e => {
+  rpHandleFiles(e.target.files);
+  e.target.value = '';
+});
+rpZone.addEventListener('click', e => {
+  if (!e.target.closest('label')) rpInput.click();
+});
+rpZone.addEventListener('dragover', e => {
+  e.preventDefault(); rpZone.classList.add('drag-over');
+});
+rpZone.addEventListener('dragleave', () => rpZone.classList.remove('drag-over'));
+rpZone.addEventListener('drop', e => {
+  e.preventDefault(); rpZone.classList.remove('drag-over');
+  rpHandleFiles(e.dataTransfer.files);
+});
+
+/* ── Preview modal wiring ────────────────────────────────── */
+document.getElementById('rpPreviewClose').addEventListener('click', rpClosePreview);
+document.getElementById('rpPreviewOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('rpPreviewOverlay')) rpClosePreview();
+});
+document.getElementById('rpPreviewDownload').addEventListener('click', () => {
+  if (rpActiveEntry) rpDownloadCsv(rpActiveEntry);
+});
+
+/* ── Tab activation ──────────────────────────────────────── */
+const _prevTabSwitch6 = window.__onTabSwitch;
+window.__onTabSwitch = tab => {
+  if (tab === 'reports') renderReports();
+  if (typeof _prevTabSwitch6 === 'function') _prevTabSwitch6(tab);
+};
+
+/* ── Initial render (in case tab is already active) ─────── */
+renderReports();
+</script>
+</body>
+</html>
