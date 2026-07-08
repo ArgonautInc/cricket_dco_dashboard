@@ -481,6 +481,269 @@ svg { display: block; }
 .page-header-sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
 .page-header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
+/* ── Pivot Table ─────────────────────────────────────────── */
+.pv-controls {
+  display: flex;
+  gap: 20px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+.pv-control-group { display: flex; flex-direction: column; gap: 6px; }
+.pv-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pv-table-wrap {
+  overflow-x: auto;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+.pv-table { width: 100%; border-collapse: collapse; }
+.pv-table thead tr {
+  background: var(--recess);
+  border-bottom: 2px solid var(--border-s);
+}
+.pv-th-row {
+  text-align: left;
+  padding: 10px 16px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  white-space: nowrap;
+  min-width: 220px;
+  position: sticky;
+  left: 0;
+  background: var(--recess);
+  z-index: 2;
+}
+.pv-th-col, .pv-th-total {
+  text-align: right;
+  padding: 10px 16px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  white-space: nowrap;
+  min-width: 110px;
+  user-select: none;
+}
+.pv-th-col.sortable, .pv-th-total.sortable { cursor: pointer; }
+.pv-th-col.sortable:hover, .pv-th-total.sortable:hover { color: var(--fg); }
+.pv-th-total { color: var(--fg2); border-left: 1px solid var(--border-s); }
+.pv-td-label {
+  padding: 9px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+  white-space: nowrap;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  left: 0;
+  background: var(--card);
+  z-index: 1;
+}
+.pv-td-val {
+  text-align: right;
+  padding: 9px 16px;
+  font-size: 11.5px;
+  color: var(--fg2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  font-family: var(--font-m);
+  transition: background .1s;
+}
+.pv-td-total {
+  text-align: right;
+  padding: 9px 16px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg);
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border-s);
+  white-space: nowrap;
+  font-family: var(--font-m);
+}
+.pv-tr-totals { background: var(--recess); border-top: 2px solid var(--border-s); }
+.pv-tr-totals .pv-td-label { background: var(--recess); font-weight: 700; font-size: 11.5px; }
+.pv-tr-totals .pv-td-val   { font-weight: 600; color: var(--fg); }
+.pv-td-grand { font-weight: 800 !important; }
+.pv-table tr:last-child td { border-bottom: none; }
+.pv-table tbody tr:not(.pv-tr-totals):hover .pv-td-val  { background: var(--recess) !important; }
+.pv-table tbody tr:not(.pv-tr-totals):hover .pv-td-total { background: var(--recess); }
+.pv-table tbody tr:not(.pv-tr-totals):hover .pv-td-label { background: var(--recess); }
+.pv-empty { padding: 48px; text-align: center; color: var(--muted); font-size: 13px; }
+
+/* ── Trends ──────────────────────────────────────────────── */
+.tr-metric-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tr-metric-pill {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg2);
+  cursor: pointer;
+  font-family: var(--font-b);
+  transition: background .15s, color .15s, border-color .15s;
+}
+.tr-metric-pill:hover { background: var(--recess); color: var(--fg); }
+.tr-metric-pill.active {
+  background: var(--accent-soft);
+  border-color: rgba(91,197,0,.35);
+  color: var(--accent-dark, #3F8D00);
+}
+[data-theme="dark"] .tr-metric-pill.active { color: var(--accent); }
+.tr-chart-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px 12px;
+}
+.tr-legend {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  margin-top: 10px;
+}
+.tr-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg2);
+}
+.tr-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.tr-delta { font-size: 11px; font-weight: 700; }
+.tr-delta-up   { color: var(--good); }
+.tr-delta-down { color: var(--bad);  }
+.tr-daily-notice {
+  margin-top: 12px;
+  background: var(--blue-soft);
+  border: 1px solid rgba(30,138,255,.25);
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 12px;
+  color: var(--fg2);
+}
+[data-theme="dark"] .tr-daily-notice { border-color: rgba(30,138,255,.2); }
+
+/* ── Glossary ────────────────────────────────────────────── */
+.gloss-cats {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.gloss-cats button {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg2);
+  cursor: pointer;
+  font-family: var(--font-b);
+  transition: background .15s, color .15s, border-color .15s;
+}
+.gloss-cats button:hover { background: var(--recess); color: var(--fg); }
+.gloss-cats button.active {
+  background: var(--accent-soft);
+  border-color: rgba(91,197,0,.35);
+  color: var(--accent-dark, #3F8D00);
+}
+[data-theme="dark"] .gloss-cats button.active { color: var(--accent); }
+.gloss-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+.gloss-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gloss-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gloss-term {
+  font-family: var(--font-d);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fg);
+}
+.gloss-full {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.gloss-cat-pill {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--recess);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.gloss-def {
+  font-size: 12.5px;
+  color: var(--fg2);
+  line-height: 1.55;
+}
+.gloss-formula {
+  font-family: var(--font-m);
+  font-size: 11px;
+  background: var(--recess);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--accent-dark, #3F8D00);
+  display: inline-block;
+  margin-top: 2px;
+}
+[data-theme="dark"] .gloss-formula { color: var(--accent); }
+.gloss-empty {
+  grid-column: 1/-1;
+  text-align: center;
+  padding: 48px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 /* ── Role badge ──────────────────────────────────────────── */
 .role-badge {
   display: inline-flex;
@@ -1151,9 +1414,24 @@ body.compact .chart-card      { padding: 14px 16px; }
       <span>Analytics</span>
     </button>
 
+    <button class="nav-item" data-tab="pivot">
+      <span class="nav-icon"><svg-icon name="table" size="17"></svg-icon></span>
+      <span>Pivot</span>
+    </button>
+
+    <button class="nav-item" data-tab="trends">
+      <span class="nav-icon"><svg-icon name="trending" size="17"></svg-icon></span>
+      <span>Trends</span>
+    </button>
+
     <button class="nav-item" data-tab="creatives">
       <span class="nav-icon"><svg-icon name="img" size="17"></svg-icon></span>
       <span>Creatives</span>
+    </button>
+
+    <button class="nav-item" data-tab="glossary">
+      <span class="nav-icon"><svg-icon name="book" size="17"></svg-icon></span>
+      <span>Glossary</span>
     </button>
 
     <div class="sidebar-spacer"></div>
@@ -1193,9 +1471,6 @@ body.compact .chart-card      { padding: 14px 16px; }
       <div class="topbar-actions">
         <button class="icon-btn" id="themeBtn" title="Toggle theme">
           <svg-icon name="sun" size="15"></svg-icon>
-        </button>
-        <button class="icon-btn" title="Notifications">
-          <svg-icon name="bell" size="15"></svg-icon>
         </button>
         <div class="user-chip">
           <div class="user-avatar" id="userAvatarEl">EM</div>
@@ -1327,10 +1602,27 @@ body.compact .chart-card      { padding: 14px 16px; }
             <option>9 - Order/Checkout</option>
           </optgroup>
           <optgroup label="Q3">
-            <option>Browser</option>
-            <option>Intent</option>
-            <option>Checkout/Purchase</option>
-            <option>Order</option>
+            <option>1 - Homepage (ajds)</option>
+            <option>2 - Mid Funnel Entry (apom)</option>
+            <option>3 - All Deals (apop)</option>
+            <option>4 - More (apoq)</option>
+            <option>5 - All Devices (apoo)</option>
+            <option>6 - Plans Research (apon)</option>
+            <option>7 - Tablet &amp; Smartwatch Plan (apos, apou)</option>
+            <option>8 - Plans - One Line Selected (ajuf)</option>
+            <option>9 - Plans - Two Lines Selected (ajug)</option>
+            <option>10 - Plans - Four Lines Selected</option>
+            <option>11 - Android Deals (apow)</option>
+            <option>12 - Smartphones (apo0)</option>
+            <option>13 - Device PDP (vcx)</option>
+            <option>14 - BYOD (sjn)</option>
+            <option>15 - Multi-Month (ani5)</option>
+            <option>16 - IMEI Check (apo4)</option>
+            <option>17 - Prompt Plan Select (apo6)</option>
+            <option>18 - Cart Abandoner (af0u)</option>
+            <option>19 - eSim Payment Method (apo5)</option>
+            <option>20 - Checkout Abandoner (apo7)</option>
+            <option>21 - Order (ajdx)</option>
           </optgroup>
         </select>
         <div class="an-search">
@@ -1432,10 +1724,27 @@ body.compact .chart-card      { padding: 14px 16px; }
             <option>9 - Order/Checkout</option>
           </optgroup>
           <optgroup label="Q3">
-            <option>Browser</option>
-            <option>Intent</option>
-            <option>Checkout/Purchase</option>
-            <option>Order</option>
+            <option>1 - Homepage (ajds)</option>
+            <option>2 - Mid Funnel Entry (apom)</option>
+            <option>3 - All Deals (apop)</option>
+            <option>4 - More (apoq)</option>
+            <option>5 - All Devices (apoo)</option>
+            <option>6 - Plans Research (apon)</option>
+            <option>7 - Tablet &amp; Smartwatch Plan (apos, apou)</option>
+            <option>8 - Plans - One Line Selected (ajuf)</option>
+            <option>9 - Plans - Two Lines Selected (ajug)</option>
+            <option>10 - Plans - Four Lines Selected</option>
+            <option>11 - Android Deals (apow)</option>
+            <option>12 - Smartphones (apo0)</option>
+            <option>13 - Device PDP (vcx)</option>
+            <option>14 - BYOD (sjn)</option>
+            <option>15 - Multi-Month (ani5)</option>
+            <option>16 - IMEI Check (apo4)</option>
+            <option>17 - Prompt Plan Select (apo6)</option>
+            <option>18 - Cart Abandoner (af0u)</option>
+            <option>19 - eSim Payment Method (apo5)</option>
+            <option>20 - Checkout Abandoner (apo7)</option>
+            <option>21 - Order (ajdx)</option>
           </optgroup>
         </select>
         <div class="an-search">
@@ -1480,16 +1789,41 @@ body.compact .chart-card      { padding: 14px 16px; }
         <div class="cr-form-group">
           <div class="cr-form-label">Funnel Stage</div>
           <select class="cr-form-select" id="crFStage">
-            <option>1 - Mid Funnel</option>
-            <option>2 - Prospecting</option>
-            <option>3 - Homepage Visitor</option>
-            <option>4 - BYOD Visitor</option>
-            <option>4 - Deals Research</option>
-            <option>5 - Plan Research</option>
-            <option>6 - Multi Month Plan Research</option>
-            <option>7 - Device Page Visitor</option>
-            <option>8 - Cart Abandoner</option>
-            <option>9 - Order/Checkout</option>
+            <optgroup label="Q1 / Q2">
+              <option>1 - Mid Funnel</option>
+              <option>2 - Prospecting</option>
+              <option>3 - Homepage Visitor</option>
+              <option>4 - BYOD Visitor</option>
+              <option>4 - Deals Research</option>
+              <option>5 - Plan Research</option>
+              <option>6 - Multi Month Plan Research</option>
+              <option>7 - Device Page Visitor</option>
+              <option>8 - Cart Abandoner</option>
+              <option>9 - Order/Checkout</option>
+            </optgroup>
+            <optgroup label="Q3">
+              <option>1 - Homepage (ajds)</option>
+              <option>2 - Mid Funnel Entry (apom)</option>
+              <option>3 - All Deals (apop)</option>
+              <option>4 - More (apoq)</option>
+              <option>5 - All Devices (apoo)</option>
+              <option>6 - Plans Research (apon)</option>
+              <option>7 - Tablet &amp; Smartwatch Plan (apos, apou)</option>
+              <option>8 - Plans - One Line Selected (ajuf)</option>
+              <option>9 - Plans - Two Lines Selected (ajug)</option>
+              <option>10 - Plans - Four Lines Selected</option>
+              <option>11 - Android Deals (apow)</option>
+              <option>12 - Smartphones (apo0)</option>
+              <option>13 - Device PDP (vcx)</option>
+              <option>14 - BYOD (sjn)</option>
+              <option>15 - Multi-Month (ani5)</option>
+              <option>16 - IMEI Check (apo4)</option>
+              <option>17 - Prompt Plan Select (apo6)</option>
+              <option>18 - Cart Abandoner (af0u)</option>
+              <option>19 - eSim Payment Method (apo5)</option>
+              <option>20 - Checkout Abandoner (apo7)</option>
+              <option>21 - Order (ajdx)</option>
+            </optgroup>
           </select>
         </div>
 
@@ -1689,6 +2023,103 @@ body.compact .chart-card      { padding: 14px 16px; }
       </div><!-- /settings-grid -->
     </div>
 
+    <div class="tab-panel" id="tab-trends">
+      <div class="page-header">
+        <div><h1>Trends</h1></div>
+        <div class="page-header-actions">
+          <div id="trGranToggle" style="display:none" class="seg-tabs">
+            <button class="active" data-gran="quarterly">Quarterly</button>
+            <button data-gran="daily">Daily</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pv-controls">
+        <div class="pv-control-group">
+          <span class="pv-label">Market</span>
+          <div class="seg-tabs green" id="trMktFilter">
+            <button class="active" data-mkt="all">All</button>
+            <button data-mkt="GM">GM</button>
+            <button data-mkt="USH">USH</button>
+          </div>
+        </div>
+        <div class="pv-control-group">
+          <span class="pv-label">Metric</span>
+          <div class="tr-metric-pills" id="trMetricPills"></div>
+        </div>
+      </div>
+
+      <div class="tr-chart-card">
+        <div id="trChartArea"></div>
+        <div class="tr-legend" id="trLegend"></div>
+      </div>
+
+      <div id="trDailyNotice" style="display:none" class="tr-daily-notice"></div>
+
+      <div class="analytics-table-wrap" style="margin-top:16px">
+        <table class="data-table analytics-table" id="trSummaryTable"></table>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-pivot">
+      <div class="page-header">
+        <div><h1>Pivot Analysis</h1></div>
+        <div class="page-header-actions">
+          <button class="btn-primary btn-sm" id="pvExportBtn">
+            <svg-icon name="download" size="13"></svg-icon> Export
+          </button>
+        </div>
+      </div>
+
+      <div class="pv-controls">
+        <div class="pv-control-group">
+          <span class="pv-label">Data</span>
+          <div class="seg-tabs" id="pvSrcToggle">
+            <button class="active" data-src="stages">By Stage</button>
+            <button data-src="creatives">By Creative</button>
+          </div>
+        </div>
+        <div class="pv-control-group">
+          <label class="pv-label" for="pvRowDim">Rows</label>
+          <select class="an-select" id="pvRowDim"></select>
+        </div>
+        <div class="pv-control-group">
+          <label class="pv-label" for="pvColDim">Columns</label>
+          <select class="an-select" id="pvColDim"></select>
+        </div>
+        <div class="pv-control-group">
+          <label class="pv-label" for="pvMetric">Metric</label>
+          <select class="an-select" id="pvMetric"></select>
+        </div>
+      </div>
+
+      <div class="pv-table-wrap">
+        <table class="pv-table" id="pvTable"></table>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-glossary">
+      <div class="page-header">
+        <div><h1>Glossary</h1></div>
+        <div class="page-header-actions">
+          <div class="an-search">
+            <svg-icon name="search" size="13" color="var(--muted)"></svg-icon>
+            <input id="glossSearch" type="text" placeholder="Search terms…"/>
+          </div>
+        </div>
+      </div>
+      <div class="gloss-cats" id="glossCats">
+        <button class="active" data-cat="all">All</button>
+        <button data-cat="metrics">Metrics</button>
+        <button data-cat="creative">Creative</button>
+        <button data-cat="markets">Markets</button>
+        <button data-cat="platforms">Platforms</button>
+        <button data-cat="ops">Ops</button>
+      </div>
+      <div id="glossCount" style="font-size:12px;color:var(--muted);margin-bottom:16px"></div>
+      <div class="gloss-grid" id="glossGrid"></div>
+    </div>
+
   </div><!-- .main -->
 </div><!-- #appLayout -->
 
@@ -1724,10 +2155,6 @@ body.compact .chart-card      { padding: 14px 16px; }
   <symbol id="ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
     <circle cx="11" cy="11" r="7"/>
     <path d="M21 21l-4.5-4.5" stroke-linecap="round"/>
-  </symbol>
-  <symbol id="ico-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-    <path d="M18 16v-5a6 6 0 10-12 0v5l-2 3h16z" stroke-linejoin="round"/>
-    <path d="M10 21a2 2 0 004 0" fill="none"/>
   </symbol>
   <symbol id="ico-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
     <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
@@ -1794,6 +2221,22 @@ body.compact .chart-card      { padding: 14px 16px; }
     <polyline points="6 9 6 2 18 2 18 9"/>
     <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
     <rect x="6" y="14" width="12" height="8"/>
+  </symbol>
+  <symbol id="ico-trending" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="17 6 23 6 23 12" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="ico-table" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <rect x="3" y="3" width="18" height="18" rx="2"/>
+    <line x1="3" y1="9" x2="21" y2="9"/>
+    <line x1="3" y1="15" x2="21" y2="15"/>
+    <line x1="9" y1="9" x2="9" y2="21"/>
+  </symbol>
+  <symbol id="ico-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
+    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+    <line x1="9" y1="7" x2="15" y2="7"/>
+    <line x1="9" y1="11" x2="13" y2="11"/>
   </symbol>
 </svg>
 
@@ -2121,7 +2564,10 @@ function initGoogleAuth() {
 const TAB_TITLES = {
   overview:  'Overview',
   analytics: 'Analytics',
+  pivot:     'Pivot Analysis',
+  trends:    'Trends',
   creatives: 'Creatives',
+  glossary:  'Glossary',
   settings:  'Settings',
 };
 
@@ -2156,7 +2602,7 @@ window.__onAuth = function(user) {
   document.getElementById('userAvatarEl').textContent = user.initials || '??';
   document.getElementById('userNameEl').textContent   = user.name;
   document.getElementById('userRoleEl').textContent   =
-    user.role === 'admin' ? 'Admin · Argonaut' : 'Viewer';
+    '';
 
   /* Show upload box for admins */
   if (user.role === 'admin') {
@@ -3716,6 +4162,765 @@ function generateOneSheet() {
 }
 
 document.getElementById('downloadOneSheeterBtn').addEventListener('click', generateOneSheet);
+
+/* ═══════════════════════════════════════════════════════════
+   MODULE · TRENDS TAB
+   ═══════════════════════════════════════════════════════════ */
+
+const TR_METRICS = [
+  { key:'imps',   label:'Impressions', fmt: v => FMT.abbr(v) },
+  { key:'ctr',    label:'CTR',         fmt: v => (v*100).toFixed(3)+'%' },
+  { key:'gmOrd',  label:'GM Orders',   fmt: v => FMT.num(v) },
+  { key:'gmLpvr', label:'GM LPVR',     fmt: v => (v*100).toFixed(3)+'%' },
+  { key:'gmCvr',  label:'GM CVR',      fmt: v => (v*100).toFixed(3)+'%' },
+  { key:'spend',  label:'Total Cost',  fmt: v => v > 0 ? FMT.dollar(v) : '—' },
+  { key:'cpc',    label:'CPC',         fmt: v => v > 0 ? '$'+v.toFixed(2) : '—' },
+];
+
+const TR_QS = ['Q1','Q2','Q3'];
+
+let trState   = { metric:'imps', mkt:'all', gran:'quarterly' };
+let trDailyData = [];
+let trDailyLoaded = false;
+let trDailyAttempted = false;
+
+function trGetVal(q, mkt, metric) {
+  let rows = AN_STAGES;
+  if (q   !== 'all') rows = rows.filter(r => r.q   === q);
+  if (mkt !== 'all') rows = rows.filter(r => r.mkt === mkt);
+  return pvAggregate(rows, metric);
+}
+
+function trBuildSeries(metric, useDailyData) {
+  if (useDailyData && trDailyData.length) {
+    const mkts  = trState.mkt === 'all' ? ['GM','USH'] : [trState.mkt];
+    const colors = { GM:'var(--accent)', USH:'var(--blue)' };
+    return mkts.map(mkt => {
+      const rows   = trDailyData.filter(r => r.mkt === mkt);
+      const labels = [...new Set(rows.map(r => r.day))].sort();
+      const points = labels.map(day => {
+        const subset = rows.filter(r => r.day === day);
+        return pvAggregate(subset, metric);
+      });
+      return { label: mkt, color: colors[mkt], labels, points };
+    });
+  }
+  /* Quarterly fallback */
+  const mkts   = trState.mkt === 'all' ? ['GM','USH'] : [trState.mkt];
+  const colors = { GM:'var(--accent)', USH:'var(--blue)' };
+  return mkts.map(mkt => ({
+    label:  mkt,
+    color:  colors[mkt],
+    labels: TR_QS,
+    points: TR_QS.map(q => trGetVal(q, mkt, metric)),
+  }));
+}
+
+function trBuildSvg(series, fmtFn) {
+  const VW = 660, VH = 230;
+  const PL = 66, PR = 16, PT = 24, PB = 38;
+  const cW = VW - PL - PR, cH = VH - PT - PB;
+
+  const labels  = series[0]?.labels || TR_QS;
+  const N       = labels.length;
+  const allVals = series.flatMap(s => s.points).filter(v => v > 0);
+  if (!allVals.length) return `<svg viewBox="0 0 ${VW} ${VH}" width="100%"><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="var(--muted)" font-size="13">No data for this selection</text></svg>`;
+
+  const maxV  = Math.max(...allVals);
+  const xOf   = i  => PL + (N === 1 ? cW/2 : (i / (N-1)) * cW);
+  const yOf   = v  => PT + cH - Math.max(0, Math.min((v / maxV) * cH, cH));
+
+  const yTickVals = [0, .25, .5, .75, 1].map(f => maxV * f);
+
+  let svg = `<svg viewBox="0 0 ${VW} ${VH}" width="100%" style="display:block;overflow:visible">`;
+
+  /* Grid */
+  yTickVals.forEach(tv => {
+    const y = yOf(tv);
+    const dash = tv === 0 ? '' : ' stroke-dasharray="4 3"';
+    svg += `<line x1="${PL}" y1="${y}" x2="${VW-PR}" y2="${y}" stroke="var(--border)" stroke-width="1"${dash}/>`;
+    svg += `<text x="${PL-8}" y="${y+4}" text-anchor="end" font-size="10" fill="var(--muted)">${fmtFn(tv)}</text>`;
+  });
+
+  /* X axis ticks — show max 12 labels when daily */
+  const step   = N <= 12 ? 1 : Math.ceil(N / 12);
+  labels.forEach((lb, i) => {
+    if (i % step !== 0 && i !== N-1) return;
+    const x = xOf(i);
+    const display = N > 20 ? lb.slice(5) : lb; // show MM-DD for daily
+    svg += `<text x="${x}" y="${VH-6}" text-anchor="middle" font-size="${N > 20 ? 9 : 11.5}" font-weight="600" fill="var(--muted)">${display}</text>`;
+  });
+
+  /* Series */
+  series.forEach(s => {
+    if (s.points.length < 2) return;
+
+    /* Area */
+    const ptStr = s.points.map((v,i) => `${xOf(i)},${yOf(v)}`).join(' ');
+    const areaD = `M${xOf(0)},${PT+cH} L${s.points.map((v,i)=>`${xOf(i)},${yOf(v)}`).join(' ')} L${xOf(N-1)},${PT+cH} Z`;
+    svg += `<path d="${areaD}" fill="${s.color}" opacity="0.07"/>`;
+
+    /* Line */
+    svg += `<polyline points="${ptStr}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+
+    /* Dots — only render if N <= 30 */
+    if (N <= 30) {
+      s.points.forEach((v, i) => {
+        const x = xOf(i), y = yOf(v);
+        svg += `<circle cx="${x}" cy="${y}" r="${N > 10 ? 3 : 5}" fill="${s.color}" stroke="var(--card)" stroke-width="2"><title>${s.label} ${labels[i]}: ${fmtFn(v)}</title></circle>`;
+        if (N <= 6) {
+          svg += `<text x="${x}" y="${y-10}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${s.color}">${fmtFn(v)}</text>`;
+        }
+      });
+    }
+
+    /* QoQ deltas (quarterly mode only) */
+    if (N <= 6) {
+      for (let i = 0; i < N-1; i++) {
+        const v1 = s.points[i], v2 = s.points[i+1];
+        if (!v1) continue;
+        const pct = ((v2 - v1) / v1) * 100;
+        const mx  = (xOf(i) + xOf(i+1)) / 2;
+        const my  = Math.min(yOf(v1), yOf(v2)) - 16;
+        const col = pct >= 0 ? 'var(--good)' : 'var(--bad)';
+        const arr = pct >= 0 ? '▲' : '▼';
+        if (s.label === series[0].label) {
+          svg += `<text x="${mx}" y="${my}" text-anchor="middle" font-size="10" fill="${col}">${arr} ${Math.abs(pct).toFixed(1)}%</text>`;
+        }
+      }
+    }
+  });
+
+  svg += '</svg>';
+  return svg;
+}
+
+function renderTrendSummaryTable() {
+  const fmtDelta = (v1, v2) => {
+    if (!v1) return '<td class="num" style="color:var(--muted)">—</td>';
+    const pct = ((v2 - v1) / v1) * 100;
+    const cls = pct >= 0 ? 'tr-delta-up' : 'tr-delta-down';
+    const arrow = pct >= 0 ? '▲' : '▼';
+    return `<td class="num"><span class="tr-delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%</span></td>`;
+  };
+
+  const mkts = trState.mkt === 'all' ? ['GM','USH'] : [trState.mkt];
+
+  const rows = mkts.flatMap(mkt =>
+    TR_METRICS.map(m => {
+      const vals = TR_QS.map(q => trGetVal(q, mkt, m.key));
+      return `<tr>
+        <td><span class="data-badge ${mkt.toLowerCase()}">${mkt}</span></td>
+        <td>${m.label}</td>
+        <td class="num">${m.fmt(vals[0])}</td>
+        <td class="num">${m.fmt(vals[1])}</td>
+        ${fmtDelta(vals[0], vals[1])}
+        <td class="num">${m.fmt(vals[2])}</td>
+        ${fmtDelta(vals[1], vals[2])}
+      </tr>`;
+    })
+  ).join('');
+
+  document.getElementById('trSummaryTable').innerHTML = `
+    <thead><tr>
+      <th>Market</th><th>Metric</th>
+      <th class="num">Q1</th><th class="num">Q2</th><th class="num">Q1→Q2</th>
+      <th class="num">Q3</th><th class="num">Q2→Q3</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>`;
+}
+
+function renderMetricPills() {
+  document.getElementById('trMetricPills').innerHTML = TR_METRICS.map(m =>
+    `<button class="tr-metric-pill${m.key===trState.metric?' active':''}" data-metric="${m.key}">${m.label}</button>`
+  ).join('');
+  document.querySelectorAll('.tr-metric-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      trState.metric = btn.dataset.metric;
+      document.querySelectorAll('.tr-metric-pill').forEach(b => b.classList.toggle('active', b===btn));
+      renderTrendChart();
+    });
+  });
+}
+
+function renderTrendChart() {
+  const m       = TR_METRICS.find(x => x.key === trState.metric);
+  const useDaily = trState.gran === 'daily' && trDailyData.length > 0;
+  const series  = trBuildSeries(trState.metric, useDaily);
+
+  document.getElementById('trChartArea').innerHTML = trBuildSvg(series, m.fmt);
+
+  document.getElementById('trLegend').innerHTML = series.map(s =>
+    `<div class="tr-legend-item">
+      <div class="tr-legend-dot" style="background:${s.color}"></div>
+      ${s.label}
+    </div>`).join('');
+
+  renderTrendSummaryTable();
+}
+
+function renderTrends() {
+  renderMetricPills();
+  renderTrendChart();
+
+  if (!trDailyAttempted) {
+    trDailyAttempted = true;
+    tryLoadTrendDailyData();
+  }
+}
+
+async function tryLoadTrendDailyData() {
+  if (!ACCESS_TOKEN) return;
+  const dateFields = ['Date Breakdown', 'Date', 'Report Date', 'Day'];
+
+  for (const field of dateFields) {
+    try {
+      const rows = await bqQuery(`
+        SELECT
+          CAST(\`${field}\` AS STRING) as day,
+          \`Flight\` as q,
+          CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
+          SUM(\`Total Ads Requested\`) as imps,
+          SUM(\`Clicks\`) as clicks,
+          SAFE_DIVIDE(SUM(\`Clicks\`), SUM(\`Total Ads Requested\`)) as ctr,
+          SUM(\`CKT_bNON_HISPANIC_ORDER Count\`) as gmOrd,
+          SUM(\`Total Cost\`) as spend
+        FROM \`crk-dco-dash.reporting_data.deliveries_view\`
+        WHERE \`Flight\` IN ('Q1','Q2','Q3')
+        GROUP BY day, q, mkt
+        ORDER BY day
+      `);
+
+      if (rows && rows.length > 0) {
+        trDailyData = rows.map(r => ({
+          day:    r.day,
+          q:      r.q,
+          mkt:    r.mkt,
+          imps:   Number(r.imps)   || 0,
+          clicks: Number(r.clicks) || 0,
+          ctr:    Number(r.ctr)    || 0,
+          gmOrd:  Number(r.gmOrd)  || 0,
+          spend:  Number(r.spend)  || 0,
+        }));
+        trDailyLoaded = true;
+
+        /* Show granularity toggle */
+        const toggle = document.getElementById('trGranToggle');
+        if (toggle) toggle.style.display = '';
+
+        const notice = document.getElementById('trDailyNotice');
+        if (notice) {
+          notice.style.display = '';
+          notice.textContent   = `Daily data loaded via "${field}" column — ${trDailyData.length} rows. Use the Quarterly / Daily toggle above to switch views.`;
+        }
+        return;
+      }
+    } catch(e) { /* try next field name */ }
+  }
+
+  /* All field names failed */
+  const notice = document.getElementById('trDailyNotice');
+  if (notice) {
+    notice.style.display = '';
+    notice.innerHTML = `Daily view unavailable — no date column found in <code>deliveries_view</code>. Ask your data team to expose a <code>Date</code> or <code>Date Breakdown</code> field. Showing quarterly data only.`;
+  }
+}
+
+/* ── Wire trends controls ────────────────────────────────── */
+document.getElementById('trMktFilter').addEventListener('click', e => {
+  const btn = e.target.closest('[data-mkt]');
+  if (!btn) return;
+  trState.mkt = btn.dataset.mkt;
+  document.querySelectorAll('#trMktFilter button').forEach(b => b.classList.toggle('active', b===btn));
+  renderTrendChart();
+});
+
+document.getElementById('trGranToggle').addEventListener('click', e => {
+  const btn = e.target.closest('[data-gran]');
+  if (!btn) return;
+  trState.gran = btn.dataset.gran;
+  document.querySelectorAll('#trGranToggle button').forEach(b => b.classList.toggle('active', b===btn));
+  renderTrendChart();
+});
+
+const _trPrev = window.__onTabSwitch;
+window.__onTabSwitch = function(tab) {
+  if (tab === 'trends') renderTrends();
+  if (typeof _trPrev === 'function') _trPrev(tab);
+};
+
+/* ═══════════════════════════════════════════════════════════
+   MODULE · PIVOT TABLE
+   ═══════════════════════════════════════════════════════════ */
+
+const PV_METRICS = [
+  { key:'imps',   label:'Impressions', stageOnly:false, fmt:v=>FMT.abbr(v) },
+  { key:'clicks', label:'Clicks',      stageOnly:false, fmt:v=>FMT.abbr(v) },
+  { key:'ctr',    label:'CTR',         stageOnly:false, fmt:v=>(v*100).toFixed(3)+'%' },
+  { key:'gmOrd',  label:'GM Orders',   stageOnly:false, fmt:v=>FMT.num(v) },
+  { key:'hmOrd',  label:'HM Orders',   stageOnly:true,  fmt:v=>FMT.num(v) },
+  { key:'gmLpvr', label:'GM LPVR',     stageOnly:false, fmt:v=>(v*100).toFixed(3)+'%' },
+  { key:'hmLpvr', label:'HM LPVR',     stageOnly:true,  fmt:v=>(v*100).toFixed(3)+'%' },
+  { key:'gmCvr',  label:'GM CVR',      stageOnly:false, fmt:v=>(v*100).toFixed(3)+'%' },
+  { key:'gmTdor', label:'GM TDOR',     stageOnly:true,  fmt:v=>(v*100).toFixed(4)+'%' },
+  { key:'spend',  label:'Total Cost',  stageOnly:false, fmt:v=>v>0?FMT.dollar(v):'—' },
+  { key:'cpc',    label:'CPC',         stageOnly:false, fmt:v=>v>0?'$'+v.toFixed(2):'—' },
+  { key:'freq',   label:'Frequency',   stageOnly:true,  fmt:v=>v.toFixed(2)+'×' },
+];
+
+const PV_DIMS = {
+  stage:    { label:'Stage',    creativeOnly:false },
+  q:        { label:'Quarter',  creativeOnly:false },
+  mkt:      { label:'Market',   creativeOnly:false },
+  creative: { label:'Creative', creativeOnly:true  },
+};
+
+let pvState = { src:'stages', rowDim:'stage', colDim:'q', metric:'imps', sortCol:'__total__', sortDir:-1 };
+
+function pvPool() { return pvState.src === 'creatives' ? AN_CREATIVES : AN_STAGES; }
+
+function pvAggregate(rows, metric) {
+  const imps    = rows.reduce((s,r) => s+(r.imps  ||0), 0);
+  const clicks  = rows.reduce((s,r) => s+(r.clicks||0), 0);
+  const gmOrd   = rows.reduce((s,r) => s+(r.gmOrd ||0), 0);
+  const hmOrd   = rows.reduce((s,r) => s+(r.hmOrd ||0), 0);
+  const spend   = rows.reduce((s,r) => s+(r.spend ||0), 0);
+  const wGmLp   = rows.reduce((s,r) => s+(r.gmLpvr||0)*(r.imps||0), 0);
+  const wHmLp   = rows.reduce((s,r) => s+(r.hmLpvr||0)*(r.imps||0), 0);
+  const wGmTd   = rows.reduce((s,r) => s+(r.gmTdor||0)*(r.imps||0), 0);
+  const wFreq   = rows.reduce((s,r) => s+(r.freq  ||1)*(r.imps||0), 0);
+  switch(metric) {
+    case 'imps':   return imps;
+    case 'clicks': return clicks;
+    case 'gmOrd':  return gmOrd;
+    case 'hmOrd':  return hmOrd;
+    case 'spend':  return spend;
+    case 'ctr':    return imps   ? clicks/imps  : 0;
+    case 'gmCvr':  return clicks ? gmOrd/clicks : 0;
+    case 'hmCvr':  return clicks ? hmOrd/clicks : 0;
+    case 'cpc':    return clicks ? spend/clicks : 0;
+    case 'gmLpvr': return imps   ? wGmLp/imps  : 0;
+    case 'hmLpvr': return imps   ? wHmLp/imps  : 0;
+    case 'gmTdor': return imps   ? wGmTd/imps  : 0;
+    case 'freq':   return imps   ? wFreq/imps  : 0;
+    default: return 0;
+  }
+}
+
+function pvFmt(metric, val) {
+  const m = PV_METRICS.find(x => x.key === metric);
+  return m ? m.fmt(val) : String(val);
+}
+
+function pvUpdateSelects() {
+  const isCreative = pvState.src === 'creatives';
+
+  const rowOpts = Object.entries(PV_DIMS)
+    .filter(([k, d]) => !d.creativeOnly || isCreative)
+    .map(([k, d]) => `<option value="${k}"${k===pvState.rowDim?' selected':''}>${d.label}</option>`).join('');
+  document.getElementById('pvRowDim').innerHTML = rowOpts;
+
+  const colOpts = Object.entries(PV_DIMS)
+    .filter(([k, d]) => k !== pvState.rowDim && !d.creativeOnly)
+    .map(([k, d]) => `<option value="${k}"${k===pvState.colDim?' selected':''}>${d.label}</option>`).join('');
+  document.getElementById('pvColDim').innerHTML = colOpts;
+  if (!colOpts.includes(`value="${pvState.colDim}"`)) {
+    pvState.colDim = Object.keys(PV_DIMS).find(k => k !== pvState.rowDim && !PV_DIMS[k].creativeOnly) || 'q';
+    document.getElementById('pvColDim').value = pvState.colDim;
+  }
+
+  const validMetric = isCreative ? pvState.metric : pvState.metric;
+  const metricInvalid = isCreative && PV_METRICS.find(m => m.key === pvState.metric)?.stageOnly;
+  if (metricInvalid) pvState.metric = 'imps';
+
+  const metOpts = PV_METRICS
+    .filter(m => !m.stageOnly || !isCreative)
+    .map(m => `<option value="${m.key}"${m.key===pvState.metric?' selected':''}>${m.label}</option>`).join('');
+  document.getElementById('pvMetric').innerHTML = metOpts;
+}
+
+function renderPivot() {
+  pvUpdateSelects();
+
+  const pool   = pvPool();
+  const rowKey = pvState.rowDim;
+  const colKey = pvState.colDim;
+  const metric = pvState.metric;
+
+  const colVals = [...new Set(pool.map(r => r[colKey]).filter(Boolean))].sort();
+  let   rowVals = [...new Set(pool.map(r => r[rowKey]).filter(Boolean))];
+
+  if (!rowVals.length) {
+    document.getElementById('pvTable').innerHTML = `<tr><td class="pv-empty">No data available for this combination.</td></tr>`;
+    return;
+  }
+
+  // Sort rows by selected sort column
+  rowVals.sort((a, b) => {
+    const v = rv => pvState.sortCol === '__total__'
+      ? pvAggregate(pool.filter(r => r[rowKey]===rv), metric)
+      : pvAggregate(pool.filter(r => r[rowKey]===rv && r[colKey]===pvState.sortCol), metric);
+    return (v(a) - v(b)) * pvState.sortDir;
+  });
+
+  // Build matrix
+  const matrix = {};
+  rowVals.forEach(rv => {
+    matrix[rv] = {};
+    colVals.forEach(cv => {
+      matrix[rv][cv] = pvAggregate(pool.filter(r => r[rowKey]===rv && r[colKey]===cv), metric);
+    });
+    matrix[rv]['__total__'] = pvAggregate(pool.filter(r => r[rowKey]===rv), metric);
+  });
+
+  const colTotals = {};
+  colVals.forEach(cv => { colTotals[cv] = pvAggregate(pool.filter(r => r[colKey]===cv), metric); });
+  colTotals['__total__'] = pvAggregate(pool, metric);
+
+  // Heat map across all data cells
+  const allVals = rowVals.flatMap(rv => colVals.map(cv => matrix[rv][cv])).filter(v => v > 0);
+  const maxVal  = Math.max(...allVals, 1);
+  const heat    = v => v > 0 ? ` style="background:rgba(91,197,0,${(Math.min(v/maxVal,1)*0.2).toFixed(3)})"` : '';
+
+  const si = col => pvState.sortCol===col ? (pvState.sortDir===-1?' ▾':' ▴') : '';
+
+  const thead = `<thead><tr>
+    <th class="pv-th-row">${PV_DIMS[rowKey]?.label||rowKey}</th>
+    ${colVals.map(cv=>`<th class="pv-th-col sortable" data-col="${cv}">${cv}${si(cv)}</th>`).join('')}
+    <th class="pv-th-total sortable" data-col="__total__">Total${si('__total__')}</th>
+  </tr></thead>`;
+
+  const tbody = `<tbody>
+    ${rowVals.map(rv => {
+      const label = rowKey==='creative' && rv.length>55 ? rv.slice(0,52)+'…' : rv;
+      return `<tr>
+        <td class="pv-td-label" title="${rv.replace(/"/g,'&quot;')}">${label}</td>
+        ${colVals.map(cv=>`<td class="pv-td-val"${heat(matrix[rv][cv])}>${pvFmt(metric,matrix[rv][cv])}</td>`).join('')}
+        <td class="pv-td-total">${pvFmt(metric,matrix[rv]['__total__'])}</td>
+      </tr>`;
+    }).join('')}
+    <tr class="pv-tr-totals">
+      <td class="pv-td-label pv-td-grand">Total</td>
+      ${colVals.map(cv=>`<td class="pv-td-total">${pvFmt(metric,colTotals[cv])}</td>`).join('')}
+      <td class="pv-td-total pv-td-grand">${pvFmt(metric,colTotals['__total__'])}</td>
+    </tr>
+  </tbody>`;
+
+  document.getElementById('pvTable').innerHTML = thead + tbody;
+
+  document.querySelectorAll('#pvTable th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (pvState.sortCol === col) pvState.sortDir *= -1;
+      else { pvState.sortCol = col; pvState.sortDir = -1; }
+      renderPivot();
+    });
+  });
+}
+
+/* ── Wire pivot controls ─────────────────────────────────── */
+document.getElementById('pvSrcToggle').addEventListener('click', e => {
+  const btn = e.target.closest('[data-src]');
+  if (!btn) return;
+  pvState.src = btn.dataset.src;
+  if (pvState.src === 'stages' && pvState.rowDim === 'creative') pvState.rowDim = 'stage';
+  document.querySelectorAll('#pvSrcToggle button').forEach(b => b.classList.toggle('active', b===btn));
+  pvState.sortCol = '__total__'; pvState.sortDir = -1;
+  renderPivot();
+});
+
+document.getElementById('pvRowDim').addEventListener('change', e => {
+  pvState.rowDim = e.target.value;
+  if (pvState.colDim === pvState.rowDim)
+    pvState.colDim = Object.keys(PV_DIMS).find(k => k!==pvState.rowDim && !PV_DIMS[k].creativeOnly) || 'q';
+  pvState.sortCol = '__total__'; pvState.sortDir = -1;
+  renderPivot();
+});
+
+document.getElementById('pvColDim').addEventListener('change', e => {
+  pvState.colDim = e.target.value;
+  pvState.sortCol = '__total__'; pvState.sortDir = -1;
+  renderPivot();
+});
+
+document.getElementById('pvMetric').addEventListener('change', e => {
+  pvState.metric = e.target.value;
+  renderPivot();
+});
+
+document.getElementById('pvExportBtn').addEventListener('click', () => {
+  const pool   = pvPool();
+  const rowKey = pvState.rowDim;
+  const colKey = pvState.colDim;
+  const metric = pvState.metric;
+  const colVals = [...new Set(pool.map(r => r[colKey]).filter(Boolean))].sort();
+  const rowVals = [...new Set(pool.map(r => r[rowKey]).filter(Boolean))];
+  const aoa = [
+    [PV_DIMS[rowKey]?.label||rowKey, ...colVals, 'Total'],
+    ...rowVals.map(rv => [
+      rv,
+      ...colVals.map(cv => pvAggregate(pool.filter(r => r[rowKey]===rv && r[colKey]===cv), metric)),
+      pvAggregate(pool.filter(r => r[rowKey]===rv), metric),
+    ]),
+    ['Total',
+      ...colVals.map(cv => pvAggregate(pool.filter(r => r[colKey]===cv), metric)),
+      pvAggregate(pool, metric),
+    ],
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Pivot');
+  XLSX.writeFile(wb, `CRKT_Pivot_${rowKey}x${colKey}_${metric}_${new Date().toISOString().slice(0,10)}.xlsx`);
+});
+
+const _pvPrev = window.__onTabSwitch;
+window.__onTabSwitch = function(tab) {
+  if (tab === 'pivot') renderPivot();
+  if (typeof _pvPrev === 'function') _pvPrev(tab);
+};
+
+/* ═══════════════════════════════════════════════════════════
+   MODULE · GLOSSARY TAB
+   ═══════════════════════════════════════════════════════════ */
+
+const GLOSSARY_TERMS = [
+  /* ── Performance Metrics ──────────────────────────────── */
+  { term:'Impressions', abbr:'Imps', cat:'metrics',
+    full:'Total Ads Requested',
+    def:'Total number of times an ad was served to a user. Sourced from the "Total Ads Requested" column in Flashtalking.',
+  },
+  { term:'Clicks', cat:'metrics',
+    def:'Number of times a user clicked on the ad unit.',
+  },
+  { term:'CTR', cat:'metrics',
+    full:'Click-Through Rate',
+    def:'How often users click after seeing an ad.',
+    formula:'Clicks ÷ Impressions',
+  },
+  { term:'LPVR', cat:'metrics',
+    full:'Landing Page Visit Rate',
+    def:'Measures how many served impressions result in a confirmed site visit (tracked via Flashtalking floodlight, not just a click redirect). A stronger signal of intent than CTR alone.',
+    formula:'Landing Page Visits ÷ Impressions',
+  },
+  { term:'CVR', cat:'metrics',
+    full:'Conversion Rate',
+    def:'Percentage of clicks that resulted in a device order or plan activation.',
+    formula:'Orders ÷ Clicks',
+  },
+  { term:'TDOR', cat:'metrics',
+    full:'Total Device Order Rate',
+    def:'End-to-end conversion rate from ad impression to completed order. Useful for comparing funnel efficiency across segments regardless of click volume.',
+    formula:'Orders ÷ Impressions',
+  },
+  { term:'Orders', cat:'metrics',
+    def:'Device activations or plan purchases attributed to the ad via Flashtalking floodlight pixel. GM and USH orders are tracked independently through separate floodlight tags.',
+  },
+  { term:'CPC', cat:'metrics',
+    full:'Cost Per Click',
+    def:'Average media cost for each click received.',
+    formula:'Total Cost ÷ Clicks',
+  },
+  { term:'Total Cost', abbr:'Spend', cat:'metrics',
+    def:'Total media cost for the placement, creative, or campaign segment over the selected period.',
+  },
+  { term:'Frequency', abbr:'Freq', cat:'metrics',
+    def:'Average number of times a unique user was served an ad in the reporting period. High frequency without proportional performance lift is an indicator of creative fatigue.',
+    formula:'Total Impressions ÷ Unique Reach',
+  },
+  { term:'GM Ord', cat:'metrics',
+    full:'General Market Orders',
+    def:'Order floodlight count attributed to the General Market audience tag (CKT_bNON_HISPANIC_ORDER).',
+  },
+  { term:'HM Ord', cat:'metrics',
+    full:'Hispanic Market Orders',
+    def:'Order floodlight count attributed to the Hispanic Market audience tag (CKT_bHISPANIC_ORDER).',
+  },
+  { term:'GM LPVR', cat:'metrics',
+    full:'General Market Landing Page Visit Rate',
+    def:'LPVR calculated using the GM-specific floodlight (CKT_bNON_HISPANIC_GLOBAL_RT).',
+    formula:'GM Landing Page Visits ÷ Impressions',
+  },
+  { term:'HM LPVR', cat:'metrics',
+    full:'Hispanic Market Landing Page Visit Rate',
+    def:'LPVR calculated using the USH-specific floodlight (CKT_bHISPANIC_GLOBAL_RT).',
+    formula:'HM Landing Page Visits ÷ Impressions',
+  },
+  { term:'GM CVR', cat:'metrics',
+    full:'General Market Conversion Rate',
+    def:'Conversion rate for the General Market audience.',
+    formula:'GM Orders ÷ Clicks',
+  },
+  { term:'HM CVR', cat:'metrics',
+    full:'Hispanic Market Conversion Rate',
+    def:'Conversion rate for the Hispanic Market audience.',
+    formula:'HM Orders ÷ Clicks',
+  },
+  { term:'GM TDOR', cat:'metrics',
+    full:'General Market Total Device Order Rate',
+    def:'End-to-end order rate for the GM audience.',
+    formula:'GM Orders ÷ Impressions',
+  },
+  { term:'HM TDOR', cat:'metrics',
+    full:'Hispanic Market Total Device Order Rate',
+    def:'End-to-end order rate for the USH audience.',
+    formula:'HM Orders ÷ Impressions',
+  },
+
+  /* ── Creative & Campaign ──────────────────────────────── */
+  { term:'DCO', cat:'creative',
+    full:'Dynamic Creative Optimization',
+    def:'Ad technology that automatically assembles and personalizes creative in real time based on audience segment data. Cricket\'s DCO is managed through Flashtalking and uses a decision tree to serve the most relevant version to each user.',
+  },
+  { term:'Version Name', cat:'creative',
+    def:'Unique identifier for a specific creative execution in Flashtalking. Encodes campaign, placement, size, and trafficking attributes in a structured string (e.g., I_ACF_CRI_014_..._EN_BAN_DTP_DT_2849). Used to look up the associated Creative Offer Name.',
+  },
+  { term:'Creative Offer Name', cat:'creative',
+    def:'Human-readable label describing the message or offer a creative version promotes (e.g., "Standard Template – Cricket pricing = simple, transparent."). One offer name typically maps to many version names across sizes and placements.',
+  },
+  { term:'Content Code', cat:'creative',
+    def:'Short internal identifier for a creative message or offer (e.g., Q32026_Urgency). Used in trafficking matrices and delivery tracking.',
+  },
+  { term:'Segment / Stage', cat:'creative',
+    def:'An audience bucket in the DCO decision tree. Each segment reflects a user\'s position in the purchase funnel (e.g., Homepage Visitor, Cart Abandoner, Order) and determines which set of creatives is eligible to serve.',
+  },
+  { term:'Flight', cat:'creative',
+    def:'A quarterly campaign period. Q1 = Jan–Mar, Q2 = Apr–Jun, Q3 = Jul–Sep. Each flight has its own trafficking matrix and creative set.',
+  },
+  { term:'Decision Tree', cat:'creative',
+    def:'The logic structure that maps audience signals to creative versions in a DCO campaign. Conditions are defined in a decision tree spreadsheet and determine which creative offer serves for each segment.',
+  },
+  { term:'Rotation', cat:'creative',
+    def:'How multiple creatives within a placement are weighted against each other. "Auto-Opt" means Flashtalking automatically shifts weight toward higher-performing creatives.',
+  },
+
+  /* ── Markets & Audiences ──────────────────────────────── */
+  { term:'GM', cat:'markets',
+    full:'General Market',
+    def:'The standard Cricket US audience, served English-language creative. Tracked via the CKT_bNON_HISPANIC floodlight family.',
+  },
+  { term:'USH', cat:'markets',
+    full:'US Hispanic',
+    def:'The Hispanic American audience segment. May be served bilingual or culturally tailored creative. Tracked via the CKT_bHISPANIC floodlight family.',
+  },
+  { term:'RTG', cat:'markets',
+    full:'Retargeting',
+    def:'Serving ads to users who have previously visited cricketwireless.com or interacted with a prior ad. RTG segments include Cart Abandoner, Product Page Visitor, and Order/Checkout.',
+  },
+  { term:'BYOD', cat:'markets',
+    full:'Bring Your Own Device',
+    def:'Cricket offer allowing customers to switch to Cricket\'s network using their existing unlocked phone. A dedicated audience segment and creative set targets users who visited the BYOD/IMEI check pages.',
+  },
+  { term:'Prospecting', cat:'markets',
+    def:'Targeting users with no prior Cricket site interaction. Broader top-of-funnel audience typically served mid-funnel messaging to drive consideration.',
+  },
+
+  /* ── Platforms & Ad Servers ───────────────────────────── */
+  { term:'Flashtalking', abbr:'FT', cat:'platforms',
+    def:'Primary ad server for Cricket display and DCO campaigns. Manages creative trafficking, rotation, and floodlight-based conversion tracking. Source of all impression, click, and conversion data in this dashboard.',
+  },
+  { term:'Innovid', cat:'platforms',
+    def:'Ad server used for CTV (Connected TV) and streaming video placements. Creatives can be linked to their Innovid URL in the Creatives tab for direct access.',
+  },
+  { term:'BigQuery', cat:'platforms',
+    def:'Google cloud data warehouse where Flashtalking delivery data is stored and queried. This dashboard connects directly to the crk-dco-dash.reporting_data.deliveries_view table.',
+  },
+  { term:'Floodlight', cat:'platforms',
+    def:'Flashtalking\'s pixel-based conversion tracking system. Each floodlight tag fires when a user completes a specific action (landing page visit, order). Cricket uses separate GM and USH floodlight tags for audience-level attribution.',
+  },
+  { term:'Vercel', cat:'platforms',
+    def:'Cloud hosting platform where this dashboard is deployed.',
+  },
+
+  /* ── Ops & Trafficking ────────────────────────────────── */
+  { term:'Trafficking', cat:'ops',
+    def:'The process of uploading, configuring, and activating ad creatives in an ad server. Includes mapping version names to placements, setting rotation weights, and verifying pixel firing.',
+  },
+  { term:'Trafficking Matrix', cat:'ops',
+    def:'A spreadsheet (Excel/CSV) mapping creative assets to placement specifications. Defines which version name goes to which segment, size, and channel for each flight.',
+  },
+  { term:'QA', cat:'ops',
+    full:'Quality Assurance',
+    def:'Review of creative assets and trafficking configuration before campaign activation. Verifies correct creative renders, URLs, and floodlight tags.',
+  },
+  { term:'LF', cat:'ops',
+    full:'Lower Funnel',
+    def:'Campaign layer targeting users close to conversion — typically retargeting segments such as Cart Abandoner, Product Page Visitor, and Order/Checkout.',
+  },
+  { term:'MF', cat:'ops',
+    full:'Mid Funnel',
+    def:'Campaign layer targeting users in the consideration phase — browsing plans, devices, or deals, but not yet in a retargeting segment.',
+  },
+  { term:'UF', cat:'ops',
+    full:'Upper Funnel',
+    def:'Campaign layer targeting broad awareness audiences with no prior Cricket engagement.',
+  },
+  { term:'TTL', cat:'ops',
+    full:'Total',
+    def:'Aggregate metric across all funnel levels, markets, or quarters — no filter applied.',
+  },
+  { term:'CRKT', cat:'ops',
+    full:'Cricket Wireless',
+    def:'Client ticker used in file naming conventions and internal references (e.g., CRKT_Q326_...).',
+  },
+  { term:'PS', cat:'ops',
+    full:'Paid Social',
+    def:'Advertising on social media platforms (Meta, Reddit, etc.). A separate channel from display/DCO but may share creative concepts.',
+  },
+];
+
+const CAT_LABELS = {
+  metrics:   'Metrics',
+  creative:  'Creative',
+  markets:   'Markets',
+  platforms: 'Platforms',
+  ops:       'Ops',
+};
+
+let glossState = { cat: 'all', search: '' };
+
+function renderGlossary() {
+  const q = glossState.search.toLowerCase();
+  const filtered = GLOSSARY_TERMS.filter(t => {
+    if (glossState.cat !== 'all' && t.cat !== glossState.cat) return false;
+    if (!q) return true;
+    return (t.term + (t.abbr||'') + (t.full||'') + t.def + (t.formula||'')).toLowerCase().includes(q);
+  });
+
+  document.getElementById('glossCount').textContent =
+    `${filtered.length} term${filtered.length !== 1 ? 's' : ''}`;
+
+  document.getElementById('glossGrid').innerHTML = filtered.length
+    ? filtered.map(t => `
+        <div class="gloss-card">
+          <div class="gloss-card-header">
+            <span class="gloss-term">${t.term}${t.abbr ? ` <span style="font-weight:500;font-size:13px;color:var(--muted)">(${t.abbr})</span>` : ''}</span>
+            ${t.full ? `<span class="gloss-full">— ${t.full}</span>` : ''}
+            <span class="gloss-cat-pill">${CAT_LABELS[t.cat]}</span>
+          </div>
+          <div class="gloss-def">${t.def}</div>
+          ${t.formula ? `<div class="gloss-formula">${t.formula}</div>` : ''}
+        </div>`).join('')
+    : `<div class="gloss-empty">No terms match "${glossState.search}"</div>`;
+}
+
+document.getElementById('glossCats').addEventListener('click', e => {
+  const btn = e.target.closest('[data-cat]');
+  if (!btn) return;
+  glossState.cat = btn.dataset.cat;
+  document.querySelectorAll('#glossCats button').forEach(b => b.classList.toggle('active', b === btn));
+  renderGlossary();
+});
+
+document.getElementById('glossSearch').addEventListener('input', e => {
+  glossState.search = e.target.value;
+  renderGlossary();
+});
+
+/* Render when tab activates */
+const _prevTabSwitch = window.__onTabSwitch;
+window.__onTabSwitch = function(tab) {
+  if (tab === 'glossary') renderGlossary();
+  if (typeof _prevTabSwitch === 'function') _prevTabSwitch(tab);
+};
 
 /* ── Offer Map upload handlers ───────────────────────────── */
 document.getElementById('offerMapUploadBtn').addEventListener('click', () => {
