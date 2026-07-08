@@ -1501,7 +1501,7 @@ body.compact .chart-card      { padding: 14px 16px; }
             <button data-q="Q2">Q2</button>
             <button data-q="Q3">Q3</button>
           </div>
-          <button class="btn-ghost btn-sm" id="downloadOneSheeterBtn" title="Download One-Sheeter" style="display:flex;align-items:center;gap:6px;padding:7px 14px;font-size:13px">
+          <button class="btn-ghost btn-sm" id="downloadOneSheeterBtn" onclick="generateOneSheet()" title="Download One-Sheeter" style="display:flex;align-items:center;gap:6px;padding:7px 14px;font-size:13px">
             <svg-icon name="print" size="14"></svg-icon> One-Sheeter
           </button>
         </div>
@@ -4007,7 +4007,8 @@ window.__onTabSwitch = tab => {
 
 <script>
 /* ── One-Sheeter Generator ───────────────────────────────── */
-function generateOneSheet() {
+function generateOneSheet() { try { _generateOneSheet(); } catch(e) { console.error('One-sheeter error:', e); alert('One-Sheeter error: ' + e.message); } }
+function _generateOneSheet() {
   const today    = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'2-digit'});
   const todayLong= new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
   const selQ   = typeof ovQ   !== 'undefined' ? ovQ   : 'all';
@@ -4293,8 +4294,16 @@ function generateOneSheet() {
 
   const blob = new Blob([html], { type: 'text/html' });
   const blobUrl = URL.createObjectURL(blob);
-  window.open(blobUrl, '_blank', 'noopener,noreferrer');
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+  const newWin = window.open(blobUrl, '_blank');
+  if (!newWin || newWin.closed || typeof newWin.closed === 'undefined') {
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = 'cricket-one-sheeter.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
 }
 
 document.getElementById('downloadOneSheeterBtn').addEventListener('click', generateOneSheet);
