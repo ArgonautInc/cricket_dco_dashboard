@@ -261,6 +261,7 @@ svg { display: block; }
 
 /* ─── Module 2: App Shell ────────────────────────────────── */
 #appLayout {
+  display: flex;
   height: 100vh;
   overflow: hidden;
 }
@@ -4007,7 +4008,11 @@ window.__onTabSwitch = tab => {
 
 <script>
 /* ── One-Sheeter Generator ───────────────────────────────── */
-function generateOneSheet() { try { _generateOneSheet(); } catch(e) { console.error('One-sheeter error:', e); alert('One-Sheeter error: ' + e.message); } }
+function generateOneSheet() {
+  const btn = document.getElementById('downloadOneSheeterBtn');
+  if (btn) { btn.textContent = 'Generating…'; setTimeout(() => btn.innerHTML = '<svg-icon name="print" size="14"></svg-icon> One-Sheeter', 3000); }
+  try { _generateOneSheet(); } catch(e) { console.error('One-sheeter error:', e); alert('One-Sheeter error: ' + e.message); }
+}
 function _generateOneSheet() {
   const today    = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'2-digit'});
   const todayLong= new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
