@@ -4292,18 +4292,63 @@ function _generateOneSheet() {
 <script>window.onload = function(){ window.print(); }<\/script>
 </body></html>`;
 
-  const blob = new Blob([html], { type: 'text/html' });
-  const blobUrl = URL.createObjectURL(blob);
-  const newWin = window.open(blobUrl, '_blank');
-  if (!newWin || newWin.closed || typeof newWin.closed === 'undefined') {
+  _showOneSheeter(html);
+}
+
+function _showOneSheeter(html) {
+  const existing = document.getElementById('osModalOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'osModalOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px;box-sizing:border-box;overflow:auto;';
+
+  const toolbar = document.createElement('div');
+  toolbar.style.cssText = 'display:flex;gap:10px;margin-bottom:14px;flex-shrink:0;';
+
+  const printBtn = document.createElement('button');
+  printBtn.textContent = 'Print / Save PDF';
+  printBtn.style.cssText = 'background:#5BC500;color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:14px;font-weight:600;cursor:pointer;';
+
+  const downloadBtn = document.createElement('button');
+  downloadBtn.textContent = 'Download HTML';
+  downloadBtn.style.cssText = 'background:#fff;color:#111;border:1px solid #ccc;border-radius:8px;padding:9px 20px;font-size:14px;font-weight:600;cursor:pointer;';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕ Close';
+  closeBtn.style.cssText = 'background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:8px;padding:9px 20px;font-size:14px;font-weight:600;cursor:pointer;margin-left:auto;';
+
+  toolbar.appendChild(printBtn);
+  toolbar.appendChild(downloadBtn);
+  toolbar.appendChild(closeBtn);
+
+  const frame = document.createElement('iframe');
+  frame.style.cssText = 'width:900px;max-width:100%;height:80vh;border:none;border-radius:10px;background:#fff;flex-shrink:0;';
+  frame.srcdoc = html;
+
+  overlay.appendChild(toolbar);
+  overlay.appendChild(frame);
+  document.body.appendChild(overlay);
+
+  closeBtn.addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  printBtn.addEventListener('click', () => {
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (win) { win.onload = () => win.print(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
+    else { alert('Allow popups for this page to print, or use Download HTML and open/print from there.'); }
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = 'cricket-one-sheeter.html';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+    a.href = url; a.download = 'cricket-one-sheeter.html';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  });
 }
 
 document.getElementById('downloadOneSheeterBtn').addEventListener('click', generateOneSheet);
