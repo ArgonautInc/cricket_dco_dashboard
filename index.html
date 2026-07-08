@@ -5149,10 +5149,10 @@ document.getElementById('glossSearch').addEventListener('input', e => {
 });
 
 /* Render when tab activates */
-const _prevTabSwitch = window.__onTabSwitch;
+const _prevTabSwitchGloss = window.__onTabSwitch;
 window.__onTabSwitch = function(tab) {
   if (tab === 'glossary') renderGlossary();
-  if (typeof _prevTabSwitch === 'function') _prevTabSwitch(tab);
+  if (typeof _prevTabSwitchGloss === 'function') _prevTabSwitchGloss(tab);
 };
 
 /* ── Offer Map upload handlers ───────────────────────────── */
