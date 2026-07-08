@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha384-D/t0ZMqQW31H3az8ktEiNb39wyKnS82iFY52QPACM+IjKW3jDUhyIgh2PApRqJZs" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
 <style>
 /* ─── Design tokens ─────────────────────────────────────── */
@@ -261,7 +261,6 @@ svg { display: block; }
 
 /* ─── Module 2: App Shell ────────────────────────────────── */
 #appLayout {
-  display: flex;
   height: 100vh;
   overflow: hidden;
 }
@@ -2310,6 +2309,7 @@ function onAuthSuccess(user) {
 /** Sign out */
 function signOut() {
   sessionStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem('crkt_pw_hash');
   if (ACCESS_TOKEN && typeof google !== 'undefined') {
     google.accounts.oauth2.revoke(ACCESS_TOKEN);
   }
@@ -2666,6 +2666,17 @@ window.__onAuth = function(user) {
      MODULE 3 JS — Overview Tab
      ═══════════════════════════════════════════════════════════ -->
 <script>
+/* ── Security helpers ───────────────────────────────────── */
+function esc(s) {
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function safeUrl(u) {
+  const t = String(u||'').trim();
+  return /^https:\/\//i.test(t) ? t : '#';
+}
+
 /* ── Format helpers ─────────────────────────────────────── */
 const FMT = {
   num:  n => new Intl.NumberFormat('en-US').format(Math.round(n)),
@@ -3486,8 +3497,8 @@ function renderCurrentUser() {
         ${avatarInitials(user.name || user.email || '?')}
       </div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:14px;font-weight:700">${user.name||user.email||'Unknown'}</div>
-        <div style="font-size:12px;color:var(--muted)">${user.email||''}</div>
+        <div style="font-size:14px;font-weight:700">${esc(user.name||user.email||'Unknown')}</div>
+        <div style="font-size:12px;color:var(--muted)">${esc(user.email||'')}</div>
       </div>
       <span class="st-role-badge ${roleClass}">${roleLabel}</span>
     </div>`;
@@ -3513,8 +3524,8 @@ function renderUsersTable() {
     <div class="st-user-row">
       <div class="st-avatar" style="background:${avatarColor(u.email)}">${avatarInitials(u.name||u.email)}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.name||u.email}</div>
-        ${u.name ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.email}</div>` : ''}
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.name||u.email)}</div>
+        ${u.name ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.email)}</div>` : ''}
       </div>
       <span class="st-role-badge ${rc}">${rl}</span>
       <span style="font-size:11px;color:var(--muted);white-space:nowrap">
@@ -3585,16 +3596,18 @@ document.getElementById('stInviteBtn')?.addEventListener('click', () => {
 });
 
 // Change password
-document.getElementById('stChangePwBtn')?.addEventListener('click', () => {
+document.getElementById('stChangePwBtn')?.addEventListener('click', async () => {
   const oldPw  = document.getElementById('stOldPw').value;
   const newPw  = document.getElementById('stNewPw').value;
   const confPw = document.getElementById('stConfPw').value;
   if (!oldPw || !newPw || !confPw) return;
   if (newPw !== confPw) { alert('New passwords do not match.'); return; }
   if (newPw.length < 6) { alert('Password must be at least 6 characters.'); return; }
-  const stored = localStorage.getItem('crkt_pw_hash');
-  if (stored && stored !== btoa(oldPw)) { alert('Current password is incorrect.'); return; }
-  localStorage.setItem('crkt_pw_hash', btoa(newPw));
+  const storedHash = localStorage.getItem('crkt_pw_hash');
+  const oldHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(oldPw)).then(b => btoa(String.fromCharCode(...new Uint8Array(b))));
+  if (storedHash && storedHash !== oldHash) { alert('Current password is incorrect.'); return; }
+  const newHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(newPw)).then(b => btoa(String.fromCharCode(...new Uint8Array(b))));
+  localStorage.setItem('crkt_pw_hash', newHash);
   ['stOldPw','stNewPw','stConfPw'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   const conf = document.getElementById('stPwConfirm');
   if (conf) { conf.textContent = 'Password updated.'; setTimeout(()=>conf.textContent='', 3500); }
@@ -3674,18 +3687,19 @@ function crThumbContent(c) {
   }
   // Creative link provided — detect type
   if (c.innovidUrl) {
-    const url = c.innovidUrl.trim();
-    const isImage = /\.(jpe?g|png|gif|webp|svg)(\?|#|$)/i.test(url);
+    const url = safeUrl(c.innovidUrl);
+    if (url === '#') return crThumbFallback(c.mkt, c.q, c.stage, 'URL must start with https://');
+    const isImage = /\.(jpe?g|png|gif|webp)(\?|#|$)/i.test(url);
     if (isImage) {
-      return `<img src="${url}" style="width:100%;height:100%;object-fit:contain;background:#000"
-               onerror="this.parentElement.innerHTML=crThumbFallback('${c.mkt}','${c.q}','${encodeURIComponent(c.stage)}','Link error — image not accessible')">`;
+      return `<img src="${esc(url)}" style="width:100%;height:100%;object-fit:contain;background:#000"
+               onerror="this.parentElement.innerHTML=crThumbFallback('${esc(c.mkt)}','${esc(c.q)}','${encodeURIComponent(c.stage)}','Link error — image not accessible')">`;
     }
     // HTML / iframe creative (Innovid, VAST redirect, hosted HTML ad, etc.)
-    return `<div class="cr-iframe-wrap" data-crid="${c.id}">
-      <iframe src="${url}" width="300" height="250" scrolling="no" frameborder="0"
-              allow="autoplay" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-              title="${c.creative}"
-              onerror="this.parentElement.innerHTML=crThumbFallback('${c.mkt}','${c.q}','${encodeURIComponent(c.stage)}','Could not load — check URL or CORS policy')">
+    return `<div class="cr-iframe-wrap" data-crid="${esc(c.id)}">
+      <iframe src="${esc(url)}" width="300" height="250" scrolling="no" frameborder="0"
+              allow="autoplay" sandbox="allow-scripts allow-forms allow-popups"
+              title="${esc(c.creative)}"
+              onerror="this.parentElement.innerHTML=crThumbFallback('${esc(c.mkt)}','${esc(c.q)}','${encodeURIComponent(c.stage)}','Could not load — check URL or CORS policy')">
       </iframe>
     </div>`;
   }
@@ -3708,8 +3722,8 @@ function crThumbFallback(mkt, q, stage, msg) {
 function crCardHTML(c) {
   const thumb = crThumbContent(c);
 
-  const linkBtn = c.innovidUrl
-    ? `<a class="cr-icon-btn" href="${c.innovidUrl}" target="_blank" title="Open in Innovid">
+  const linkBtn = c.innovidUrl && safeUrl(c.innovidUrl) !== '#'
+    ? `<a class="cr-icon-btn" href="${esc(safeUrl(c.innovidUrl))}" target="_blank" rel="noopener noreferrer" title="Open in Innovid">
          <svg-icon name="external-link" size="14"></svg-icon></a>`
     : `<span class="cr-icon-btn cr-icon-btn--dim" title="Enter Innovid URL first">
          <svg-icon name="external-link" size="14"></svg-icon></span>`;
@@ -3722,18 +3736,18 @@ function crCardHTML(c) {
   const gmCvr  = c.gmCvr  ? fmtPct(c.gmCvr)     : '—';
 
   return `
-  <div class="creative-card" data-id="${c.id}">
+  <div class="creative-card" data-id="${esc(c.id)}">
     <div class="creative-thumb">${thumb}</div>
     <div class="creative-card-body">
       <div class="creative-meta-row">
-        <span class="data-badge ${c.mkt.toLowerCase()}">${c.mkt}</span>
-        <span class="data-badge ${c.q.toLowerCase()}">${c.q}</span>
-        <button class="cr-icon-btn cr-edit-btn" data-id="${c.id}" title="Edit" style="margin-left:auto">
+        <span class="data-badge ${esc(c.mkt.toLowerCase())}">${esc(c.mkt)}</span>
+        <span class="data-badge ${esc(c.q.toLowerCase())}">${esc(c.q)}</span>
+        <button class="cr-icon-btn cr-edit-btn" data-id="${esc(c.id)}" title="Edit" style="margin-left:auto">
           <svg-icon name="edit-2" size="13"></svg-icon>
         </button>
       </div>
-      <div class="creative-stage-label">${stageShort(c.stage)}</div>
-      <div class="creative-name" title="${c.creative}">${c.creative}</div>
+      <div class="creative-stage-label">${esc(stageShort(c.stage))}</div>
+      <div class="creative-name" title="${esc(c.creative)}">${esc(c.creative)}</div>
       <div class="creative-stats-grid">
         <div class="cs-item"><div class="cs-label">Impressions</div><div class="cs-val">${imps}</div></div>
         <div class="cs-item"><div class="cs-label">Clicks</div><div class="cs-val">${clicks}</div></div>
@@ -3744,14 +3758,14 @@ function crCardHTML(c) {
       </div>
       <div class="creative-innovid-row">
         <svg-icon name="link" size="13" color="var(--muted)" style="flex-shrink:0"></svg-icon>
-        <input class="cr-url-input" data-id="${c.id}" type="url"
-               placeholder="Innovid URL…" value="${c.innovidUrl || ''}"/>
+        <input class="cr-url-input" data-id="${esc(c.id)}" type="url"
+               placeholder="Innovid URL…" value="${esc(c.innovidUrl || '')}"/>
         ${linkBtn}
       </div>
-      <label class="cr-upload-btn" for="crThumb_${c.id}">
+      <label class="cr-upload-btn" for="crThumb_${esc(c.id)}">
         <svg-icon name="image" size="13"></svg-icon> Upload Preview
-        <input type="file" id="crThumb_${c.id}" data-id="${c.id}"
-               accept="image/*" class="cr-thumb-input" style="display:none"/>
+        <input type="file" id="crThumb_${esc(c.id)}" data-id="${esc(c.id)}"
+               accept="image/png,image/jpeg,image/gif,image/webp" class="cr-thumb-input" style="display:none"/>
       </label>
     </div>
   </div>`;
@@ -3821,6 +3835,8 @@ function crWireCards() {
       const id   = inp.dataset.id;
       const file = inp.files[0];
       if (!file) return;
+      const allowed = ['image/png','image/jpeg','image/gif','image/webp'];
+      if (!allowed.includes(file.type)) { alert('Only PNG, JPEG, GIF, or WebP images are allowed.'); inp.value=''; return; }
       const reader = new FileReader();
       reader.onload = ev => {
         crSaved[id] = { ...(crSaved[id]||{}), thumbDataUrl: ev.target.result };
@@ -3906,11 +3922,13 @@ function crWireThumbPreview() {
   input.addEventListener('change', () => {
     const file = input.files[0];
     if (!file) return;
+    const allowed = ['image/png','image/jpeg','image/gif','image/webp'];
+    if (!allowed.includes(file.type)) { alert('Only PNG, JPEG, GIF, or WebP images are allowed.'); input.value=''; return; }
     const reader = new FileReader();
     reader.onload = ev => {
       crModalThumbDataUrl = ev.target.result;
-      preview.innerHTML = `<img src="${ev.target.result}" style="width:100%;height:100%;object-fit:cover"/>` +
-        '<input type="file" id="crFThumb" accept="image/*" style="display:none"/>';
+      preview.innerHTML = `<img src="${esc(ev.target.result)}" style="width:100%;height:100%;object-fit:cover"/>` +
+        '<input type="file" id="crFThumb" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none"/>';
       crWireThumbPreview();
     };
     reader.readAsDataURL(file);
@@ -4064,9 +4082,9 @@ function generateOneSheet() {
 
   // ── Key Insights ──
   const insights = [
-    topOrd  ? `<strong>Top Order Driver:</strong> "${offerLabel(topOrd.creative)}" (${topOrd.q}, ${topOrd.mkt}) led with <strong>${FMT.num(topOrd.gmOrd)} orders</strong> on ${FMT.abbr(topOrd.imps)} impressions.` : null,
-    topCtr  ? `<strong>Highest CTR:</strong> "${offerLabel(topCtr.creative)}" (${topCtr.q}, ${topCtr.mkt}) achieved <strong>${(topCtr.ctr*100).toFixed(3)}% CTR</strong>${topCtr.imps < 50000 ? ' — note limited delivery volume' : ' with strong delivery'}.` : null,
-    topLpvr && topLpvr.gmLpvr > 0 ? `<strong>Best Post-Click Quality:</strong> "${offerLabel(topLpvr.creative)}" (${topLpvr.q}, ${topLpvr.mkt}) had the highest LPVR at <strong>${(topLpvr.gmLpvr*100).toFixed(2)}%</strong>, indicating strong landing page alignment.` : null,
+    topOrd  ? `<strong>Top Order Driver:</strong> &ldquo;${esc(offerLabel(topOrd.creative))}&rdquo; (${esc(topOrd.q)}, ${esc(topOrd.mkt)}) led with <strong>${FMT.num(topOrd.gmOrd)} orders</strong> on ${FMT.abbr(topOrd.imps)} impressions.` : null,
+    topCtr  ? `<strong>Highest CTR:</strong> &ldquo;${esc(offerLabel(topCtr.creative))}&rdquo; (${esc(topCtr.q)}, ${esc(topCtr.mkt)}) achieved <strong>${(topCtr.ctr*100).toFixed(3)}% CTR</strong>${topCtr.imps < 50000 ? ' — note limited delivery volume' : ' with strong delivery'}.` : null,
+    topLpvr && topLpvr.gmLpvr > 0 ? `<strong>Best Post-Click Quality:</strong> &ldquo;${esc(offerLabel(topLpvr.creative))}&rdquo; (${esc(topLpvr.q)}, ${esc(topLpvr.mkt)}) had the highest LPVR at <strong>${(topLpvr.gmLpvr*100).toFixed(2)}%</strong>, indicating strong landing page alignment.` : null,
     selMkt==='all' && gmImps>0 && ushImps>0 ? `<strong>Market Split:</strong> GM drove ${((gmImps/(gmImps+ushImps))*100).toFixed(0)}% of impressions and ${gmOrd+ushOrd>0?((gmOrd/(gmOrd+ushOrd))*100).toFixed(0)+'%':' —'} of orders; USH drove the remainder.` : null,
     hasSpend ? `<strong>Overall Efficiency:</strong> ${FMT.dollar(totSpend)} invested across ${activeQs.join(' + ')} at an average CPC of <strong>$${totCpc.toFixed(2)}</strong> and CPM of <strong>$${totCpm.toFixed(2)}</strong>.` : null,
     `<strong>Data Source:</strong> Flashtalking + Innovid DCO delivery via BigQuery. Spotlight signals used for LPVR and order attribution.`,
@@ -4074,11 +4092,11 @@ function generateOneSheet() {
 
   // ── Recommendations ──
   const recs = [];
-  if (topOrd) recs.push(`Prioritize budget toward <strong>"${offerLabel(topOrd.creative)}"</strong> — the top order driver — while monitoring frequency caps to avoid saturation.`);
-  if (topCtr && topCtr.creative !== topOrd?.creative) recs.push(`Scale <strong>"${offerLabel(topCtr.creative)}"</strong> (highest CTR) to additional placements or audiences; high click intent suggests strong offer-message fit.`);
-  if (topLpvr && topLpvr.gmLpvr > 0.02) recs.push(`Replicate the decision tree rules driving <strong>"${offerLabel(topLpvr.creative)}"</strong>'s high LPVR — this audience segment responds well post-click.`);
+  if (topOrd) recs.push(`Prioritize budget toward <strong>&ldquo;${esc(offerLabel(topOrd.creative))}&rdquo;</strong> — the top order driver — while monitoring frequency caps to avoid saturation.`);
+  if (topCtr && topCtr.creative !== topOrd?.creative) recs.push(`Scale <strong>&ldquo;${esc(offerLabel(topCtr.creative))}&rdquo;</strong> (highest CTR) to additional placements or audiences; high click intent suggests strong offer-message fit.`);
+  if (topLpvr && topLpvr.gmLpvr > 0.02) recs.push(`Replicate the decision tree rules driving <strong>&ldquo;${esc(offerLabel(topLpvr.creative))}&rdquo;</strong>'s high LPVR — this audience segment responds well post-click.`);
   const lowEff = byOrd.filter(r => r.gmOrd > 0 && r.imps > 100000 && r.gmOrd/r.imps < 0.0001);
-  if (lowEff.length) recs.push(`${lowEff.length} creative${lowEff.length>1?'s':''} with high delivery but low order conversion (incl. "${offerLabel(lowEff[0].creative)}") may benefit from offer refresh or creative rotation.`);
+  if (lowEff.length) recs.push(`${lowEff.length} creative${lowEff.length>1?'s':''} with high delivery but low order conversion (incl. &ldquo;${esc(offerLabel(lowEff[0].creative))}&rdquo;) may benefit from offer refresh or creative rotation.`);
   if (activeQs.length > 1) recs.push(`Review the Trends tab for QoQ CTR and LPVR shifts to inform next quarter's creative strategy and budget allocation.`);
   if (!recs.length) recs.push('Continue monitoring weekly delivery pacing; flag any creative with <0.03% CTR to the agency team for review or refresh.');
 
@@ -4273,8 +4291,10 @@ function generateOneSheet() {
 <script>window.onload = function(){ window.print(); }<\/script>
 </body></html>`;
 
-  const w = window.open('', '_blank');
-  if (w) { w.document.write(html); w.document.close(); }
+  const blob = new Blob([html], { type: 'text/html' });
+  const blobUrl = URL.createObjectURL(blob);
+  window.open(blobUrl, '_blank', 'noopener,noreferrer');
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 }
 
 document.getElementById('downloadOneSheeterBtn').addEventListener('click', generateOneSheet);
@@ -5043,7 +5063,7 @@ function renderGlossary() {
           <div class="gloss-def">${t.def}</div>
           ${t.formula ? `<div class="gloss-formula">${t.formula}</div>` : ''}
         </div>`).join('')
-    : `<div class="gloss-empty">No terms match "${glossState.search}"</div>`;
+    : `<div class="gloss-empty">No terms match &ldquo;${esc(glossState.search)}&rdquo;</div>`;
 }
 
 document.getElementById('glossCats').addEventListener('click', e => {
