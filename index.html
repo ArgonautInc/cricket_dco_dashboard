@@ -708,6 +708,30 @@ svg { display: block; }
   margin-bottom: 12px;
   flex-wrap: wrap;
 }
+.offer-map-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--accent-soft);
+  color: var(--accent-dark, #3F8D00);
+  border: 1px solid rgba(91,197,0,.3);
+  border-radius: 999px;
+  padding: 3px 8px 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.offer-map-chip-clear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: .65;
+}
+.offer-map-chip-clear:hover { opacity: 1; }
 .an-filter-row {
   display: flex;
   gap: 8px;
@@ -961,125 +985,6 @@ svg { display: block; }
 .cr-thumb-preview img { width:100%; height:100%; object-fit:cover; }
 .cr-thumb-preview-hint { font-size:11px; color:var(--muted); font-weight:500; }
 
-/* ─── Module 6: Reports ──────────────────────────────────── */
-.rp-upload-zone {
-  border: 2px dashed var(--border);
-  border-radius: var(--radius);
-  padding: 40px 24px;
-  display: flex; flex-direction: column;
-  align-items: center; gap: 10px;
-  cursor: pointer; transition: border-color .18s, background .18s;
-  text-align: center; margin-bottom: 28px;
-}
-.rp-upload-zone:hover, .rp-upload-zone.drag-over {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.rp-upload-icon {
-  width: 56px; height: 56px; border-radius: 16px;
-  background: var(--recess); border: 1px solid var(--border);
-  display: grid; place-items: center; color: var(--fg2);
-  margin-bottom: 4px;
-}
-.rp-upload-title { font-size: 15px; font-weight: 700; color: var(--fg); }
-.rp-upload-sub   { font-size: 12px; color: var(--muted); }
-
-.rp-section { margin-bottom: 28px; }
-.rp-section-header {
-  display: flex; align-items: center; gap: 10px;
-  margin-bottom: 12px;
-}
-.rp-section-title { font-size: 14px; font-weight: 700; color: var(--fg); }
-.rp-section-count {
-  font-size: 11px; font-weight: 600; padding: 2px 8px;
-  border-radius: 999px; background: var(--recess); color: var(--muted);
-}
-.rp-empty {
-  text-align: center; padding: 32px 16px;
-  color: var(--muted); font-size: 13px;
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.rp-list { display: flex; flex-direction: column; gap: 8px; }
-.rp-item {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 12px; padding: 14px 16px;
-  display: flex; align-items: center; gap: 14px;
-  transition: box-shadow .15s;
-}
-.rp-item:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
-.rp-item-icon {
-  width: 40px; height: 40px; border-radius: 10px;
-  display: grid; place-items: center; flex-shrink: 0;
-  font-size: 11px; font-weight: 800; letter-spacing: .03em;
-}
-.rp-icon-csv  { background: #E8F5E9; color: #2E7D32; }
-.rp-icon-xlsx { background: #E3F2FD; color: #1565C0; }
-.rp-icon-zip  { background: #FFF3E0; color: #E65100; }
-.rp-icon-snap { background: var(--accent-soft); color: var(--accent-dark); }
-[data-theme="dark"] .rp-icon-csv  { background: rgba(46,125,50,.2);  color: #81C784; }
-[data-theme="dark"] .rp-icon-xlsx { background: rgba(21,101,192,.2);  color: #64B5F6; }
-[data-theme="dark"] .rp-icon-zip  { background: rgba(230,81,0,.2);    color: #FFB74D; }
-[data-theme="dark"] .rp-icon-snap { color: var(--accent); }
-.rp-item-body { flex: 1; min-width: 0; }
-.rp-item-name {
-  font-size: 13px; font-weight: 600; color: var(--fg);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.rp-item-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
-.rp-item-actions { display: flex; gap: 4px; flex-shrink: 0; }
-.rp-action-btn {
-  width: 32px; height: 32px; border-radius: 8px; border: none;
-  background: transparent; cursor: pointer; display: grid; place-items: center;
-  color: var(--fg2); transition: background .15s, color .15s;
-}
-.rp-action-btn:hover { background: var(--recess); color: var(--fg); }
-.rp-action-btn.danger:hover { background: rgba(220,53,53,.1); color: #dc3535; }
-.rp-rows-badge {
-  font-size: 11px; font-weight: 600; padding: 2px 8px;
-  border-radius: 999px; background: var(--recess); color: var(--muted);
-  white-space: nowrap;
-}
-
-/* Preview modal */
-.rp-preview-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.55);
-  z-index: 400; display: grid; place-items: center;
-  backdrop-filter: blur(3px);
-  opacity: 0; pointer-events: none; transition: opacity .2s;
-}
-.rp-preview-overlay.open { opacity: 1; pointer-events: all; }
-.rp-preview-modal {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 20px; width: min(900px, 96vw);
-  max-height: 88vh; display: flex; flex-direction: column;
-  box-shadow: 0 24px 64px rgba(0,0,0,.3);
-  transform: translateY(16px); transition: transform .2s;
-  overflow: hidden;
-}
-.rp-preview-overlay.open .rp-preview-modal { transform: translateY(0); }
-.rp-preview-header {
-  display: flex; align-items: center; gap: 12px;
-  padding: 18px 22px 16px; border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.rp-preview-title { font-size: 15px; font-weight: 700; flex: 1; min-width: 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rp-preview-close {
-  width: 32px; height: 32px; border-radius: 8px; border: none;
-  background: var(--recess); cursor: pointer; display: grid;
-  place-items: center; color: var(--fg2); font-size: 18px; flex-shrink: 0;
-}
-.rp-preview-close:hover { background: var(--border); }
-.rp-preview-table-wrap { overflow: auto; flex: 1; padding: 0; }
-.rp-preview-table { min-width: 600px; }
-.rp-preview-footer {
-  padding: 12px 22px; border-top: 1px solid var(--border);
-  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
-  font-size: 12px; color: var(--muted);
-}
-
 /* ─── Module 7: Settings ─────────────────────────────────── */
 .settings-grid {
   display: grid;
@@ -1251,11 +1156,6 @@ body.compact .chart-card      { padding: 14px 16px; }
       <span>Creatives</span>
     </button>
 
-    <button class="nav-item" data-tab="reports">
-      <span class="nav-icon"><svg-icon name="file" size="17"></svg-icon></span>
-      <span>Reports</span>
-    </button>
-
     <div class="sidebar-spacer"></div>
 
     <div class="nav-section-label">Account</div>
@@ -1312,7 +1212,6 @@ body.compact .chart-card      { padding: 14px 16px; }
       <div class="page-header">
         <div>
           <h1>Overview</h1>
-          <div class="page-header-sub" id="ovSubtitle">Q1 + Q2 · All markets · Flashtalking DCO</div>
         </div>
         <div class="page-header-actions">
           <!-- Market filter -->
@@ -1392,18 +1291,10 @@ body.compact .chart-card      { padding: 14px 16px; }
       <div class="page-header">
         <div>
           <h1>Analytics</h1>
-          <div class="page-header-sub">All 12 pivot metrics · Full creative breakdown · Flashtalking DCO</div>
         </div>
         <div class="page-header-actions">
-          <label class="btn-ghost btn-sm" style="cursor:pointer">
-            <svg-icon name="upload" size="13"></svg-icon> Import CSV / XLSX
-            <input type="file" id="anFileInput" accept=".csv,.xlsx,.xls" style="display:none"/>
-          </label>
-          <button class="btn-ghost btn-sm" id="anExportBtn">
-            <svg-icon name="download" size="13"></svg-icon> Export CSV
-          </button>
-          <button class="btn-ghost btn-sm" id="anSaveSnapBtn">
-            <svg-icon name="bookmark" size="13"></svg-icon> Save Snapshot
+          <button class="btn-primary btn-sm" id="anExportBtn">
+            <svg-icon name="download" size="13"></svg-icon> Download Excel
           </button>
         </div>
       </div>
@@ -1480,6 +1371,16 @@ body.compact .chart-card      { padding: 14px 16px; }
           <button data-view="creative">By Creative</button>
         </div>
         <span id="anRowCount" style="font-size:12px;color:var(--muted)"></span>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <button class="btn-primary btn-sm" id="offerMapUploadBtn" title="Upload a two-column CSV or Excel file: column 1 = version name (as it appears in data), column 2 = friendly offer name">
+            <svg-icon name="upload" size="13"></svg-icon> Offer Map
+          </button>
+          <div class="offer-map-chip" id="offerMapChip" style="display:none">
+            <span id="offerMapChipLabel"></span>
+            <button class="offer-map-chip-clear" id="offerMapClearBtn" title="Remove offer map">✕</button>
+          </div>
+        </div>
+        <input type="file" id="offerMapFileInput" accept=".csv,.xlsx,.xls" style="display:none">
       </div>
 
       <!-- Scrollable table -->
@@ -1495,7 +1396,6 @@ body.compact .chart-card      { padding: 14px 16px; }
       <div class="page-header">
         <div>
           <h1>Creatives</h1>
-          <div class="page-header-sub">All active creative versions · Link Innovid · Upload previews</div>
         </div>
         <div class="page-header-actions">
           <button class="btn-primary btn-sm" id="crAddBtnTop">
@@ -1635,81 +1535,10 @@ body.compact .chart-card      { padding: 14px 16px; }
       </div>
     </div>
 
-    <div class="tab-panel" id="tab-reports">
-      <div class="page-header">
-        <div>
-          <h1>Reports</h1>
-          <div class="page-header-sub">Upload delivery exports · View saved analytics snapshots</div>
-        </div>
-        <div class="page-header-actions">
-          <label class="btn-primary btn-sm" style="cursor:pointer" for="rpFileInput">
-            <svg-icon name="upload" size="13"></svg-icon> Upload Report
-          </label>
-        </div>
-      </div>
-
-      <!-- Drop zone -->
-      <div class="rp-upload-zone" id="rpUploadZone">
-        <div class="rp-upload-icon">
-          <svg-icon name="file-text" size="24"></svg-icon>
-        </div>
-        <div class="rp-upload-title">Drop delivery reports here</div>
-        <div class="rp-upload-sub">CSV, XLSX, XLS, ZIP &nbsp;·&nbsp; max 50 MB per file</div>
-        <label class="btn-ghost btn-sm" style="cursor:pointer;margin-top:4px" for="rpFileInput">
-          Browse files
-        </label>
-        <input type="file" id="rpFileInput" multiple accept=".csv,.xlsx,.xls,.zip" style="display:none"/>
-      </div>
-
-      <!-- Uploaded Reports -->
-      <div class="rp-section">
-        <div class="rp-section-header">
-          <div class="rp-section-title">Uploaded Reports</div>
-          <div class="rp-section-count" id="rpReportCount">0</div>
-        </div>
-        <div class="rp-list" id="rpReportList">
-          <div class="rp-empty">No reports uploaded yet. Drop a file above to get started.</div>
-        </div>
-      </div>
-
-      <!-- Saved Snapshots -->
-      <div class="rp-section">
-        <div class="rp-section-header">
-          <div class="rp-section-title">Saved Snapshots</div>
-          <div class="rp-section-count" id="rpSnapCount">0</div>
-          <span style="font-size:11.5px;color:var(--muted);margin-left:4px">— saved from the Analytics tab</span>
-        </div>
-        <div class="rp-list" id="rpSnapList">
-          <div class="rp-empty">No snapshots saved yet. Use <strong>Save Snapshot</strong> in the Analytics tab.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Report Preview Modal -->
-    <div class="rp-preview-overlay" id="rpPreviewOverlay">
-      <div class="rp-preview-modal">
-        <div class="rp-preview-header">
-          <div class="rp-preview-title" id="rpPreviewTitle"></div>
-          <button class="rp-preview-close" id="rpPreviewClose">×</button>
-        </div>
-        <div class="rp-preview-table-wrap">
-          <table class="data-table rp-preview-table" id="rpPreviewTable"></table>
-        </div>
-        <div class="rp-preview-footer">
-          <span id="rpPreviewMeta"></span>
-          <div style="flex:1"></div>
-          <button class="btn-ghost btn-sm" id="rpPreviewDownload">
-            <svg-icon name="download" size="13"></svg-icon> Download CSV
-          </button>
-        </div>
-      </div>
-    </div>
-
     <div class="tab-panel" id="tab-settings">
       <div class="page-header">
         <div>
           <h1>Settings</h1>
-          <div class="page-header-sub">Appearance · Account · Team & Access · Dashboard Defaults</div>
         </div>
       </div>
 
@@ -1774,7 +1603,6 @@ body.compact .chart-card      { padding: 14px 16px; }
                   <option value="overview">Overview</option>
                   <option value="analytics">Analytics</option>
                   <option value="creatives">Creatives</option>
-                  <option value="reports">Reports</option>
                 </select>
               </div>
             </div>
@@ -2063,8 +1891,8 @@ async function loadBigQueryData() {
             SUM(\`CKT_bNON_HISPANIC_GLOBAL_RT Count\`) + SUM(\`CKT_bHISPANIC_GLOBAL_RT Count\`),
             SUM(\`Total Ads Requested\`)
           ) as lpvr,
-          SUM(\`Spend\`) as spend,
-          SAFE_DIVIDE(SUM(\`Spend\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc
+          SUM(\`Total Cost\`) as spend,
+          SAFE_DIVIDE(SUM(\`Total Cost\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
         WHERE \`Flight\` IN ('Q1','Q2','Q3')
         GROUP BY \`Flight\`
@@ -2101,8 +1929,8 @@ async function loadBigQueryData() {
           SAFE_DIVIDE(SUM(\`CKT_bHISPANIC_ORDER Count\`), SUM(\`Total Ads Requested\`)) as hmTdor,
           SAFE_DIVIDE(SUM(\`CKT_bNON_HISPANIC_ORDER Count\`), NULLIF(SUM(\`Clicks\`), 0)) as gmCvr,
           SAFE_DIVIDE(SUM(\`CKT_bHISPANIC_ORDER Count\`), NULLIF(SUM(\`Clicks\`), 0)) as hmCvr,
-          SUM(\`Spend\`) as spend,
-          SAFE_DIVIDE(SUM(\`Spend\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc
+          SUM(\`Total Cost\`) as spend,
+          SAFE_DIVIDE(SUM(\`Total Cost\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
         WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
         GROUP BY q, mkt, stage
@@ -2120,8 +1948,8 @@ async function loadBigQueryData() {
           SUM(\`CKT_bNON_HISPANIC_ORDER Count\`) as gmOrd,
           SAFE_DIVIDE(SUM(\`CKT_bNON_HISPANIC_GLOBAL_RT Count\`), SUM(\`Total Ads Requested\`)) as gmLpvr,
           SAFE_DIVIDE(SUM(\`CKT_bNON_HISPANIC_ORDER Count\`), NULLIF(SUM(\`Clicks\`), 0)) as gmCvr,
-          SUM(\`Spend\`) as spend,
-          SAFE_DIVIDE(SUM(\`Spend\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc
+          SUM(\`Total Cost\`) as spend,
+          SAFE_DIVIDE(SUM(\`Total Cost\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
         WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
           AND \`Creative Offer Name\` IS NOT NULL
@@ -2294,7 +2122,6 @@ const TAB_TITLES = {
   overview:  'Overview',
   analytics: 'Analytics',
   creatives: 'Creatives',
-  reports:   'Reports',
   settings:  'Settings',
 };
 
@@ -2343,12 +2170,6 @@ window.__onAuth = function(user) {
 
   /* Sign out */
   document.getElementById('signOutBtn').addEventListener('click', signOut);
-
-  /* Sidebar quick-upload → navigate to Reports tab */
-  const uploadBtn = document.getElementById('sidebarUploadBtn');
-  if (uploadBtn) {
-    uploadBtn.addEventListener('click', () => switchTab('reports'));
-  }
 
   /* Theme toggle */
   document.getElementById('themeBtn').addEventListener('click', () => {
@@ -2731,8 +2552,6 @@ function renderOverview() {
   const stages = computeStages(ovQ, ovMkt);
   const mktLabel = ovMkt === 'all' ? 'GM + USH' : ovMkt;
   const qLabel   = ovQ   === 'all' ? 'Q1 + Q2 + Q3' : ovQ;
-  document.getElementById('ovSubtitle').textContent =
-    `${qLabel} · ${mktLabel} · Flashtalking DCO`;
   renderOvKpis(totals, ovQ);
   renderOvTrend(ovQ);
   if (ovMkt !== 'all') {
@@ -2863,6 +2682,27 @@ let AN_CREATIVES = [
   {q:'Q2',mkt:'USH',stage:'1 - Mid Funnel',creative:'Template-Transparency-Simplicity',                                   imps:3651320, clicks:2636,gmOrd:7, ctr:0.000722,gmLpvr:0.00764,gmCvr:0.00266},
 ];
 
+/* ── Offer name lookup map ───────────────────────────────── */
+const OFFER_MAP_KEY = 'crkt_offer_map_v1';
+let OFFER_MAP = (() => {
+  try { return JSON.parse(localStorage.getItem(OFFER_MAP_KEY) || '{}'); } catch { return {}; }
+})();
+
+function offerLabel(name) { return (name && OFFER_MAP[name]) || name; }
+
+function updateOfferMapChip() {
+  const n = Object.keys(OFFER_MAP).length;
+  const chip  = document.getElementById('offerMapChip');
+  const label = document.getElementById('offerMapChipLabel');
+  if (!chip) return;
+  if (n > 0) {
+    chip.style.display = '';
+    label.textContent  = `${n} offer${n !== 1 ? 's' : ''} mapped`;
+  } else {
+    chip.style.display = 'none';
+  }
+}
+
 /* ── Filter state ────────────────────────────────────────── */
 const anState = { q:'all', mkt:'all', stage:'all', view:'stage', search:'', sortCol:'imps', sortDir:-1 };
 
@@ -2977,7 +2817,7 @@ const CREATIVE_COLS = [
   {key:'q',       label:'Qtr',    fmt:v=>`<span class="data-badge ${v.toLowerCase()}">${v}</span>`},
   {key:'mkt',     label:'Market', fmt:v=>`<span class="data-badge ${v.toLowerCase()}">${v}</span>`},
   {key:'stage',   label:'Stage',  fmt:v=>v},
-  {key:'creative',label:'Creative',fmt:v=>`<div class="creative-name-cell" title="${v}">${v}</div>`},
+  {key:'creative',label:'Creative',fmt:v=>`<div class="creative-name-cell" title="${v}">${offerLabel(v)}</div>`},
   {key:'imps',    label:'Imps',   fmt:fmtN},
   {key:'clicks',  label:'Clicks', fmt:fmtN},
   {key:'ctr',     label:'CTR',    fmt:fmtPct},
@@ -3017,46 +2857,28 @@ function renderAnalytics() {
   renderAnTable(rows, isCreative ? CREATIVE_COLS : STAGE_COLS);
 }
 
-/* ── CSV export ──────────────────────────────────────────── */
-function exportAnCsv() {
-  const isCreative = anState.view === 'creative';
-  const cols = isCreative ? CREATIVE_COLS : STAGE_COLS;
-  const rows = anFilter(isCreative ? AN_CREATIVES : AN_STAGES);
-  const header = cols.map(c=>c.label).join(',');
-  const body   = rows.map(r=>cols.map(c=>{
-    const v = r[c.key] ?? 0;
-    return typeof v === 'string' ? `"${v.replace(/"/g,'""')}"` : v;
-  }).join(',')).join('\n');
-  const blob = new Blob([header+'\n'+body], {type:'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `CRKT_Analytics_${anState.q}_${anState.mkt}_${Date.now()}.csv`;
-  a.click();
+/* ── XLSX export (two sheets: By Stage + By Creative) ─────── */
+function exportAnXlsx() {
+  const q   = anState.q   !== 'all' ? anState.q   : 'All';
+  const mkt = anState.mkt !== 'all' ? anState.mkt : 'All';
+
+  function sheetFromData(cols, rows) {
+    const data = [cols.map(c => c.label)].concat(
+      rows.map(r => cols.map(c => r[c.key] ?? 0))
+    );
+    return XLSX.utils.aoa_to_sheet(data);
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheetFromData(STAGE_COLS,    anFilter(AN_STAGES)),    'By Stage');
+  XLSX.utils.book_append_sheet(wb, sheetFromData(CREATIVE_COLS, anFilter(AN_CREATIVES)), 'By Creative');
+
+  const filename = `CRKT_Analytics_${q}_${mkt}_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, filename);
 }
 
-/* ── CSV/XLSX import ─────────────────────────────────────── */
-document.getElementById('anFileInput').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const ext = file.name.split('.').pop().toLowerCase();
-  if (ext === 'csv') {
-    Papa.parse(file, { header:true, skipEmptyLines:true, complete(res) { console.log('[Analytics] Loaded CSV:', res.data.length, 'rows'); alert(`Loaded ${res.data.length} rows. Custom import rendering coming in a future update.`); } });
-  } else {
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const wb = XLSX.read(ev.target.result, {type:'array'});
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const data = XLSX.utils.sheet_to_json(ws);
-      console.log('[Analytics] Loaded XLSX:', data.length, 'rows');
-      alert(`Loaded ${data.length} rows from "${wb.SheetNames[0]}". Custom import rendering coming in a future update.`);
-    };
-    reader.readAsArrayBuffer(file);
-  }
-  e.target.value = '';
-});
-
 /* ── Wire controls ───────────────────────────────────────── */
-document.getElementById('anExportBtn').addEventListener('click', exportAnCsv);
+document.getElementById('anExportBtn').addEventListener('click', exportAnXlsx);
 
 document.getElementById('anMarketFilter').addEventListener('click', e => {
   const btn = e.target.closest('[data-mkt]');
@@ -3325,11 +3147,6 @@ window.__onTabSwitch = tab => {
 // Apply settings on load (handles saved theme + accent + compact)
 applySettings(stSettings);
 
-/* ── Save Snapshot (wired here, used by Reports) ─────────── */
-document.getElementById('anSaveSnapBtn').addEventListener('click', () => {
-  if (typeof rpSaveSnapshot === 'function') rpSaveSnapshot();
-  else alert('Reports module not loaded yet.');
-});
 
 /* ═══════════════════════════════════════════════════════════
      MODULE 5 · CREATIVES TAB
@@ -3707,284 +3524,6 @@ window.__onTabSwitch = tab => {
 };
 </script>
 
-<!-- ═══════════════════════════════════════════════════════
-     MODULE 6 · REPORTS TAB
-     ═══════════════════════════════════════════════════════ -->
-<script>
-/* ── Persistence ─────────────────────────────────────────── */
-const RP_KEY   = 'crkt_reports_v1';
-const SNAP_KEY = 'crkt_snaps_v1';
-let rpReports = (() => { try { return JSON.parse(localStorage.getItem(RP_KEY)  || '[]'); } catch { return []; } })();
-let rpSnaps   = (() => { try { return JSON.parse(localStorage.getItem(SNAP_KEY)|| '[]'); } catch { return []; } })();
-function rpPersist()   { localStorage.setItem(RP_KEY,   JSON.stringify(rpReports)); }
-function snapPersist() { localStorage.setItem(SNAP_KEY, JSON.stringify(rpSnaps));  }
-
-/* ── Formatters ──────────────────────────────────────────── */
-function fmtBytes(b) {
-  if (b < 1024)    return b + ' B';
-  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
-  return (b/1048576).toFixed(1) + ' MB';
-}
-function fmtDate2(ts) {
-  return new Date(ts).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
-}
-
-/* ── Parse uploaded file ─────────────────────────────────── */
-function rpParseFile(file, cb) {
-  const ext = file.name.split('.').pop().toLowerCase();
-  if (ext === 'csv') {
-    Papa.parse(file, { header:true, skipEmptyLines:true,
-      complete(res) { cb(res.meta.fields||[], res.data, null); },
-      error(err)    { cb([], [], err.message); }
-    });
-  } else if (['xlsx','xls'].includes(ext)) {
-    const reader = new FileReader();
-    reader.onload = ev => {
-      try {
-        const wb   = XLSX.read(ev.target.result, {type:'array'});
-        const ws   = wb.Sheets[wb.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json(ws, {defval:''});
-        const cols = data.length ? Object.keys(data[0]) : [];
-        cb(cols, data, null);
-      } catch(e) { cb([], [], e.message); }
-    };
-    reader.readAsArrayBuffer(file);
-  } else if (ext === 'zip') {
-    cb(['Note'], [{Note:'ZIP preview not supported. Extract and upload the CSV directly.'}], null);
-  } else {
-    cb([], [], 'Unsupported file type: ' + ext);
-  }
-}
-
-/* ── Add report from file ────────────────────────────────── */
-function rpAddFile(file) {
-  rpParseFile(file, (cols, rows, err) => {
-    const id = 'rp_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
-    rpReports.unshift({
-      id, name: file.name, size: file.size,
-      type: file.name.split('.').pop().toUpperCase(),
-      date: Date.now(), cols,
-      preview: rows.slice(0, 500),
-      total: rows.length,
-      error: err || null,
-    });
-    rpPersist();
-    renderReports();
-  });
-}
-
-/* ── Save snapshot from Analytics ───────────────────────────*/
-function rpSaveSnapshot() {
-  if (typeof AN_STAGES === 'undefined') return;
-  const isCreative = (typeof anState !== 'undefined') && anState.view === 'creative';
-  const pool   = isCreative ? AN_CREATIVES : AN_STAGES;
-  const rows   = (typeof anFilter === 'function') ? anFilter(pool) : pool;
-  const cols   = isCreative
-    ? ['q','mkt','stage','creative','imps','clicks','ctr','gmOrd','gmLpvr','gmCvr']
-    : ['q','mkt','stage','imps','freq','clicks','ctr','gmOrd','hmOrd','gmLpvr','hmLpvr','gmTdor','hmTdor','gmCvr','hmCvr'];
-
-  const label = [
-    anState?.q    !== 'all' ? anState.q    : 'All Quarters',
-    anState?.mkt  !== 'all' ? anState.mkt  : 'All Markets',
-    anState?.stage!== 'all' ? anState.stage: '',
-    isCreative ? 'Creatives' : 'By Stage',
-  ].filter(Boolean).join(' · ');
-
-  const id = 'snap_' + Date.now();
-  rpSnaps.unshift({
-    id,
-    name:    label,
-    date:    Date.now(),
-    filters: { ...(anState || {}) },
-    cols,
-    preview: rows,
-    total:   rows.length,
-  });
-  snapPersist();
-  renderReports();
-  // Switch to Reports tab to confirm
-  if (typeof switchTab === 'function') switchTab('reports');
-}
-
-/* ── CSV download from stored data ──────────────────────────*/
-function rpDownloadCsv(entry) {
-  const cols = entry.cols || [];
-  const rows = entry.preview || [];
-  const header = cols.join(',');
-  const body = rows.map(r => cols.map(k => {
-    const v = r[k] ?? '';
-    return typeof v === 'string' && (v.includes(',') || v.includes('"'))
-      ? `"${v.replace(/"/g,'""')}"` : v;
-  }).join(',')).join('\n');
-  const blob = new Blob([header + '\n' + body], {type:'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = entry.name.replace(/\.(xlsx|xls|zip)$/i, '.csv');
-  a.click();
-}
-
-/* ── Preview modal ───────────────────────────────────────── */
-let rpActiveEntry = null;
-
-function rpOpenPreview(entry) {
-  rpActiveEntry = entry;
-  const overlay = document.getElementById('rpPreviewOverlay');
-  document.getElementById('rpPreviewTitle').textContent = entry.name;
-
-  const cols = entry.cols || [];
-  const rows = (entry.preview || []).slice(0, 200);
-  const thead = `<thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>`;
-  const tbody = `<tbody>${rows.map(r=>`<tr>${cols.map(c=>`<td>${r[c]??''}</td>`).join('')}</tr>`).join('')}</tbody>`;
-  document.getElementById('rpPreviewTable').innerHTML = thead + tbody;
-
-  const shown = Math.min(rows.length, 200);
-  document.getElementById('rpPreviewMeta').textContent =
-    `Showing ${shown.toLocaleString()} of ${(entry.total||rows.length).toLocaleString()} rows`;
-
-  overlay.classList.add('open');
-}
-
-function rpClosePreview() {
-  document.getElementById('rpPreviewOverlay').classList.remove('open');
-  rpActiveEntry = null;
-}
-
-/* ── Render list items ───────────────────────────────────── */
-function rpItemHTML(entry, isSnap) {
-  const iconClass = isSnap ? 'rp-icon-snap'
-    : entry.type === 'CSV'  ? 'rp-icon-csv'
-    : entry.type === 'XLSX' || entry.type === 'XLS' ? 'rp-icon-xlsx'
-    : 'rp-icon-zip';
-  const iconLabel = isSnap ? '📊' : entry.type;
-
-  const meta = isSnap
-    ? `${fmtDate2(entry.date)} · ${entry.total} rows · Filters: ${[entry.filters?.q, entry.filters?.mkt].filter(v=>v&&v!=='all').join(', ')||'All'}`
-    : `${fmtDate2(entry.date)} · ${fmtBytes(entry.size)} · ${entry.total?.toLocaleString()||'?'} rows${entry.error ? ' · ⚠ '+entry.error : ''}`;
-
-  return `
-  <div class="rp-item" data-id="${entry.id}">
-    <div class="rp-item-icon ${iconClass}">${iconLabel}</div>
-    <div class="rp-item-body">
-      <div class="rp-item-name">${entry.name}</div>
-      <div class="rp-item-meta">${meta}</div>
-    </div>
-    <div class="rp-item-actions">
-      <button class="rp-action-btn rp-preview-btn" data-id="${entry.id}" data-snap="${isSnap?1:0}" title="Preview">
-        <svg-icon name="eye" size="15"></svg-icon>
-      </button>
-      <button class="rp-action-btn rp-dl-btn" data-id="${entry.id}" data-snap="${isSnap?1:0}" title="Download CSV">
-        <svg-icon name="download" size="15"></svg-icon>
-      </button>
-      <button class="rp-action-btn danger rp-del-btn" data-id="${entry.id}" data-snap="${isSnap?1:0}" title="Delete">
-        <svg-icon name="trash-2" size="15"></svg-icon>
-      </button>
-    </div>
-  </div>`;
-}
-
-/* ── Top-level render ────────────────────────────────────── */
-function renderReports() {
-  // Reports
-  const rList = document.getElementById('rpReportList');
-  const rCount = document.getElementById('rpReportCount');
-  if (rList) {
-    rList.innerHTML = rpReports.length
-      ? rpReports.map(r => rpItemHTML(r, false)).join('')
-      : '<div class="rp-empty">No reports uploaded yet. Drop a file above to get started.</div>';
-  }
-  if (rCount) rCount.textContent = rpReports.length;
-
-  // Snapshots
-  const sList  = document.getElementById('rpSnapList');
-  const sCount = document.getElementById('rpSnapCount');
-  if (sList) {
-    sList.innerHTML = rpSnaps.length
-      ? rpSnaps.map(s => rpItemHTML(s, true)).join('')
-      : '<div class="rp-empty">No snapshots saved yet. Use <strong>Save Snapshot</strong> in the Analytics tab.</div>';
-  }
-  if (sCount) sCount.textContent = rpSnaps.length;
-
-  rpWireListActions();
-}
-
-/* ── Wire list buttons ───────────────────────────────────── */
-function rpWireListActions() {
-  document.querySelectorAll('.rp-preview-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const isSnap = btn.dataset.snap === '1';
-      const list   = isSnap ? rpSnaps : rpReports;
-      const entry  = list.find(e => e.id === btn.dataset.id);
-      if (entry) rpOpenPreview(entry);
-    });
-  });
-  document.querySelectorAll('.rp-dl-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const isSnap = btn.dataset.snap === '1';
-      const list   = isSnap ? rpSnaps : rpReports;
-      const entry  = list.find(e => e.id === btn.dataset.id);
-      if (entry) rpDownloadCsv(entry);
-    });
-  });
-  document.querySelectorAll('.rp-del-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const isSnap = btn.dataset.snap === '1';
-      if (!confirm('Delete this ' + (isSnap ? 'snapshot' : 'report') + '?')) return;
-      if (isSnap) {
-        rpSnaps = rpSnaps.filter(e => e.id !== btn.dataset.id);
-        snapPersist();
-      } else {
-        rpReports = rpReports.filter(e => e.id !== btn.dataset.id);
-        rpPersist();
-      }
-      renderReports();
-    });
-  });
-}
-
-/* ── Upload zone wiring ──────────────────────────────────── */
-const rpZone = document.getElementById('rpUploadZone');
-const rpInput = document.getElementById('rpFileInput');
-
-function rpHandleFiles(files) {
-  Array.from(files).forEach(f => rpAddFile(f));
-}
-
-rpInput.addEventListener('change', e => {
-  rpHandleFiles(e.target.files);
-  e.target.value = '';
-});
-rpZone.addEventListener('click', e => {
-  if (!e.target.closest('label')) rpInput.click();
-});
-rpZone.addEventListener('dragover', e => {
-  e.preventDefault(); rpZone.classList.add('drag-over');
-});
-rpZone.addEventListener('dragleave', () => rpZone.classList.remove('drag-over'));
-rpZone.addEventListener('drop', e => {
-  e.preventDefault(); rpZone.classList.remove('drag-over');
-  rpHandleFiles(e.dataTransfer.files);
-});
-
-/* ── Preview modal wiring ────────────────────────────────── */
-document.getElementById('rpPreviewClose').addEventListener('click', rpClosePreview);
-document.getElementById('rpPreviewOverlay').addEventListener('click', e => {
-  if (e.target === document.getElementById('rpPreviewOverlay')) rpClosePreview();
-});
-document.getElementById('rpPreviewDownload').addEventListener('click', () => {
-  if (rpActiveEntry) rpDownloadCsv(rpActiveEntry);
-});
-
-/* ── Tab activation ──────────────────────────────────────── */
-const _prevTabSwitch6 = window.__onTabSwitch;
-window.__onTabSwitch = tab => {
-  if (tab === 'reports') renderReports();
-  if (typeof _prevTabSwitch6 === 'function') _prevTabSwitch6(tab);
-};
-
-/* ── Initial render (in case tab is already active) ─────── */
-renderReports();
-</script>
-
 <script>
 /* ── One-Sheeter Generator ───────────────────────────────── */
 function generateOneSheet() {
@@ -4041,7 +3580,7 @@ function generateOneSheet() {
     return `<table class="os-table"><thead><tr><th>#</th><th>Creative / Offer</th><th>Qtr</th><th>${label}</th><th>Imps</th></tr></thead><tbody>
       ${sorted.map((r,i)=>`<tr>
         <td class="rank">${i+1}</td>
-        <td class="creative-cell"><span class="badge ${r.mkt.toLowerCase()}">${r.mkt}</span>${r.creative||r.stage}</td>
+        <td class="creative-cell"><span class="badge ${r.mkt.toLowerCase()}">${r.mkt}</span>${offerLabel(r.creative||r.stage)}</td>
         <td><span class="badge ${r.q.toLowerCase()}">${r.q}</span></td>
         <td class="val">${valFmt(r[sortKey]||0)}</td>
         <td class="val-muted">${FMT.abbr(r.imps||0)}</td>
@@ -4055,7 +3594,7 @@ function generateOneSheet() {
     return `<table class="os-table"><thead><tr><th>#</th><th>Creative / Offer</th><th>Segment</th><th>LPVR</th><th>CPC</th></tr></thead><tbody>
       ${sorted.map((r,i)=>`<tr>
         <td class="rank">${i+1}</td>
-        <td class="creative-cell"><span class="badge ${r.q.toLowerCase()}">${r.q}</span>${r.creative||'—'}</td>
+        <td class="creative-cell"><span class="badge ${r.q.toLowerCase()}">${r.q}</span>${offerLabel(r.creative)||'—'}</td>
         <td>${r.stage||'—'}</td>
         <td class="val">${(r.gmLpvr*100).toFixed(1)}%</td>
         <td class="val-muted">${r.cpc>0?'$'+r.cpc.toFixed(2):'—'}</td>
@@ -4071,8 +3610,8 @@ function generateOneSheet() {
   const totSpend = activeQs.reduce((s,q)=>{const d=PIVOT_DATA.quarters[q];return s+((d?.GM?.spend||0)+(d?.USH?.spend||0));},0);
 
   const insights = [
-    topOrder ? `<strong>Top Order Driver:</strong> "${topOrder.creative}" (${topOrder.q}, ${topOrder.mkt}) generated ${FMT.num(topOrder.gmOrd)} orders on ${FMT.abbr(topOrder.imps)} impressions — highest order volume in the selected period.` : null,
-    topCtr   ? `<strong>Highest CTR Creative:</strong> "${topCtr.creative}" (${topCtr.q}, ${topCtr.mkt}) achieved ${(topCtr.ctr*100).toFixed(3)}% CTR on ${FMT.abbr(topCtr.imps)} impressions.` : null,
+    topOrder ? `<strong>Top Order Driver:</strong> "${offerLabel(topOrder.creative)}" (${topOrder.q}, ${topOrder.mkt}) generated ${FMT.num(topOrder.gmOrd)} orders on ${FMT.abbr(topOrder.imps)} impressions — highest order volume in the selected period.` : null,
+    topCtr   ? `<strong>Highest CTR Creative:</strong> "${offerLabel(topCtr.creative)}" (${topCtr.q}, ${topCtr.mkt}) achieved ${(topCtr.ctr*100).toFixed(3)}% CTR on ${FMT.abbr(topCtr.imps)} impressions.` : null,
     totSpend > 0 ? `<strong>Overall Efficiency:</strong> ${FMT.dollar(totSpend)} total spend across ${activeQs.join(' + ')} at an average CPC of $${(totAll.spend&&totAll.clicks?totAll.spend/totAll.clicks:0).toFixed(2)}.` : null,
     `<strong>Data Source:</strong> Flashtalking / Innovid DCO delivery data via BigQuery (crk-dco-dash.reporting_data.deliveries_view). Audience signals from floodlight spotlight columns.`,
   ].filter(Boolean);
@@ -4177,6 +3716,72 @@ function generateOneSheet() {
 }
 
 document.getElementById('downloadOneSheeterBtn').addEventListener('click', generateOneSheet);
+
+/* ── Offer Map upload handlers ───────────────────────────── */
+document.getElementById('offerMapUploadBtn').addEventListener('click', () => {
+  document.getElementById('offerMapFileInput').click();
+});
+
+document.getElementById('offerMapClearBtn').addEventListener('click', () => {
+  OFFER_MAP = {};
+  localStorage.removeItem(OFFER_MAP_KEY);
+  updateOfferMapChip();
+  renderAnalytics();
+});
+
+document.getElementById('offerMapFileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+
+  function applyMap(map) {
+    OFFER_MAP = map;
+    localStorage.setItem(OFFER_MAP_KEY, JSON.stringify(OFFER_MAP));
+    updateOfferMapChip();
+    renderAnalytics();
+  }
+
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  function buildMapFromRows(headerRow, dataRows) {
+    const headers = headerRow.map(h => String(h || '').trim());
+    const keyCol  = headers.indexOf('Version Name');
+    const valCol  = headers.indexOf('Creative Offer Name');
+    const kIdx = keyCol  >= 0 ? keyCol  : 0;
+    const vIdx = valCol  >= 0 ? valCol  : 1;
+    const map = {};
+    dataRows.forEach(row => {
+      const key = String(row[kIdx] || '').trim();
+      const val = String(row[vIdx] || '').trim();
+      if (key && val) map[key] = val;
+    });
+    return map;
+  }
+
+  if (ext === 'csv') {
+    Papa.parse(file, {
+      header: false,
+      skipEmptyLines: true,
+      complete(results) {
+        const all = results.data;
+        if (all.length < 2) return;
+        applyMap(buildMapFromRows(all[0], all.slice(1)));
+      }
+    });
+  } else {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const wb   = XLSX.read(ev.target.result, { type: 'array' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (data.length < 2) return;
+      applyMap(buildMapFromRows(data[0], data.slice(1)));
+    };
+    reader.readAsArrayBuffer(file);
+  }
+});
+
+updateOfferMapChip();
 </script>
 </body>
 </html>
