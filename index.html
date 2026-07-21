@@ -1693,8 +1693,16 @@ body.compact .chart-card      { padding: 14px 16px; }
             <span id="offerMapChipLabel"></span>
             <button class="offer-map-chip-clear" id="offerMapClearBtn" title="Remove offer map">✕</button>
           </div>
+          <button class="btn-primary btn-sm" id="perfDataUploadBtn" title="Upload a delivery report with named Spotlight columns (Flight, Segment, Strategy, Creative Offer Name, Total Ads Requested, Clicks, Total Cost, order & LPVR pixel counts) to fill in quarters BigQuery is missing — including orders and LPVR, which the automatic Cloud Storage reports don't have.">
+            <svg-icon name="upload" size="13"></svg-icon> Performance Data
+          </button>
+          <div class="offer-map-chip" id="perfDataChip" style="display:none">
+            <span id="perfDataChipLabel"></span>
+            <button class="offer-map-chip-clear" id="perfDataClearBtn" title="Remove manual performance data">✕</button>
+          </div>
         </div>
         <input type="file" id="offerMapFileInput" accept=".csv,.xlsx,.xls" style="display:none">
+        <input type="file" id="perfDataFileInput" accept=".csv,.xlsx,.xls" style="display:none">
       </div>
 
       <!-- Offer Map: Cloud Storage picker modal -->
@@ -2329,6 +2337,7 @@ const BQ_PROJECT       = 'crk-dco-dash';
 const BQ_SCOPE         = 'https://www.googleapis.com/auth/bigquery.readonly';
 const GCS_SCOPE        = 'https://www.googleapis.com/auth/devstorage.read_only';
 const GCS_BUCKET       = 'crk-dco-bucket-daily-performance';
+const GCS_REPORTS_PREFIX = 'reports/';
 const SESSION_KEY      = 'crkt_gsession';
 
 let ACCESS_TOKEN = null;
@@ -2386,11 +2395,10 @@ async function bqQuery(sql) {
 }
 
 /* ── Cloud Storage helpers (crk-dco-bucket-daily-performance) ── */
-async function gcsListObjects() {
-  const res = await fetch(
-    `https://storage.googleapis.com/storage/v1/b/${GCS_BUCKET}/o?maxResults=200`,
-    { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } }
-  );
+async function gcsListObjects(prefix = '') {
+  const url = `https://storage.googleapis.com/storage/v1/b/${GCS_BUCKET}/o?maxResults=500` +
+    (prefix ? `&prefix=${encodeURIComponent(prefix)}` : '');
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } });
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
   return (data.items || [])
@@ -2566,6 +2574,295 @@ async function loadBigQueryData() {
   }
 }
 
+/* ── Cloud Storage delivery-report fallback ──────────────────
+   Fills in whole quarters BigQuery has no rows for yet (e.g. Q3
+   before the pipeline catches up), using the raw daily delivery
+   exports in crk-dco-bucket-daily-performance/reports/. These are
+   the same raw files that feed the BigQuery pipeline, but without
+   its Flashtalking Spotlight pixel-ID → metric mapping — so only
+   imps/clicks/ctr/spend are derivable here. Orders/LPVR/CVR stay
+   at 0 for cloud-sourced quarters until that mapping is added. ── */
+function quarterFromActivityDate(dateStr) {
+  const month = Number(String(dateStr || '').slice(5, 7));
+  if (month >= 1 && month <= 3) return 'Q1';
+  if (month >= 4 && month <= 6) return 'Q2';
+  if (month >= 7 && month <= 9) return 'Q3';
+  return null;
+}
+
+function marketFromDeliveryRow(row) {
+  const strategy = row.placement_strategy || '';
+  const creative = row.creative || '';
+  return /_HM$/i.test(strategy) || /HISPANIC/i.test(creative) ? 'USH' : 'GM';
+}
+
+function parseDeliveryReportCsv(text) {
+  return new Promise((resolve, reject) => {
+    Papa.parse(text, {
+      header: true,
+      skipEmptyLines: true,
+      complete: results => resolve(results.data),
+      error: reject
+    });
+  });
+}
+
+function aggregateDeliveryRows(rows, into) {
+  rows.forEach(row => {
+    const q = quarterFromActivityDate(row.activity_date);
+    if (!q) return;
+    const mkt    = marketFromDeliveryRow(row);
+    const imps   = Number(row.total_ads_requested) || 0;
+    const clicks = Number(row.clicks) || 0;
+    const spend  = Number(row.total_cost) || 0;
+    into[q] = into[q] || { GM: { imps: 0, clicks: 0, spend: 0 }, USH: { imps: 0, clicks: 0, spend: 0 } };
+    into[q][mkt].imps   += imps;
+    into[q][mkt].clicks += clicks;
+    into[q][mkt].spend  += spend;
+  });
+  return into;
+}
+
+async function loadCloudDeliveryFallback() {
+  try {
+    const files = await gcsListObjects(GCS_REPORTS_PREFIX);
+    if (!files.length) return;
+
+    const rowSets = await Promise.all(files.map(async file => {
+      const text = await gcsFetchObject(file.name);
+      return parseDeliveryReportCsv(text);
+    }));
+
+    const agg = {};
+    rowSets.forEach(rows => aggregateDeliveryRows(rows, agg));
+
+    Object.keys(agg).forEach(q => {
+      const existing  = PIVOT_DATA.quarters[q];
+      const hasBqData = existing && ((existing.GM?.imps || 0) + (existing.USH?.imps || 0) > 0);
+      if (hasBqData) return; // BigQuery already covers this quarter — don't overwrite it
+
+      const buildMkt = mkt => {
+        const d = agg[q][mkt];
+        return {
+          imps: d.imps, clicks: d.clicks,
+          gmOrd: 0, hmOrd: 0,
+          ctr: d.imps ? d.clicks / d.imps : 0,
+          gmLpvr: 0, gmCvr: 0,
+          spend: d.spend,
+          cpc: d.clicks ? d.spend / d.clicks : 0,
+          _source: 'cloud-reports',
+        };
+      };
+      PIVOT_DATA.quarters[q] = { GM: buildMkt('GM'), USH: buildMkt('USH') };
+    });
+
+    if (typeof renderOverview === 'function') renderOverview();
+  } catch (e) {
+    console.warn('Cloud delivery-report fallback failed:', e);
+  }
+}
+
+/* ── Manual performance data upload ──────────────────────────
+   Same "fill gaps only" rule as the cloud reports fallback above,
+   but takes priority over it — a manual export includes named
+   Flashtalking Spotlight goal columns (orders/LPVR), which the raw
+   reports/ files don't. Expected columns match what the BigQuery
+   view already exposes: Flight, Segment, Strategy, Creative Offer
+   Name, Total Ads Requested, Clicks, Total Cost, Cookie ID Reach:
+   Total Ad Reach, CKT_bNON_HISPANIC_ORDER Count, CKT_bHISPANIC_ORDER
+   Count, CKT_bNON_HISPANIC_GLOBAL_RT Count, CKT_bHISPANIC_GLOBAL_RT
+   Count. Only the aggregated result (not the raw rows) is persisted,
+   keyed by Flight, so re-uploading one quarter's file doesn't wipe
+   out another quarter uploaded earlier. ─────────────────────────── */
+const PERF_DATA_KEY = 'crkt_manual_perf_data_v1';
+
+let MANUAL_PERF_DATA = (() => {
+  try { return JSON.parse(localStorage.getItem(PERF_DATA_KEY) || 'null'); } catch { return null; }
+})();
+
+function numCol(row, name) { return Number(row[name]) || 0; }
+
+function marketFromStrategyCol(row) {
+  return /USH/i.test(row['Strategy'] || '') ? 'USH' : 'GM';
+}
+
+function quarterIsMissingFromBigQuery(flight) {
+  const existing = PIVOT_DATA.quarters[flight];
+  if (!existing) return true;
+  if (existing.GM?._source === 'cloud-reports' || existing.GM?._source === 'manual-upload') return true;
+  return ((existing.GM?.imps || 0) + (existing.USH?.imps || 0)) === 0;
+}
+
+function parseXlsxRowsHeaderMode(buffer) {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { defval: '' });
+}
+
+function parsePerformanceRowsByExt(bufferOrText, ext) {
+  return ext === 'csv'
+    ? parseDeliveryReportCsv(bufferOrText)
+    : Promise.resolve(parseXlsxRowsHeaderMode(bufferOrText));
+}
+
+function aggregateManualPerformanceRows(rows) {
+  const groups = {}; // Flight -> raw rows
+  rows.forEach(row => {
+    const flight = (row['Flight'] || '').trim();
+    if (!flight) return;
+    (groups[flight] = groups[flight] || []).push(row);
+  });
+
+  const quartersByFlight    = {};
+  const stagesByFlight      = {};
+  const anStagesByFlight    = {};
+  const anCreativesByFlight = {};
+
+  Object.keys(groups).forEach(flight => {
+    const flightRows = groups[flight];
+
+    // -- quarter totals (mirrors the BigQuery quarters query: orders combined, USH left at 0)
+    let imps = 0, clicks = 0, gmOrdSum = 0, hmOrdSum = 0, gmRtSum = 0, hmRtSum = 0, spend = 0;
+    flightRows.forEach(r => {
+      imps     += numCol(r, 'Total Ads Requested');
+      clicks   += numCol(r, 'Clicks');
+      gmOrdSum += numCol(r, 'CKT_bNON_HISPANIC_ORDER Count');
+      hmOrdSum += numCol(r, 'CKT_bHISPANIC_ORDER Count');
+      gmRtSum  += numCol(r, 'CKT_bNON_HISPANIC_GLOBAL_RT Count');
+      hmRtSum  += numCol(r, 'CKT_bHISPANIC_GLOBAL_RT Count');
+      spend    += numCol(r, 'Total Cost');
+    });
+    const orders = gmOrdSum + hmOrdSum;
+    quartersByFlight[flight] = {
+      GM:  { imps, clicks, gmOrd: orders, hmOrd: 0, ctr: imps ? clicks/imps : 0, gmLpvr: imps ? (gmRtSum+hmRtSum)/imps : 0, gmCvr: clicks ? orders/clicks : 0, spend, cpc: clicks ? spend/clicks : 0 },
+      USH: { imps: 0, clicks: 0, gmOrd: 0, hmOrd: 0, ctr: 0, gmLpvr: 0, gmCvr: 0, spend: 0, cpc: 0 },
+    };
+
+    // -- PIVOT_DATA.stages shape (mirrors the overview-stages query: grouped by Segment only, mkt hardcoded GM)
+    const stageGroups = {};
+    flightRows.forEach(r => {
+      const seg = (r['Segment'] || '').trim();
+      if (!seg) return;
+      const g = stageGroups[seg] = stageGroups[seg] || { imps:0, clicks:0, gmOrdSum:0, hmOrdSum:0, gmRtSum:0, hmRtSum:0 };
+      g.imps     += numCol(r, 'Total Ads Requested');
+      g.clicks   += numCol(r, 'Clicks');
+      g.gmOrdSum += numCol(r, 'CKT_bNON_HISPANIC_ORDER Count');
+      g.hmOrdSum += numCol(r, 'CKT_bHISPANIC_ORDER Count');
+      g.gmRtSum  += numCol(r, 'CKT_bNON_HISPANIC_GLOBAL_RT Count');
+      g.hmRtSum  += numCol(r, 'CKT_bHISPANIC_GLOBAL_RT Count');
+    });
+    stagesByFlight[flight] = Object.keys(stageGroups).map(seg => {
+      const g = stageGroups[seg], ord = g.gmOrdSum + g.hmOrdSum;
+      return {
+        q: flight, mkt: 'GM', stage: seg, imps: g.imps, clicks: g.clicks,
+        gmOrd: ord, ctr: g.imps ? g.clicks/g.imps : 0,
+        gmLpvr: g.imps ? (g.gmRtSum+g.hmRtSum)/g.imps : 0,
+        gmCvr: g.clicks ? ord/g.clicks : 0,
+        _source: 'manual-upload',
+      };
+    });
+
+    // -- AN_STAGES shape (mirrors the by-stage analytics query: grouped by mkt + Segment)
+    const anStageGroups = {};
+    flightRows.forEach(r => {
+      const seg = (r['Segment'] || '').trim();
+      if (!seg) return;
+      const mkt = marketFromStrategyCol(r);
+      const key = mkt + '|' + seg;
+      const g = anStageGroups[key] = anStageGroups[key] || { mkt, seg, imps:0, clicks:0, gmOrdSum:0, hmOrdSum:0, gmRtSum:0, hmRtSum:0, spend:0, reach:0 };
+      g.imps     += numCol(r, 'Total Ads Requested');
+      g.clicks   += numCol(r, 'Clicks');
+      g.gmOrdSum += numCol(r, 'CKT_bNON_HISPANIC_ORDER Count');
+      g.hmOrdSum += numCol(r, 'CKT_bHISPANIC_ORDER Count');
+      g.gmRtSum  += numCol(r, 'CKT_bNON_HISPANIC_GLOBAL_RT Count');
+      g.hmRtSum  += numCol(r, 'CKT_bHISPANIC_GLOBAL_RT Count');
+      g.spend    += numCol(r, 'Total Cost');
+      g.reach    += numCol(r, 'Cookie ID Reach: Total Ad Reach');
+    });
+    anStagesByFlight[flight] = Object.values(anStageGroups).map(g => ({
+      q: flight, mkt: g.mkt, stage: g.seg,
+      freq: g.reach ? g.imps/g.reach : 1,
+      imps: g.imps, clicks: g.clicks, ctr: g.imps ? g.clicks/g.imps : 0,
+      gmOrd: g.gmOrdSum, hmOrd: g.hmOrdSum,
+      gmLpvr: g.imps ? g.gmRtSum/g.imps : 0, hmLpvr: g.imps ? g.hmRtSum/g.imps : 0,
+      gmTdor: g.imps ? g.gmOrdSum/g.imps : 0, hmTdor: g.imps ? g.hmOrdSum/g.imps : 0,
+      gmCvr: g.clicks ? g.gmOrdSum/g.clicks : 0, hmCvr: g.clicks ? g.hmOrdSum/g.clicks : 0,
+      spend: g.spend, cpc: g.clicks ? g.spend/g.clicks : 0,
+      _source: 'manual-upload',
+    }));
+
+    // -- AN_CREATIVES shape (mirrors the by-creative analytics query: grouped by mkt + Segment + Creative Offer Name)
+    const anCreativeGroups = {};
+    flightRows.forEach(r => {
+      const seg      = (r['Segment'] || '').trim();
+      const creative = (r['Creative Offer Name'] || '').trim();
+      if (!seg || !creative) return;
+      const mkt = marketFromStrategyCol(r);
+      const key = mkt + '|' + seg + '|' + creative;
+      const g = anCreativeGroups[key] = anCreativeGroups[key] || { mkt, seg, creative, imps:0, clicks:0, gmOrdSum:0, gmRtSum:0, spend:0 };
+      g.imps     += numCol(r, 'Total Ads Requested');
+      g.clicks   += numCol(r, 'Clicks');
+      g.gmOrdSum += numCol(r, 'CKT_bNON_HISPANIC_ORDER Count');
+      g.gmRtSum  += numCol(r, 'CKT_bNON_HISPANIC_GLOBAL_RT Count');
+      g.spend    += numCol(r, 'Total Cost');
+    });
+    anCreativesByFlight[flight] = Object.values(anCreativeGroups).map(g => ({
+      q: flight, mkt: g.mkt, stage: g.seg, creative: g.creative,
+      imps: g.imps, clicks: g.clicks, ctr: g.imps ? g.clicks/g.imps : 0,
+      gmOrd: g.gmOrdSum, gmLpvr: g.imps ? g.gmRtSum/g.imps : 0,
+      gmCvr: g.clicks ? g.gmOrdSum/g.clicks : 0,
+      spend: g.spend, cpc: g.clicks ? g.spend/g.clicks : 0,
+      _source: 'manual-upload',
+    }));
+  });
+
+  return { quartersByFlight, stagesByFlight, anStagesByFlight, anCreativesByFlight };
+}
+
+function mergePerfAggregates(existing, incoming) {
+  const base = existing || { quartersByFlight:{}, stagesByFlight:{}, anStagesByFlight:{}, anCreativesByFlight:{} };
+  return {
+    quartersByFlight:    { ...base.quartersByFlight,    ...incoming.quartersByFlight },
+    stagesByFlight:      { ...base.stagesByFlight,      ...incoming.stagesByFlight },
+    anStagesByFlight:    { ...base.anStagesByFlight,    ...incoming.anStagesByFlight },
+    anCreativesByFlight: { ...base.anCreativesByFlight, ...incoming.anCreativesByFlight },
+  };
+}
+
+function clearManualPerformanceFlights() {
+  Object.keys(PIVOT_DATA.quarters).forEach(flight => {
+    if (PIVOT_DATA.quarters[flight]?.GM?._source === 'manual-upload') delete PIVOT_DATA.quarters[flight];
+  });
+  PIVOT_DATA.stages = PIVOT_DATA.stages.filter(r => r._source !== 'manual-upload');
+  AN_STAGES         = AN_STAGES.filter(r => r._source !== 'manual-upload');
+  AN_CREATIVES      = AN_CREATIVES.filter(r => r._source !== 'manual-upload');
+}
+
+/* Apply persisted manual data to whichever flights BigQuery is still missing */
+function applyManualPerformanceData() {
+  if (!MANUAL_PERF_DATA) return;
+  Object.keys(MANUAL_PERF_DATA.quartersByFlight || {}).forEach(flight => {
+    if (!quarterIsMissingFromBigQuery(flight)) return;
+
+    const q = MANUAL_PERF_DATA.quartersByFlight[flight];
+    PIVOT_DATA.quarters[flight] = {
+      GM:  { ...q.GM,  _source: 'manual-upload' },
+      USH: { ...q.USH, _source: 'manual-upload' },
+    };
+    if (MANUAL_PERF_DATA.stagesByFlight[flight]) {
+      PIVOT_DATA.stages = PIVOT_DATA.stages.filter(r => r.q !== flight).concat(MANUAL_PERF_DATA.stagesByFlight[flight]);
+    }
+    if (MANUAL_PERF_DATA.anStagesByFlight[flight]) {
+      AN_STAGES = AN_STAGES.filter(r => r.q !== flight).concat(MANUAL_PERF_DATA.anStagesByFlight[flight]);
+    }
+    if (MANUAL_PERF_DATA.anCreativesByFlight[flight]) {
+      AN_CREATIVES = AN_CREATIVES.filter(r => r.q !== flight).concat(MANUAL_PERF_DATA.anCreativesByFlight[flight]);
+    }
+  });
+  if (typeof renderOverview  === 'function') renderOverview();
+  if (typeof renderAnalytics === 'function') renderAnalytics();
+}
+
 /* ── Google OAuth token handler ─────────────────────────── */
 async function handleGoogleToken(resp) {
   if (resp.error) {
@@ -2597,7 +2894,10 @@ async function handleGoogleToken(resp) {
 
   CURRENT_USER = user;
   onAuthSuccess(user);
-  loadBigQueryData();
+  loadBigQueryData().then(() => {
+    applyManualPerformanceData();
+    return loadCloudDeliveryFallback();
+  });
   autoLoadCloudOfferMap();
 }
 
@@ -2624,7 +2924,11 @@ function initGoogleAuth() {
         ACCESS_TOKEN = sess.token;
         const user = { email: sess.email, name: sess.name, initials: sess.initials, role: sess.role };
         CURRENT_USER = user;
-        loadBigQueryData().then(() => onAuthSuccess(user));
+        loadBigQueryData().then(() => {
+          onAuthSuccess(user);
+          applyManualPerformanceData();
+          loadCloudDeliveryFallback();
+        });
         autoLoadCloudOfferMap();
         return;
       }
@@ -5447,6 +5751,58 @@ offerMapCloudLoadBtn.addEventListener('click', () => {
 });
 
 updateOfferMapChip();
+
+/* ── Manual performance data: upload handlers ────────────── */
+function updatePerfDataChip() {
+  const chip  = document.getElementById('perfDataChip');
+  const label = document.getElementById('perfDataChipLabel');
+  if (!chip) return;
+  const flights = MANUAL_PERF_DATA ? Object.keys(MANUAL_PERF_DATA.quartersByFlight || {}) : [];
+  if (flights.length) {
+    chip.style.display = '';
+    label.textContent  = `Manual data: ${flights.join(', ')}`;
+  } else {
+    chip.style.display = 'none';
+  }
+}
+
+document.getElementById('perfDataUploadBtn').addEventListener('click', () => {
+  document.getElementById('perfDataFileInput').click();
+});
+
+document.getElementById('perfDataClearBtn').addEventListener('click', () => {
+  MANUAL_PERF_DATA = null;
+  localStorage.removeItem(PERF_DATA_KEY);
+  clearManualPerformanceFlights();
+  updatePerfDataChip();
+  loadCloudDeliveryFallback();
+  if (typeof renderOverview  === 'function') renderOverview();
+  if (typeof renderAnalytics === 'function') renderAnalytics();
+});
+
+document.getElementById('perfDataFileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  const readAs = ext === 'csv' ? file.text() : file.arrayBuffer();
+
+  readAs
+    .then(data => parsePerformanceRowsByExt(data, ext))
+    .then(rows => {
+      const incoming = aggregateManualPerformanceRows(rows);
+      MANUAL_PERF_DATA = mergePerfAggregates(MANUAL_PERF_DATA, incoming);
+      localStorage.setItem(PERF_DATA_KEY, JSON.stringify(MANUAL_PERF_DATA));
+      applyManualPerformanceData();
+      updatePerfDataChip();
+    })
+    .catch(err => {
+      console.warn('Manual performance data upload failed:', err);
+    });
+});
+
+updatePerfDataChip();
 </script>
 </body>
 </html>
