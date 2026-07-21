@@ -1006,6 +1006,15 @@ svg { display: block; }
   opacity: .65;
 }
 .offer-map-chip-clear:hover { opacity: 1; }
+.gcs-file-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--recess); cursor: pointer; text-align: left;
+  font-family: var(--font-b); font-size: 12.5px; color: var(--fg);
+}
+.gcs-file-row:hover { border-color: var(--accent); }
+.gcs-file-name { font-weight: 600; overflow-wrap: anywhere; }
+.gcs-file-meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .an-filter-row {
   display: flex;
   gap: 8px;
@@ -1677,12 +1686,38 @@ body.compact .chart-card      { padding: 14px 16px; }
           <button class="btn-primary btn-sm" id="offerMapUploadBtn" title="Upload the DCO trafficker export (.xlsx/.csv). Maps FT Version Name to &quot;Tactic | Segment — Creative Offer Name&quot;">
             <svg-icon name="upload" size="13"></svg-icon> Offer Map
           </button>
+          <button class="btn-ghost btn-sm" id="offerMapCloudBtn" title="Load the offer map from Cloud Storage (crk-dco-bucket-daily-performance)">
+            <svg-icon name="download" size="13"></svg-icon> From Cloud
+          </button>
           <div class="offer-map-chip" id="offerMapChip" style="display:none">
             <span id="offerMapChipLabel"></span>
             <button class="offer-map-chip-clear" id="offerMapClearBtn" title="Remove offer map">✕</button>
           </div>
         </div>
         <input type="file" id="offerMapFileInput" accept=".csv,.xlsx,.xls" style="display:none">
+      </div>
+
+      <!-- Offer Map: Cloud Storage picker modal -->
+      <div class="cr-modal-overlay" id="offerMapCloudOverlay">
+        <div class="cr-modal" style="width:min(560px,92vw)">
+          <div class="cr-modal-title">Load Offer Map from Cloud Storage</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+            Bucket: <code>crk-dco-bucket-daily-performance</code>. Check the file(s) that map FT Version Name to Creative Offer Name — selecting more than one merges them into a single offer map (most recently updated file wins on overlapping keys). Your selection is remembered and refreshed automatically on future sign-ins.
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;cursor:pointer">
+              <input type="checkbox" id="offerMapCloudSelectAll"> Select all
+            </label>
+            <span id="offerMapCloudSelCount" style="font-size:11px;color:var(--muted)"></span>
+          </div>
+          <div id="offerMapCloudList" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto"></div>
+          <div id="offerMapCloudEmpty" style="display:none;font-size:12px;color:var(--muted);padding:16px 0;text-align:center">No CSV/XLSX files found in this bucket.</div>
+          <div id="offerMapCloudError" style="display:none;font-size:12px;color:#d33;padding:8px 0"></div>
+          <div class="cr-modal-actions">
+            <button class="btn-ghost btn-sm" id="offerMapCloudCancel">Cancel</button>
+            <button class="btn-primary btn-sm" id="offerMapCloudLoadBtn" disabled>Load Selected</button>
+          </div>
+        </div>
       </div>
 
       <!-- Scrollable table -->
@@ -2292,6 +2327,8 @@ customElements.define('svg-icon', SvgIcon);
 const GOOGLE_CLIENT_ID = '625036036670-tk3t8mmoah5l9gjq1a6rkl0vqbtqj0od.apps.googleusercontent.com';
 const BQ_PROJECT       = 'crk-dco-dash';
 const BQ_SCOPE         = 'https://www.googleapis.com/auth/bigquery.readonly';
+const GCS_SCOPE        = 'https://www.googleapis.com/auth/devstorage.read_only';
+const GCS_BUCKET       = 'crk-dco-bucket-daily-performance';
 const SESSION_KEY      = 'crkt_gsession';
 
 let ACCESS_TOKEN = null;
@@ -2346,6 +2383,28 @@ async function bqQuery(sql) {
     row.f.forEach((cell, i) => { obj[fields[i]] = cell.v; });
     return obj;
   });
+}
+
+/* ── Cloud Storage helpers (crk-dco-bucket-daily-performance) ── */
+async function gcsListObjects() {
+  const res = await fetch(
+    `https://storage.googleapis.com/storage/v1/b/${GCS_BUCKET}/o?maxResults=200`,
+    { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } }
+  );
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return (data.items || [])
+    .filter(o => /\.(csv|xlsx|xls)$/i.test(o.name))
+    .sort((a, b) => new Date(b.updated) - new Date(a.updated));
+}
+
+async function gcsFetchObject(name) {
+  const res = await fetch(
+    `https://storage.googleapis.com/storage/v1/b/${GCS_BUCKET}/o/${encodeURIComponent(name)}?alt=media`,
+    { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } }
+  );
+  if (!res.ok) throw new Error(`Cloud Storage fetch failed (${res.status})`);
+  return res.arrayBuffer();
 }
 
 /* ── Load live data from BigQuery ────────────────────────── */
@@ -2538,13 +2597,14 @@ async function handleGoogleToken(resp) {
   CURRENT_USER = user;
   onAuthSuccess(user);
   loadBigQueryData();
+  autoLoadCloudOfferMap();
 }
 
 /* ── Init Google OAuth token client ─────────────────────── */
 function initGoogleAuth() {
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
-    scope:     BQ_SCOPE,
+    scope:     `${BQ_SCOPE} ${GCS_SCOPE}`,
     callback:  handleGoogleToken,
   });
   document.getElementById('googleSignInBtn').addEventListener('click', () => {
@@ -2564,6 +2624,7 @@ function initGoogleAuth() {
         const user = { email: sess.email, name: sess.name, initials: sess.initials, role: sess.role };
         CURRENT_USER = user;
         loadBigQueryData().then(() => onAuthSuccess(user));
+        autoLoadCloudOfferMap();
         return;
       }
     } catch(e) {}
@@ -3168,9 +3229,16 @@ let AN_CREATIVES = [
 ];
 
 /* ── Offer name lookup map ───────────────────────────────── */
-const OFFER_MAP_KEY = 'crkt_offer_map_v1';
+const OFFER_MAP_KEY         = 'crkt_offer_map_v1';
+const OFFER_MAP_SOURCE_KEY  = 'crkt_offer_map_source_v1';   // 'manual' | 'cloud'
+const OFFER_MAP_CLOUD_OBJS_KEY = 'crkt_offer_map_cloud_objs_v1'; // JSON array of selected bucket object names
+
 let OFFER_MAP = (() => {
   try { return JSON.parse(localStorage.getItem(OFFER_MAP_KEY) || '{}'); } catch { return {}; }
+})();
+let OFFER_MAP_SOURCE        = localStorage.getItem(OFFER_MAP_SOURCE_KEY) || null;
+let OFFER_MAP_CLOUD_OBJECTS = (() => {
+  try { return JSON.parse(localStorage.getItem(OFFER_MAP_CLOUD_OBJS_KEY) || '[]'); } catch { return []; }
 })();
 
 function offerLabel(name) { return (name && OFFER_MAP[name]) || name; }
@@ -3182,9 +3250,91 @@ function updateOfferMapChip() {
   if (!chip) return;
   if (n > 0) {
     chip.style.display = '';
-    label.textContent  = `${n} offer${n !== 1 ? 's' : ''} mapped`;
+    let sourceTag = '';
+    if (OFFER_MAP_SOURCE === 'cloud') {
+      sourceTag = OFFER_MAP_CLOUD_OBJECTS.length > 1
+        ? ` · cloud (${OFFER_MAP_CLOUD_OBJECTS.length} files)`
+        : ' · cloud';
+    } else if (OFFER_MAP_SOURCE === 'manual') {
+      sourceTag = ' · manual';
+    }
+    label.textContent  = `${n} offer${n !== 1 ? 's' : ''} mapped${sourceTag}`;
   } else {
     chip.style.display = 'none';
+  }
+}
+
+/* ── Shared offer-map parsing (used by manual upload + cloud load) ── */
+function buildOfferMapFromRows(headerRow, dataRows) {
+  const headers   = headerRow.map(h => String(h || '').trim());
+  const keyCol    = headers.indexOf('FT Version Name');
+  const offerCol  = headers.indexOf('Creative Offer Name');
+  const tacticCol = headers.indexOf('Tactic | Segment');
+  const kIdx = keyCol   >= 0 ? keyCol   : 0;
+  const oIdx = offerCol >= 0 ? offerCol : 1;
+  const map = {};
+  dataRows.forEach(row => {
+    const key   = String(row[kIdx] || '').trim();
+    const offer = String(row[oIdx] || '').trim();
+    if (!key || !offer) return; // skips blank/legend rows (e.g. the RESOURCES row)
+    const tactic = tacticCol >= 0 ? String(row[tacticCol] || '').trim() : '';
+    map[key] = tactic ? `${tactic} — ${offer}` : offer;
+  });
+  return map;
+}
+
+function parseOfferMapCsvText(text) {
+  return new Promise((resolve, reject) => {
+    Papa.parse(text, {
+      header: false,
+      skipEmptyLines: true,
+      complete(results) {
+        const all = results.data;
+        resolve(all.length < 2 ? {} : buildOfferMapFromRows(all[0], all.slice(1)));
+      },
+      error: reject
+    });
+  });
+}
+
+function parseOfferMapWorkbookBuffer(buffer) {
+  const wb   = XLSX.read(buffer, { type: 'array' });
+  const ws   = wb.Sheets[wb.SheetNames[0]];
+  const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  return data.length < 2 ? {} : buildOfferMapFromRows(data[0], data.slice(1));
+}
+
+function parseOfferMapByExt(bufferOrText, ext) {
+  return ext === 'csv'
+    ? parseOfferMapCsvText(bufferOrText)
+    : Promise.resolve(parseOfferMapWorkbookBuffer(bufferOrText));
+}
+
+/* ── Fetch + merge offer maps from one or more bucket objects ──
+   `names` is assumed most-recently-updated-first (the order the
+   picker lists them in); on overlapping keys, the more recently
+   updated file wins. ─────────────────────────────────────────── */
+async function fetchAndMergeOfferMapObjects(names) {
+  const maps = await Promise.all(names.map(async name => {
+    const buffer = await gcsFetchObject(name);
+    const ext = name.split('.').pop().toLowerCase();
+    return parseOfferMapByExt(buffer, ext);
+  }));
+  return Object.assign({}, ...maps.slice().reverse());
+}
+
+/* ── Auto-load offer map from Cloud Storage on sign-in ──────
+   Manual uploads take precedence — only auto-load if the
+   current source isn't an active manual upload. ────────── */
+async function autoLoadCloudOfferMap() {
+  if (OFFER_MAP_SOURCE !== 'cloud' || !OFFER_MAP_CLOUD_OBJECTS.length) return;
+  try {
+    OFFER_MAP = await fetchAndMergeOfferMapObjects(OFFER_MAP_CLOUD_OBJECTS);
+    localStorage.setItem(OFFER_MAP_KEY, JSON.stringify(OFFER_MAP));
+    updateOfferMapChip();
+    if (typeof renderAnalytics === 'function') renderAnalytics();
+  } catch (e) {
+    console.warn('Cloud offer map auto-load failed:', e);
   }
 }
 
@@ -5155,14 +5305,31 @@ window.__onTabSwitch = function(tab) {
   if (typeof _prevTabSwitchGloss === 'function') _prevTabSwitchGloss(tab);
 };
 
-/* ── Offer Map upload handlers ───────────────────────────── */
+/* ── Offer Map: manual upload handlers ───────────────────── */
+function applyOfferMap(map, source, cloudObjectNames) {
+  OFFER_MAP        = map;
+  OFFER_MAP_SOURCE = source;
+  localStorage.setItem(OFFER_MAP_KEY, JSON.stringify(OFFER_MAP));
+  localStorage.setItem(OFFER_MAP_SOURCE_KEY, source);
+  if (source === 'cloud') {
+    OFFER_MAP_CLOUD_OBJECTS = cloudObjectNames;
+    localStorage.setItem(OFFER_MAP_CLOUD_OBJS_KEY, JSON.stringify(OFFER_MAP_CLOUD_OBJECTS));
+  }
+  updateOfferMapChip();
+  renderAnalytics();
+}
+
 document.getElementById('offerMapUploadBtn').addEventListener('click', () => {
   document.getElementById('offerMapFileInput').click();
 });
 
 document.getElementById('offerMapClearBtn').addEventListener('click', () => {
   OFFER_MAP = {};
+  OFFER_MAP_SOURCE = null;
+  OFFER_MAP_CLOUD_OBJECTS = [];
   localStorage.removeItem(OFFER_MAP_KEY);
+  localStorage.removeItem(OFFER_MAP_SOURCE_KEY);
+  localStorage.removeItem(OFFER_MAP_CLOUD_OBJS_KEY);
   updateOfferMapChip();
   renderAnalytics();
 });
@@ -5171,55 +5338,111 @@ document.getElementById('offerMapFileInput').addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
   e.target.value = '';
-
-  function applyMap(map) {
-    OFFER_MAP = map;
-    localStorage.setItem(OFFER_MAP_KEY, JSON.stringify(OFFER_MAP));
-    updateOfferMapChip();
-    renderAnalytics();
-  }
-
   const ext = file.name.split('.').pop().toLowerCase();
 
-  function buildMapFromRows(headerRow, dataRows) {
-    const headers   = headerRow.map(h => String(h || '').trim());
-    const keyCol    = headers.indexOf('FT Version Name');
-    const offerCol  = headers.indexOf('Creative Offer Name');
-    const tacticCol = headers.indexOf('Tactic | Segment');
-    const kIdx = keyCol   >= 0 ? keyCol   : 0;
-    const oIdx = offerCol >= 0 ? offerCol : 1;
-    const map = {};
-    dataRows.forEach(row => {
-      const key   = String(row[kIdx] || '').trim();
-      const offer = String(row[oIdx] || '').trim();
-      if (!key || !offer) return; // skips blank/legend rows (e.g. the RESOURCES row)
-      const tactic = tacticCol >= 0 ? String(row[tacticCol] || '').trim() : '';
-      map[key] = tactic ? `${tactic} — ${offer}` : offer;
-    });
-    return map;
-  }
+  const readAs = ext === 'csv'
+    ? file.text()
+    : file.arrayBuffer();
 
-  if (ext === 'csv') {
-    Papa.parse(file, {
-      header: false,
-      skipEmptyLines: true,
-      complete(results) {
-        const all = results.data;
-        if (all.length < 2) return;
-        applyMap(buildMapFromRows(all[0], all.slice(1)));
-      }
+  readAs
+    .then(data => parseOfferMapByExt(data, ext))
+    .then(map => applyOfferMap(map, 'manual'));
+});
+
+/* ── Offer Map: load from Cloud Storage (multi-select) ───── */
+const offerMapCloudOverlay    = document.getElementById('offerMapCloudOverlay');
+const offerMapCloudList       = document.getElementById('offerMapCloudList');
+const offerMapCloudEmpty      = document.getElementById('offerMapCloudEmpty');
+const offerMapCloudError      = document.getElementById('offerMapCloudError');
+const offerMapCloudSelectAll  = document.getElementById('offerMapCloudSelectAll');
+const offerMapCloudSelCount   = document.getElementById('offerMapCloudSelCount');
+const offerMapCloudLoadBtn    = document.getElementById('offerMapCloudLoadBtn');
+
+function offerMapCloudCheckboxes() {
+  return Array.from(offerMapCloudList.querySelectorAll('.gcs-file-checkbox'));
+}
+
+function updateOfferMapCloudSelectionUI() {
+  const boxes    = offerMapCloudCheckboxes();
+  const selected = boxes.filter(b => b.checked);
+  offerMapCloudSelCount.textContent = selected.length
+    ? `${selected.length} selected`
+    : '';
+  offerMapCloudLoadBtn.disabled = selected.length === 0;
+  offerMapCloudSelectAll.checked   = boxes.length > 0 && selected.length === boxes.length;
+  offerMapCloudSelectAll.indeterminate = selected.length > 0 && selected.length < boxes.length;
+}
+
+function openOfferMapCloudPicker() {
+  offerMapCloudOverlay.classList.add('open');
+  offerMapCloudList.innerHTML  = `<div style="font-size:12px;color:var(--muted);padding:16px 0;text-align:center">Loading bucket contents…</div>`;
+  offerMapCloudEmpty.style.display = 'none';
+  offerMapCloudError.style.display = 'none';
+  offerMapCloudSelectAll.checked = false;
+  offerMapCloudSelectAll.indeterminate = false;
+  offerMapCloudSelCount.textContent = '';
+  offerMapCloudLoadBtn.disabled = true;
+
+  gcsListObjects().then(items => {
+    if (!items.length) {
+      offerMapCloudList.innerHTML = '';
+      offerMapCloudEmpty.style.display = '';
+      return;
+    }
+    const previouslySelected = new Set(OFFER_MAP_SOURCE === 'cloud' ? OFFER_MAP_CLOUD_OBJECTS : []);
+    offerMapCloudList.innerHTML = items.map(o => `
+      <label class="gcs-file-row">
+        <span style="display:flex;align-items:center;gap:10px;overflow:hidden">
+          <input type="checkbox" class="gcs-file-checkbox" data-name="${esc(o.name)}" ${previouslySelected.has(o.name) ? 'checked' : ''}>
+          <span class="gcs-file-name">${esc(o.name)}</span>
+        </span>
+        <span class="gcs-file-meta">${new Date(o.updated).toLocaleDateString()}</span>
+      </label>`).join('');
+    updateOfferMapCloudSelectionUI();
+  }).catch(err => {
+    offerMapCloudList.innerHTML = '';
+    offerMapCloudError.textContent = `Couldn't list bucket contents: ${err.message}`;
+    offerMapCloudError.style.display = '';
+  });
+}
+
+function closeOfferMapCloudPicker() {
+  offerMapCloudOverlay.classList.remove('open');
+}
+
+document.getElementById('offerMapCloudBtn').addEventListener('click', openOfferMapCloudPicker);
+document.getElementById('offerMapCloudCancel').addEventListener('click', closeOfferMapCloudPicker);
+
+offerMapCloudList.addEventListener('change', e => {
+  if (e.target.classList.contains('gcs-file-checkbox')) updateOfferMapCloudSelectionUI();
+});
+
+offerMapCloudSelectAll.addEventListener('change', () => {
+  offerMapCloudCheckboxes().forEach(b => { b.checked = offerMapCloudSelectAll.checked; });
+  updateOfferMapCloudSelectionUI();
+});
+
+offerMapCloudLoadBtn.addEventListener('click', () => {
+  const names = offerMapCloudCheckboxes().filter(b => b.checked).map(b => b.dataset.name);
+  if (!names.length) return;
+
+  offerMapCloudError.style.display = 'none';
+  offerMapCloudLoadBtn.disabled = true;
+  offerMapCloudLoadBtn.textContent = 'Loading…';
+
+  fetchAndMergeOfferMapObjects(names)
+    .then(map => {
+      applyOfferMap(map, 'cloud', names);
+      closeOfferMapCloudPicker();
+    })
+    .catch(err => {
+      offerMapCloudError.textContent = `Couldn't load selected file(s): ${err.message}`;
+      offerMapCloudError.style.display = '';
+    })
+    .finally(() => {
+      offerMapCloudLoadBtn.disabled = false;
+      offerMapCloudLoadBtn.textContent = 'Load Selected';
     });
-  } else {
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const wb   = XLSX.read(ev.target.result, { type: 'array' });
-      const ws   = wb.Sheets[wb.SheetNames[0]];
-      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-      if (data.length < 2) return;
-      applyMap(buildMapFromRows(data[0], data.slice(1)));
-    };
-    reader.readAsArrayBuffer(file);
-  }
 });
 
 updateOfferMapChip();
