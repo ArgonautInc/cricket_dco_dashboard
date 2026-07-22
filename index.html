@@ -2368,8 +2368,9 @@ function signOut() {
   sessionStorage.removeItem(SESSION_KEY);
   localStorage.removeItem('crkt_pw_hash');
   if (ACCESS_TOKEN && typeof google !== 'undefined') {
-    google.accounts.oauth2.revoke(ACCESS_TOKEN);
+    try { google.accounts.oauth2.revoke(ACCESS_TOKEN); } catch (e) { console.warn('Token revoke failed:', e); }
   }
+  ACCESS_TOKEN = null;
   location.reload();
 }
 
@@ -2910,7 +2911,10 @@ function initGoogleAuth() {
   });
   document.getElementById('googleSignInBtn').addEventListener('click', () => {
     hideAuthError();
-    tokenClient.requestAccessToken({ prompt: 'select_account' });
+    // 'consent' forces Google to re-show the scope grant screen instead of
+    // silently reusing a prior (narrower) grant — needed whenever we add a
+    // new scope, e.g. adding Cloud Storage access alongside BigQuery.
+    tokenClient.requestAccessToken({ prompt: 'consent select_account' });
   });
 }
 
