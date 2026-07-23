@@ -651,8 +651,9 @@ svg { display: block; }
   flex-shrink: 0;
 }
 .tr-delta { font-size: 11px; font-weight: 700; }
-.tr-delta-up   { color: var(--good); }
-.tr-delta-down { color: var(--bad);  }
+.tr-delta-up      { color: var(--good); }
+.tr-delta-down    { color: var(--bad);  }
+.tr-delta-neutral { color: var(--muted); }
 .tr-daily-notice {
   margin-top: 12px;
   background: var(--blue-soft);
@@ -2089,12 +2090,27 @@ body.compact .chart-card      { padding: 14px 16px; }
 
       <div class="pv-controls">
         <div class="pv-control-group">
+          <span class="pv-label">Quarter</span>
+          <div class="seg-tabs green" id="trQuarterFilter">
+            <button class="active" data-q="Q1">Q1</button>
+            <button class="active" data-q="Q2">Q2</button>
+            <button class="active" data-q="Q3">Q3</button>
+          </div>
+        </div>
+        <div class="pv-control-group">
           <span class="pv-label">Market</span>
           <div class="seg-tabs green" id="trMktFilter">
             <button class="active" data-mkt="all">All</button>
             <button data-mkt="GM">GM</button>
             <button data-mkt="USH">USH</button>
           </div>
+        </div>
+        <div class="pv-control-group" id="trDateRangeGroup" style="display:none;align-items:center;gap:6px">
+          <span class="pv-label">Date Range</span>
+          <input type="date" id="trDateFrom" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px">
+          <span style="color:var(--muted);font-size:12px">to</span>
+          <input type="date" id="trDateTo" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px">
+          <button class="btn-ghost btn-sm" id="trDateRangeClear" style="padding:4px 10px">Reset</button>
         </div>
         <div class="pv-control-group">
           <span class="pv-label">Metric</span>
@@ -3820,8 +3836,8 @@ function svgHBar(data, color='#5BC500') {
 
 /* ── Charts ──────────────────────────────────────────────── */
 function renderAnCharts(stages) {
-  // CTR chart — top 8 stages by impressions
-  const sorted = [...stages].sort((a,b)=>b.imps-a.imps).slice(0,8);
+  // CTR / Imps charts — all stages in the current filter, sorted by impressions
+  const sorted = [...stages].sort((a,b)=>b.imps-a.imps);
   document.getElementById('anCtrBar').innerHTML = svgHBar(
     sorted.map(r=>({ label:r.stage.replace(/^\d+ - /,''), v:r.ctr, vLabel:fmtPct(r.ctr), c:'var(--accent)' })),
     'var(--accent)'
@@ -4928,19 +4944,29 @@ document.getElementById('downloadOneSheeterBtn').addEventListener('click', gener
    MODULE · TRENDS TAB
    ═══════════════════════════════════════════════════════════ */
 
+/* direction: 'up' = higher is better (green on increase), 'down' = higher is
+   worse (red on increase, e.g. CPC), 'neutral' = no good/bad judgment (e.g.
+   Total Cost — spend going up isn't inherently good or bad without a budget
+   benchmark to compare against). */
 const TR_METRICS = [
-  { key:'imps',   label:'Impressions', fmt: v => FMT.abbr(v) },
-  { key:'ctr',    label:'CTR',         fmt: v => (v*100).toFixed(3)+'%' },
-  { key:'gmOrd',  label:'GM Orders',   fmt: v => FMT.num(v) },
-  { key:'gmLpvr', label:'GM LPVR',     fmt: v => (v*100).toFixed(3)+'%' },
-  { key:'gmCvr',  label:'GM CVR',      fmt: v => (v*100).toFixed(3)+'%' },
-  { key:'spend',  label:'Total Cost',  fmt: v => v > 0 ? FMT.dollar(v) : '—' },
-  { key:'cpc',    label:'CPC',         fmt: v => v > 0 ? '$'+v.toFixed(2) : '—' },
+  { key:'imps',   label:'Impressions', fmt: v => FMT.abbr(v),                     direction:'up' },
+  { key:'ctr',    label:'CTR',         fmt: v => (v*100).toFixed(3)+'%',          direction:'up' },
+  { key:'gmOrd',  label:'GM Orders',   fmt: v => FMT.num(v),                      direction:'up' },
+  { key:'gmLpvr', label:'GM LPVR',     fmt: v => (v*100).toFixed(3)+'%',          direction:'up' },
+  { key:'gmCvr',  label:'GM CVR',      fmt: v => (v*100).toFixed(3)+'%',          direction:'up' },
+  { key:'spend',  label:'Total Cost',  fmt: v => v > 0 ? FMT.dollar(v) : '—',     direction:'neutral' },
+  { key:'cpc',    label:'CPC',         fmt: v => v > 0 ? '$'+v.toFixed(2) : '—',  direction:'down' },
 ];
+
+/* null = no good/bad judgment (neutral); otherwise true/false */
+function trIsGoodDirection(direction, pct) {
+  if (direction === 'neutral') return null;
+  return direction === 'down' ? pct <= 0 : pct >= 0;
+}
 
 const TR_QS = ['Q1','Q2','Q3'];
 
-let trState   = { metric:'imps', mkt:'all', gran:'quarterly' };
+let trState   = { metric:'imps', mkt:'all', gran:'quarterly', quarters:['Q1','Q2','Q3'], dateFrom:null, dateTo:null };
 let trDailyData = [];
 let trDailyLoaded = false;
 let trDailyAttempted = false;
@@ -4957,7 +4983,9 @@ function trBuildSeries(metric, useDailyData) {
     const mkts  = trState.mkt === 'all' ? ['GM','USH'] : [trState.mkt];
     const colors = { GM:'var(--accent)', USH:'var(--blue)' };
     return mkts.map(mkt => {
-      const rows   = trDailyData.filter(r => r.mkt === mkt);
+      let rows = trDailyData.filter(r => r.mkt === mkt && trState.quarters.includes(r.q));
+      if (trState.dateFrom) rows = rows.filter(r => r.day >= trState.dateFrom);
+      if (trState.dateTo)   rows = rows.filter(r => r.day <= trState.dateTo);
       const labels = [...new Set(rows.map(r => r.day))].sort();
       const points = labels.map(day => {
         const subset = rows.filter(r => r.day === day);
@@ -4969,15 +4997,16 @@ function trBuildSeries(metric, useDailyData) {
   /* Quarterly fallback */
   const mkts   = trState.mkt === 'all' ? ['GM','USH'] : [trState.mkt];
   const colors = { GM:'var(--accent)', USH:'var(--blue)' };
+  const qs     = TR_QS.filter(q => trState.quarters.includes(q));
   return mkts.map(mkt => ({
     label:  mkt,
     color:  colors[mkt],
-    labels: TR_QS,
-    points: TR_QS.map(q => trGetVal(q, mkt, metric)),
+    labels: qs,
+    points: qs.map(q => trGetVal(q, mkt, metric)),
   }));
 }
 
-function trBuildSvg(series, fmtFn) {
+function trBuildSvg(series, fmtFn, direction) {
   const VW = 660, VH = 230;
   const PL = 66, PR = 16, PT = 24, PB = 38;
   const cW = VW - PL - PR, cH = VH - PT - PB;
@@ -5024,16 +5053,25 @@ function trBuildSvg(series, fmtFn) {
     /* Line */
     svg += `<polyline points="${ptStr}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
 
-    /* Dots — only render if N <= 30 */
+    /* Visible dots — only render if N <= 30 (avoids overcrowding a full
+       quarter of daily points) */
     if (N <= 30) {
       s.points.forEach((v, i) => {
         const x = xOf(i), y = yOf(v);
-        svg += `<circle cx="${x}" cy="${y}" r="${N > 10 ? 3 : 5}" fill="${s.color}" stroke="var(--card)" stroke-width="2"><title>${s.label} ${labels[i]}: ${fmtFn(v)}</title></circle>`;
+        svg += `<circle cx="${x}" cy="${y}" r="${N > 10 ? 3 : 5}" fill="${s.color}" stroke="var(--card)" stroke-width="2"/>`;
         if (N <= 6) {
           svg += `<text x="${x}" y="${y-10}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${s.color}">${fmtFn(v)}</text>`;
         }
       });
     }
+
+    /* Invisible hover hit-targets with a date+value tooltip — rendered for
+       every point regardless of N, so hovering the line works in daily mode
+       (90+ points) too, not just when visible dots are shown. */
+    s.points.forEach((v, i) => {
+      const x = xOf(i), y = yOf(v);
+      svg += `<circle cx="${x}" cy="${y}" r="7" fill="transparent" stroke="none"><title>${s.label} — ${labels[i]}: ${fmtFn(v)}</title></circle>`;
+    });
 
     /* QoQ deltas (quarterly mode only) */
     if (N <= 6) {
@@ -5043,7 +5081,8 @@ function trBuildSvg(series, fmtFn) {
         const pct = ((v2 - v1) / v1) * 100;
         const mx  = (xOf(i) + xOf(i+1)) / 2;
         const my  = Math.min(yOf(v1), yOf(v2)) - 16;
-        const col = pct >= 0 ? 'var(--good)' : 'var(--bad)';
+        const isGood = trIsGoodDirection(direction, pct);
+        const col = isGood === null ? 'var(--muted)' : (isGood ? 'var(--good)' : 'var(--bad)');
         const arr = pct >= 0 ? '▲' : '▼';
         if (s.label === series[0].label) {
           svg += `<text x="${mx}" y="${my}" text-anchor="middle" font-size="10" fill="${col}">${arr} ${Math.abs(pct).toFixed(1)}%</text>`;
@@ -5057,36 +5096,40 @@ function trBuildSvg(series, fmtFn) {
 }
 
 function renderTrendSummaryTable() {
-  const fmtDelta = (v1, v2) => {
+  const fmtDelta = (v1, v2, direction) => {
     if (!v1) return '<td class="num" style="color:var(--muted)">—</td>';
     const pct = ((v2 - v1) / v1) * 100;
-    const cls = pct >= 0 ? 'tr-delta-up' : 'tr-delta-down';
+    const isGood = trIsGoodDirection(direction, pct);
+    const cls = isGood === null ? 'tr-delta-neutral' : (isGood ? 'tr-delta-up' : 'tr-delta-down');
     const arrow = pct >= 0 ? '▲' : '▼';
     return `<td class="num"><span class="tr-delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%</span></td>`;
   };
 
   const mkts = trState.mkt === 'all' ? ['GM','USH'] : [trState.mkt];
+  const qs   = TR_QS.filter(q => trState.quarters.includes(q));
 
   const rows = mkts.flatMap(mkt =>
     TR_METRICS.map(m => {
-      const vals = TR_QS.map(q => trGetVal(q, mkt, m.key));
+      const vals  = qs.map(q => trGetVal(q, mkt, m.key));
+      const cells = vals.map((v, i) => {
+        const cell = `<td class="num">${m.fmt(v)}</td>`;
+        return i === 0 ? cell : cell + fmtDelta(vals[i-1], v, m.direction);
+      }).join('');
       return `<tr>
         <td><span class="data-badge ${mkt.toLowerCase()}">${mkt}</span></td>
         <td>${m.label}</td>
-        <td class="num">${m.fmt(vals[0])}</td>
-        <td class="num">${m.fmt(vals[1])}</td>
-        ${fmtDelta(vals[0], vals[1])}
-        <td class="num">${m.fmt(vals[2])}</td>
-        ${fmtDelta(vals[1], vals[2])}
+        ${cells}
       </tr>`;
     })
   ).join('');
 
+  const headerCells = qs.map((q, i) =>
+    i === 0 ? `<th class="num">${q}</th>` : `<th class="num">${q}</th><th class="num">${qs[i-1]}→${q}</th>`
+  ).join('');
+
   document.getElementById('trSummaryTable').innerHTML = `
     <thead><tr>
-      <th>Market</th><th>Metric</th>
-      <th class="num">Q1</th><th class="num">Q2</th><th class="num">Q1→Q2</th>
-      <th class="num">Q3</th><th class="num">Q2→Q3</th>
+      <th>Market</th><th>Metric</th>${headerCells}
     </tr></thead>
     <tbody>${rows}</tbody>`;
 }
@@ -5109,7 +5152,7 @@ function renderTrendChart() {
   const useDaily = trState.gran === 'daily' && trDailyData.length > 0;
   const series  = trBuildSeries(trState.metric, useDaily);
 
-  document.getElementById('trChartArea').innerHTML = trBuildSvg(series, m.fmt);
+  document.getElementById('trChartArea').innerHTML = trBuildSvg(series, m.fmt, m.direction);
 
   document.getElementById('trLegend').innerHTML = series.map(s =>
     `<div class="tr-legend-item">
@@ -5169,6 +5212,16 @@ async function tryLoadTrendDailyData() {
         const toggle = document.getElementById('trGranToggle');
         if (toggle) toggle.style.display = '';
 
+        /* Set up date-range bounds from the loaded data (group itself stays
+           hidden until the user switches to Daily) */
+        const days = [...new Set(trDailyData.map(r => r.day))].sort();
+        const fromInput = document.getElementById('trDateFrom');
+        const toInput   = document.getElementById('trDateTo');
+        if (fromInput && toInput && days.length) {
+          fromInput.min = toInput.min = days[0];
+          fromInput.max = toInput.max = days[days.length - 1];
+        }
+
         const notice = document.getElementById('trDailyNotice');
         if (notice) {
           notice.style.display = '';
@@ -5196,11 +5249,46 @@ document.getElementById('trMktFilter').addEventListener('click', e => {
   renderTrendChart();
 });
 
+/* Quarter filter is multi-select — each button toggles independently,
+   with at least one quarter always kept selected. */
+document.getElementById('trQuarterFilter').addEventListener('click', e => {
+  const btn = e.target.closest('[data-q]');
+  if (!btn) return;
+  const q = btn.dataset.q;
+  const isActive = btn.classList.contains('active');
+  if (isActive && trState.quarters.length === 1) return; // keep at least one selected
+  if (isActive) {
+    trState.quarters = trState.quarters.filter(x => x !== q);
+  } else {
+    trState.quarters = TR_QS.filter(x => trState.quarters.includes(x) || x === q);
+  }
+  btn.classList.toggle('active', !isActive);
+  renderTrendChart();
+});
+
 document.getElementById('trGranToggle').addEventListener('click', e => {
   const btn = e.target.closest('[data-gran]');
   if (!btn) return;
   trState.gran = btn.dataset.gran;
   document.querySelectorAll('#trGranToggle button').forEach(b => b.classList.toggle('active', b===btn));
+  const rangeGroup = document.getElementById('trDateRangeGroup');
+  if (rangeGroup) rangeGroup.style.display = trState.gran === 'daily' ? '' : 'none';
+  renderTrendChart();
+});
+
+document.getElementById('trDateFrom').addEventListener('change', e => {
+  trState.dateFrom = e.target.value || null;
+  renderTrendChart();
+});
+document.getElementById('trDateTo').addEventListener('change', e => {
+  trState.dateTo = e.target.value || null;
+  renderTrendChart();
+});
+document.getElementById('trDateRangeClear').addEventListener('click', () => {
+  trState.dateFrom = null;
+  trState.dateTo   = null;
+  document.getElementById('trDateFrom').value = '';
+  document.getElementById('trDateTo').value   = '';
   renderTrendChart();
 });
 
