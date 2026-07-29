@@ -654,6 +654,7 @@ svg { display: block; }
 .tr-delta-up      { color: var(--good); }
 .tr-delta-down    { color: var(--bad);  }
 .tr-delta-neutral { color: var(--muted); }
+.tr-delta-note    { font-size: 9.5px; font-weight: 600; color: var(--muted); margin-top: 2px; white-space: nowrap; }
 .tr-hit { cursor: crosshair; }
 .tr-tooltip {
   position: fixed; z-index: 400; pointer-events: none;
@@ -4981,6 +4982,54 @@ function trIsGoodDirection(direction, pct) {
 
 const TR_QS = ['Q1','Q2','Q3'];
 
+/* Calendar bounds for each flight, used to detect which quarter (if any) is
+   currently live and how many days it's been running — see
+   specs/trends-day-aligned-comparison.md. */
+const TR_QUARTER_BOUNDS = {
+  Q1: { start: '2026-01-01', end: '2026-03-31' },
+  Q2: { start: '2026-04-01', end: '2026-06-30' },
+  Q3: { start: '2026-07-01', end: '2026-09-30' },
+};
+
+/* LPVR pixel counts aren't selected by the BigQuery daily query (see
+   tryLoadTrendDailyData) — only imps/clicks/gmOrd/spend are — so GM LPVR
+   can't be day-clipped like the other metrics. */
+const TR_DAILY_UNSUPPORTED_METRICS = ['gmLpvr'];
+
+function trDateAdd(dateStr, days) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function trDaysBetween(fromStr, toStr) {
+  return Math.round((new Date(toStr+'T00:00:00Z') - new Date(fromStr+'T00:00:00Z')) / 86400000);
+}
+
+/* Returns { daysLive } if q is the currently-live quarter (today falls
+   within its calendar bounds), else null. At most one quarter is live. */
+function trLiveQuarterInfo(q) {
+  const bounds = TR_QUARTER_BOUNDS[q];
+  if (!bounds) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  if (today < bounds.start || today > bounds.end) return null;
+  const totalDays = trDaysBetween(bounds.start, bounds.end) + 1;
+  const daysLive  = Math.min(trDaysBetween(bounds.start, today) + 1, totalDays);
+  return { daysLive };
+}
+
+/* Day-clipped cumulative total for quarter q's first `daysLive` calendar
+   days, from the loaded daily BigQuery data. Returns null if daily data
+   isn't loaded (caller should fall back to the full-quarter comparison). */
+function trGetValClipped(q, mkt, metric, daysLive) {
+  const bounds = TR_QUARTER_BOUNDS[q];
+  if (!bounds || !trDailyData.length) return null;
+  const cutoff = trDateAdd(bounds.start, daysLive - 1);
+  let rows = trDailyData.filter(r => r.q === q && r.day >= bounds.start && r.day <= cutoff);
+  if (mkt !== 'all') rows = rows.filter(r => r.mkt === mkt);
+  return pvAggregate(rows, metric);
+}
+
 let trState   = { metric:'imps', mkt:'all', gran:'quarterly', quarters:['Q1','Q2','Q3'], dateFrom:null, dateTo:null };
 let trDailyData = [];
 let trDailyLoaded = false;
@@ -5120,24 +5169,57 @@ function trBuildSvg(series, fmtFn, direction) {
 }
 
 function renderTrendSummaryTable() {
-  const fmtDelta = (v1, v2, direction) => {
+  const fmtDelta = (v1, v2, direction, opts) => {
+    opts = opts || {};
     if (!v1) return '<td class="num" style="color:var(--muted)">—</td>';
     const pct = ((v2 - v1) / v1) * 100;
     const isGood = trIsGoodDirection(direction, pct);
     const cls = isGood === null ? 'tr-delta-neutral' : (isGood ? 'tr-delta-up' : 'tr-delta-down');
     const arrow = pct >= 0 ? '▲' : '▼';
-    return `<td class="num"><span class="tr-delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%</span></td>`;
+    const title = opts.title ? ` title="${opts.title}"` : '';
+    const note  = opts.note ? `<div class="tr-delta-note">${opts.note}</div>` : '';
+    return `<td class="num"${title}><span class="tr-delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%</span>${note}</td>`;
   };
 
   const mkts = trState.mkt === 'all' ? ['GM','USH'] : [trState.mkt];
   const qs   = TR_QS.filter(q => trState.quarters.includes(q));
+
+  /* Day-aligned comparison: if the later quarter in a Qi→Qi+1 pair is
+     currently live, the earlier quarter's delta basis is clipped to the
+     same number of elapsed calendar days instead of its full total — see
+     specs/trends-day-aligned-comparison.md. At most one quarter can be
+     live, so this only needs to be resolved once per render. */
+  let liveQ = null, liveInfo = null;
+  for (const q of qs) {
+    const info = trLiveQuarterInfo(q);
+    if (info) { liveQ = q; liveInfo = info; break; }
+  }
 
   const rows = mkts.flatMap(mkt =>
     TR_METRICS.map(m => {
       const vals  = qs.map(q => trGetVal(q, mkt, m.key));
       const cells = vals.map((v, i) => {
         const cell = `<td class="num">${m.fmt(v)}</td>`;
-        return i === 0 ? cell : cell + fmtDelta(vals[i-1], v, m.direction);
+        if (i === 0) return cell;
+
+        const prevQ = qs[i-1], curQ = qs[i];
+        if (curQ === liveQ && !TR_DAILY_UNSUPPORTED_METRICS.includes(m.key)) {
+          const clipped = trGetValClipped(prevQ, mkt, m.key, liveInfo.daysLive);
+          const dayWord = `Day${liveInfo.daysLive === 1 ? '' : 's'} 1–${liveInfo.daysLive}`;
+          if (clipped !== null) {
+            return cell + fmtDelta(clipped, v, m.direction, {
+              title: `${curQ} is in progress (day ${liveInfo.daysLive}) — compared against ${prevQ}'s first ${liveInfo.daysLive} day${liveInfo.daysLive===1?'':'s'} instead of its full total.`,
+              note: `vs ${prevQ} ${dayWord}`,
+            });
+          }
+          /* Daily data unavailable — fall back to the full-total comparison, flagged. */
+          return cell + fmtDelta(vals[i-1], v, m.direction, {
+            title: `${curQ} is in progress — this compares ${prevQ}'s full total against ${curQ}'s to-date total (not day-aligned) because daily breakdown data isn't loaded.`,
+            note: `not day-aligned`,
+          });
+        }
+
+        return cell + fmtDelta(vals[i-1], v, m.direction);
       }).join('');
       return `<tr>
         <td><span class="data-badge ${mkt.toLowerCase()}">${mkt}</span></td>
