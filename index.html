@@ -598,6 +598,9 @@ svg { display: block; }
 .pv-table tbody tr:not(.pv-tr-totals):hover .pv-td-total { background: var(--recess); }
 .pv-table tbody tr:not(.pv-tr-totals):hover .pv-td-label { background: var(--recess); }
 .pv-empty { padding: 48px; text-align: center; color: var(--muted); font-size: 13px; }
+.pv-table-block { margin-bottom: 20px; }
+.pv-table-block:last-child { margin-bottom: 0; }
+.pv-table-heading { font-size: 13px; font-weight: 700; color: var(--fg); margin-bottom: 8px; }
 
 /* ── Trends ──────────────────────────────────────────────── */
 .tr-metric-pills {
@@ -1765,66 +1768,128 @@ body.compact .chart-card      { padding: 14px 16px; }
         </div>
       </div>
 
-      <!-- Filters -->
-      <div class="an-filter-row">
-        <div class="seg-tabs green" id="crMarketFilter">
-          <button class="active" data-mkt="all">All</button>
-          <button data-mkt="GM">GM</button>
-          <button data-mkt="USH">USH</button>
-        </div>
-        <div class="seg-tabs" id="crQFilter">
-          <button class="active" data-q="all">All Quarters</button>
-          <button data-q="Q1">Q1</button>
-          <button data-q="Q2">Q2</button>
-          <button data-q="Q3">Q3</button>
-        </div>
-        <select class="an-select" id="crStageFilter">
-          <option value="all">All Stages</option>
-          <optgroup label="Q1 / Q2">
-            <option>1 - Mid Funnel</option>
-            <option>2 - Prospecting</option>
-            <option>3 - Homepage Visitor</option>
-            <option>4 - BYOD Visitor</option>
-            <option>4 - Deals Research</option>
-            <option>5 - Plan Research</option>
-            <option>6 - Multi Month Plan Research</option>
-            <option>7 - Device Page Visitor</option>
-            <option>8 - Cart Abandoner</option>
-            <option>9 - Order/Checkout</option>
-          </optgroup>
-          <optgroup label="Q3">
-            <option>1 - Homepage (ajds)</option>
-            <option>2 - Mid Funnel Entry (apom)</option>
-            <option>3 - All Deals (apop)</option>
-            <option>4 - More (apoq)</option>
-            <option>5 - All Devices (apoo)</option>
-            <option>6 - Plans Research (apon)</option>
-            <option>7 - Tablet &amp; Smartwatch Plan (apos, apou)</option>
-            <option>8 - Plans - One Line Selected (ajuf)</option>
-            <option>9 - Plans - Two Lines Selected (ajug)</option>
-            <option>10 - Plans - Four Lines Selected</option>
-            <option>11 - Android Deals (apow)</option>
-            <option>12 - Smartphones (apo0)</option>
-            <option>13 - Device PDP (vcx)</option>
-            <option>14 - BYOD (sjn)</option>
-            <option>15 - Multi-Month (ani5)</option>
-            <option>16 - IMEI Check (apo4)</option>
-            <option>17 - Prompt Plan Select (apo6)</option>
-            <option>18 - Cart Abandoner (af0u)</option>
-            <option>19 - eSim Payment Method (apo5)</option>
-            <option>20 - Checkout Abandoner (apo7)</option>
-            <option>21 - Order (ajdx)</option>
-          </optgroup>
-        </select>
-        <div class="an-search">
-          <svg-icon name="search" size="13" color="var(--muted)"></svg-icon>
-          <input id="crSearch" type="text" placeholder="Search creative…"/>
-        </div>
-        <span id="crCount" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
+      <div class="seg-tabs" id="crViewToggle" style="margin-bottom:12px">
+        <button class="active" data-view="cards">Creative Library</button>
+        <button data-view="scoring">Performance Scoring</button>
       </div>
 
-      <!-- Grid -->
-      <div class="creatives-grid" id="creativesGrid"></div>
+      <div id="crCardsView">
+        <!-- Filters -->
+        <div class="an-filter-row">
+          <div class="seg-tabs green" id="crMarketFilter">
+            <button class="active" data-mkt="all">All</button>
+            <button data-mkt="GM">GM</button>
+            <button data-mkt="USH">USH</button>
+          </div>
+          <div class="seg-tabs" id="crQFilter">
+            <button class="active" data-q="all">All Quarters</button>
+            <button data-q="Q1">Q1</button>
+            <button data-q="Q2">Q2</button>
+            <button data-q="Q3">Q3</button>
+          </div>
+          <select class="an-select" id="crStageFilter">
+            <option value="all">All Stages</option>
+            <optgroup label="Q1 / Q2">
+              <option>1 - Mid Funnel</option>
+              <option>2 - Prospecting</option>
+              <option>3 - Homepage Visitor</option>
+              <option>4 - BYOD Visitor</option>
+              <option>4 - Deals Research</option>
+              <option>5 - Plan Research</option>
+              <option>6 - Multi Month Plan Research</option>
+              <option>7 - Device Page Visitor</option>
+              <option>8 - Cart Abandoner</option>
+              <option>9 - Order/Checkout</option>
+            </optgroup>
+            <optgroup label="Q3">
+              <option>1 - Homepage (ajds)</option>
+              <option>2 - Mid Funnel Entry (apom)</option>
+              <option>3 - All Deals (apop)</option>
+              <option>4 - More (apoq)</option>
+              <option>5 - All Devices (apoo)</option>
+              <option>6 - Plans Research (apon)</option>
+              <option>7 - Tablet &amp; Smartwatch Plan (apos, apou)</option>
+              <option>8 - Plans - One Line Selected (ajuf)</option>
+              <option>9 - Plans - Two Lines Selected (ajug)</option>
+              <option>10 - Plans - Four Lines Selected</option>
+              <option>11 - Android Deals (apow)</option>
+              <option>12 - Smartphones (apo0)</option>
+              <option>13 - Device PDP (vcx)</option>
+              <option>14 - BYOD (sjn)</option>
+              <option>15 - Multi-Month (ani5)</option>
+              <option>16 - IMEI Check (apo4)</option>
+              <option>17 - Prompt Plan Select (apo6)</option>
+              <option>18 - Cart Abandoner (af0u)</option>
+              <option>19 - eSim Payment Method (apo5)</option>
+              <option>20 - Checkout Abandoner (apo7)</option>
+              <option>21 - Order (ajdx)</option>
+            </optgroup>
+          </select>
+          <div class="an-search">
+            <svg-icon name="search" size="13" color="var(--muted)"></svg-icon>
+            <input id="crSearch" type="text" placeholder="Search creative…"/>
+          </div>
+          <span id="crCount" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
+        </div>
+
+        <!-- Grid -->
+        <div class="creatives-grid" id="creativesGrid"></div>
+      </div>
+
+      <div id="crScoringView" style="display:none">
+        <!-- Upload toolbar -->
+        <div class="analytics-toolbar">
+          <select class="an-select" id="psDatasetTypeSelect" title="How this upload should be treated — required, not auto-detected">
+            <option value="daily">Daily</option>
+            <option value="monthly">Monthly</option>
+            <option value="summary">Summary</option>
+          </select>
+          <span id="psRowCount" style="font-size:12px;color:var(--muted)"></span>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+            <button class="btn-primary btn-sm" id="psCrosstabUploadBtn" title="Upload a Creative_DownloadCrosstab export (.csv/.xlsx). Expected columns: Creative Id, Publisher, Funnel, Ad Type, Date Breakdown, Impressions, Clicks, Landing Page Visits, Total Device Orders — plus optional video/social columns.">
+              <svg-icon name="upload" size="13"></svg-icon> Upload Crosstab
+            </button>
+            <div class="offer-map-chip" id="psCrosstabChip" style="display:none">
+              <span id="psCrosstabChipLabel"></span>
+              <button class="offer-map-chip-clear" id="psCrosstabClearBtn" title="Remove this dataset">✕</button>
+            </div>
+            <button class="btn-ghost btn-sm" id="psLookupUploadBtn" title="Upload a Lookup Table (.csv/.xlsx) with a Creative ID column — every other column becomes a filterable dimension.">
+              <svg-icon name="upload" size="13"></svg-icon> Lookup Table
+            </button>
+            <div class="offer-map-chip" id="psLookupChip" style="display:none">
+              <span id="psLookupChipLabel"></span>
+              <button class="offer-map-chip-clear" id="psLookupClearBtn" title="Remove lookup table">✕</button>
+            </div>
+          </div>
+          <input type="file" id="psCrosstabFileInput" accept=".csv,.xlsx,.xls" style="display:none">
+          <input type="file" id="psLookupFileInput" accept=".csv,.xlsx,.xls" style="display:none">
+        </div>
+
+        <div id="psUploadError" style="display:none;font-size:12px;color:#d33;padding:8px 0"></div>
+
+        <!-- Filters -->
+        <div class="an-filter-row">
+          <select class="an-select" id="psPublisherFilter"><option value="all">All Publishers</option></select>
+          <select class="an-select" id="psFunnelFilter"><option value="all">All Funnels</option></select>
+          <select class="an-select" id="psAdTypeFilter"><option value="all">All Ad Types</option></select>
+          <div id="psExtraFilters" style="display:contents"></div>
+          <div class="an-search">
+            <svg-icon name="search" size="13" color="var(--muted)"></svg-icon>
+            <input id="psSearch" type="text" placeholder="Search creative ID…"/>
+          </div>
+        </div>
+
+        <div id="psEmptyState" style="font-size:12px;color:var(--muted);padding:32px 0;text-align:center">
+          Upload a Creative_DownloadCrosstab export to see Performance Scoring.
+        </div>
+
+        <div class="analytics-table-wrap">
+          <table class="data-table analytics-table" id="psTable" style="display:none">
+            <thead id="psThead"></thead>
+            <tbody id="psTbody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- Add / Edit Creative modal -->
@@ -2190,14 +2255,12 @@ body.compact .chart-card      { padding: 14px 16px; }
           <select class="an-select" id="pvColDim"></select>
         </div>
         <div class="pv-control-group">
-          <label class="pv-label" for="pvMetric">Metric</label>
-          <select class="an-select" id="pvMetric"></select>
+          <span class="pv-label">Metrics</span>
+          <div class="tr-metric-pills" id="pvMetricPills"></div>
         </div>
       </div>
 
-      <div class="pv-table-wrap">
-        <table class="pv-table" id="pvTable"></table>
-      </div>
+      <div id="pvTablesContainer"></div>
     </div>
 
     <div class="tab-panel" id="tab-glossary">
@@ -2217,6 +2280,7 @@ body.compact .chart-card      { padding: 14px 16px; }
         <button data-cat="markets">Markets</button>
         <button data-cat="platforms">Platforms</button>
         <button data-cat="ops">Ops</button>
+        <button data-cat="scoring">Performance Scoring</button>
       </div>
       <div id="glossCount" style="font-size:12px;color:var(--muted);margin-bottom:16px"></div>
       <div class="gloss-grid" id="glossGrid"></div>
@@ -4605,6 +4669,553 @@ window.__onTabSwitch = tab => {
 </script>
 
 <script>
+/* ═══════════════════════════════════════════════════════════
+     MODULE 5B · PERFORMANCE SCORING (CREATIVES TAB)
+     See specs/performance-scoring.md for the full spec. This
+     module is fully independent from the rest of the Creatives
+     tab (Module 5 above) — separate data, separate storage,
+     separate rendering. They only share the tab's view toggle.
+     ═══════════════════════════════════════════════════════ */
+
+/* ── Column matching (forgiving — case/whitespace-insensitive,
+   synonym-aware) ─────────────────────────────────────────── */
+function psNormalizeHeader(h) {
+  return String(h||'').trim().toLowerCase().replace(/\s+/g,' ').replace(/%/g,'');
+}
+
+function psFindCol(row, candidates) {
+  const normKeys = Object.keys(row).map(k => ({ raw:k, norm: psNormalizeHeader(k) }));
+  for (const cand of candidates) {
+    const target = psNormalizeHeader(cand);
+    const hit = normKeys.find(k => k.norm === target);
+    if (hit) return hit.raw;
+  }
+  return null;
+}
+
+function psNumCol(row, colKey) {
+  if (!colKey) return 0;
+  const raw = row[colKey];
+  if (raw === '' || raw == null) return 0;
+  const n = Number(String(raw).replace(/,/g,'').replace(/%$/,''));
+  return Number.isFinite(n) ? n : 0;
+}
+
+const PS_COL_SYNONYMS = {
+  creativeId:   ['Creative Id', 'Creative ID'],
+  publisher:    ['Publisher', 'Group'],
+  funnel:       ['Funnel'],
+  adType:       ['Ad Type'],
+  dateBreakdown:['Date Breakdown'],
+  impressions:  ['Impressions'],
+  clicks:       ['Clicks'],
+  lpv:          ['Landing Page Visits'],
+  orders:       ['Total Device Orders'],
+  vcomp:        ['100% Video Completes', 'VCOMP'],
+  vv25:         ['VV25', 'Video Views To 25 Percent'],
+  socialEng:    ['Social Engagements', 'Engagements'],
+  campaignName: ['Campaign Name'], // stored, unused until Phase 2's AIPE
+};
+const PS_REQUIRED_FIELDS = ['creativeId','publisher','funnel','adType','impressions','clicks','lpv','orders'];
+const PS_REQUIRED_LABELS = {
+  creativeId:'Creative Id', publisher:'Publisher', funnel:'Funnel', adType:'Ad Type',
+  impressions:'Impressions', clicks:'Clicks', lpv:'Landing Page Visits', orders:'Total Device Orders',
+};
+
+function psResolveColumnMap(sampleRow) {
+  const map = {};
+  Object.keys(PS_COL_SYNONYMS).forEach(field => { map[field] = psFindCol(sampleRow, PS_COL_SYNONYMS[field]); });
+  return map;
+}
+function psValidateColumnMap(map) {
+  const missing = PS_REQUIRED_FIELDS.filter(f => !map[f]);
+  if (missing.length) throw new Error(`Couldn't find a '${PS_REQUIRED_LABELS[missing[0]]}' column`);
+}
+
+/* ── Row normalization (upload time) ─────────────────────── */
+function psNormalizeCrosstabRows(rawRows) {
+  if (!rawRows.length) return [];
+  const colMap = psResolveColumnMap(rawRows[0]);
+  psValidateColumnMap(colMap);
+  const hasSocialCol = !!colMap.socialEng;
+  return rawRows.map(row => ({
+    creativeId: String(row[colMap.creativeId] ?? '').trim(),
+    publisher:  String(row[colMap.publisher]  ?? '').trim(),
+    funnel:     String(row[colMap.funnel]     ?? '').trim(),
+    adType:     String(row[colMap.adType]     ?? '').trim(),
+    dateBreakdown: colMap.dateBreakdown ? String(row[colMap.dateBreakdown] ?? '').trim() : '',
+    imps:   psNumCol(row, colMap.impressions),
+    clicks: psNumCol(row, colMap.clicks),
+    lpv:    psNumCol(row, colMap.lpv),
+    orders: psNumCol(row, colMap.orders),
+    vcomp:  colMap.vcomp ? psNumCol(row, colMap.vcomp) : 0,
+    vv25:   colMap.vv25  ? psNumCol(row, colMap.vv25)  : 0,
+    socialEng: hasSocialCol ? psNumCol(row, colMap.socialEng) : 0,
+    socialColPresent: hasSocialCol,
+  }));
+}
+
+function psRowKey(r) { return `${r.creativeId}|${r.publisher}|${r.funnel}|${r.adType}|${r.dateBreakdown}`; }
+
+/* New dates merge in; re-uploading the same creative/date overwrites
+   (last upload wins) rather than double-counting. */
+function psUpsertRows(existingRows, incomingRows) {
+  const map = new Map(existingRows.map(r => [psRowKey(r), r]));
+  incomingRows.forEach(r => map.set(psRowKey(r), r));
+  return [...map.values()];
+}
+
+function psParseLookupRows(rawRows) {
+  if (!rawRows.length) return { byId:{}, extraCols:[] };
+  const idCol = psFindCol(rawRows[0], ['Creative ID', 'Creative Id']);
+  if (!idCol) throw new Error("Couldn't find a 'Creative ID' column in the lookup table");
+  const extraCols = Object.keys(rawRows[0]).filter(k => k !== idCol);
+  const byId = {};
+  rawRows.forEach(row => {
+    const id = String(row[idCol] ?? '').trim();
+    if (!id) return;
+    const extra = {};
+    extraCols.forEach(c => { extra[c] = row[c]; });
+    byId[id] = extra;
+  });
+  return { byId, extraCols };
+}
+
+/* ── Scoring pipeline (pure — no DOM access) ─────────────── */
+function psAggregateScoringRows(normalizedRows) {
+  const groups = new Map();
+  normalizedRows.forEach(r => {
+    const key = `${r.creativeId}|${r.publisher}|${r.funnel}|${r.adType}`;
+    if (!groups.has(key)) {
+      groups.set(key, { creativeId:r.creativeId, publisher:r.publisher, funnel:r.funnel, adType:r.adType,
+        imps:0, clicks:0, lpv:0, orders:0, vcomp:0, vv25:0, socialEng:0, socialColPresent:false });
+    }
+    const g = groups.get(key);
+    g.imps      += r.imps;
+    g.clicks    += r.clicks;
+    g.lpv       += r.lpv;
+    g.orders    += r.orders;
+    g.vcomp     += r.vcomp;
+    g.vv25      += r.vv25;
+    g.socialEng += r.socialEng;
+    if (r.socialColPresent) g.socialColPresent = true;
+  });
+  return [...groups.values()];
+}
+
+function psComputeMetrics(g) {
+  return {
+    ctr:  g.imps > 0 ? g.clicks / g.imps : null,
+    lpvr: g.imps > 0 ? g.lpv    / g.imps : null,
+    cvr:  g.lpv  > 0 ? g.orders / g.lpv  : null,
+    tdor: g.imps > 0 ? g.orders / g.imps : null,
+    vcr100: (g.imps > 0 && g.vcomp > 0) ? g.vcomp / g.imps : null,
+    vvr25:  (g.imps > 0 && g.vv25  > 0) ? g.vv25  / g.imps : null,
+    rateOfCompletion: g.vv25 > 0 ? g.vcomp / g.vv25 : null,
+  };
+}
+function psSocialEr(g) {
+  if (!g.socialColPresent) return null;
+  return g.imps > 0 ? g.socialEng / g.imps : null;
+}
+
+function psMedian(values) {
+  const v = values.filter(x => x != null).slice().sort((a,b) => a-b);
+  if (!v.length) return null;
+  const mid = Math.floor(v.length/2);
+  return v.length % 2 ? v[mid] : (v[mid-1]+v[mid])/2;
+}
+function psComputeBenchmarks(members, metricKeys) {
+  const bench = {};
+  metricKeys.forEach(k => {
+    const vals = members.map(r => r.metrics[k]).filter(v => v != null);
+    bench[k] = vals.length ? psMedian(vals) : null;
+  });
+  return bench;
+}
+function psPercentileRank(values, v) {
+  if (v == null) return null;
+  const valid = values.filter(x => x != null);
+  if (!valid.length) return null;
+  return valid.filter(x => x <= v).length / valid.length;
+}
+function psComposite(pct) {
+  if (pct.tdor == null || pct.cvr == null || pct.lpvr == null || pct.ctr == null) return null;
+  return 100 * (0.35*pct.tdor + 0.30*pct.cvr + 0.20*pct.lpvr + 0.15*pct.ctr);
+}
+const PS_COMPOSITE_LABELS = { tdor:'TDOR', cvr:'CVR', lpvr:'LPVR', ctr:'CTR' };
+
+function psScoreRows(normalizedRows) {
+  const grouped = psAggregateScoringRows(normalizedRows);
+  const scored = grouped.map(g => {
+    const metrics = psComputeMetrics(g);
+    metrics.socialEr = psSocialEr(g);
+    return { ...g, metrics };
+  });
+
+  /* Benchmark Groups: Publisher × Funnel × Ad Type */
+  const benchGroups = new Map();
+  scored.forEach(r => {
+    const key = `${r.publisher}|${r.funnel}|${r.adType}`;
+    if (!benchGroups.has(key)) benchGroups.set(key, []);
+    benchGroups.get(key).push(r);
+  });
+  const benchMetricKeys = ['ctr','lpvr','cvr','tdor','vcr100','vvr25','rateOfCompletion','socialEr'];
+  benchGroups.forEach(members => {
+    const bench = psComputeBenchmarks(members, benchMetricKeys);
+    const lowConfidence = members.length < 2;
+    members.forEach(r => { r.benchmark = bench; r.benchmarkLowConfidence = lowConfidence; r.benchmarkMemberCount = members.length; });
+  });
+
+  /* Peer Groups: Publisher × Funnel */
+  const peerGroups = new Map();
+  scored.forEach(r => {
+    const key = `${r.publisher}|${r.funnel}`;
+    if (!peerGroups.has(key)) peerGroups.set(key, []);
+    peerGroups.get(key).push(r);
+  });
+  const compositeMetricKeys = ['tdor','cvr','lpvr','ctr'];
+  peerGroups.forEach(members => {
+    const valuesByMetric = {};
+    compositeMetricKeys.forEach(k => { valuesByMetric[k] = members.map(r => r.metrics[k]); });
+    members.forEach(r => {
+      const pct = {};
+      compositeMetricKeys.forEach(k => { pct[k] = psPercentileRank(valuesByMetric[k], r.metrics[k]); });
+      r.percentiles = pct;
+      r.composite = psComposite(pct);
+      r.compositeMissingMetric = r.composite == null
+        ? PS_COMPOSITE_LABELS[compositeMetricKeys.find(k => pct[k] == null)]
+        : null;
+    });
+    const scoredMembers = members.filter(r => r.composite != null).sort((a,b) => b.composite - a.composite);
+    scoredMembers.forEach((r,i) => { r.peerRank = i+1; r.peerScoredCount = scoredMembers.length; });
+    members.filter(r => r.composite == null).forEach(r => { r.peerRank = null; r.peerScoredCount = scoredMembers.length; });
+  });
+
+  return scored;
+}
+
+/* ── Persistence ──────────────────────────────────────────── */
+const PS_CROSSTAB_KEY = 'crkt_ps_crosstab_v1';
+const PS_LOOKUP_KEY   = 'crkt_ps_lookup_v1';
+
+function psLoadDatasets() {
+  try { return { daily:[], monthly:[], summary:[], ...JSON.parse(localStorage.getItem(PS_CROSSTAB_KEY)||'{}') }; }
+  catch { return { daily:[], monthly:[], summary:[] }; }
+}
+function psPersistDatasets() { localStorage.setItem(PS_CROSSTAB_KEY, JSON.stringify(PS_DATASETS)); }
+
+function psLoadLookup() {
+  try { return { byId:{}, extraCols:[], ...JSON.parse(localStorage.getItem(PS_LOOKUP_KEY)||'{}') }; }
+  catch { return { byId:{}, extraCols:[] }; }
+}
+function psPersistLookup() { localStorage.setItem(PS_LOOKUP_KEY, JSON.stringify(PS_LOOKUP)); }
+
+let PS_DATASETS = psLoadDatasets();
+let PS_LOOKUP   = psLoadLookup();
+
+/* ── State ────────────────────────────────────────────────── */
+let crViewState = { view: 'cards' };
+const psState = {
+  datasetType: 'daily', publisher:'all', funnel:'all', adType:'all',
+  extraFilters:{}, search:'', sortCol:'composite', sortDir:-1,
+};
+let psScoredCache = []; // full-dataset scored rows (unfiltered) — benchmarks/peer rank
+                         // always reflect the whole loaded dataset, not the current filter view
+
+function psRecompute() {
+  const rows = PS_DATASETS[psState.datasetType] || [];
+  psScoredCache = rows.length ? psScoreRows(rows) : [];
+}
+
+/* Lookup join happens at render time only — never baked into PS_DATASETS,
+   and never part of the Benchmark/Peer Group keys. */
+function psJoinLookup(row) {
+  return { ...row, lookup: PS_LOOKUP.byId[row.creativeId] || null };
+}
+
+function psFmtPct(v)      { return v == null ? '—'   : (v*100).toFixed(2)+'%'; }
+function psFmtBenchPct(v) { return v == null ? 'N/A' : (v*100).toFixed(2)+'%'; }
+
+function psFlattenRow(r) {
+  const flat = {
+    creativeId:r.creativeId, publisher:r.publisher, funnel:r.funnel, adType:r.adType, imps:r.imps,
+    m_ctr:r.metrics.ctr, m_lpvr:r.metrics.lpvr, m_cvr:r.metrics.cvr, m_tdor:r.metrics.tdor,
+    m_vcr100:r.metrics.vcr100, m_vvr25:r.metrics.vvr25, m_rateOfCompletion:r.metrics.rateOfCompletion,
+    m_socialEr:r.metrics.socialEr,
+    b_ctr:r.benchmark.ctr, b_lpvr:r.benchmark.lpvr, b_cvr:r.benchmark.cvr, b_tdor:r.benchmark.tdor,
+    b_socialEr:r.benchmark.socialEr,
+    composite:r.composite, compositeMissingMetric:r.compositeMissingMetric,
+    peerRankStr: r.peerRank != null ? `${r.peerRank} / ${r.peerScoredCount}` : '—',
+    benchmarkLowConfidence:r.benchmarkLowConfidence, benchmarkMemberCount:r.benchmarkMemberCount,
+    socialColPresent:r.socialColPresent, lookup:r.lookup,
+  };
+  if (r.lookup) Object.keys(r.lookup).forEach(col => { flat['extra_'+col] = r.lookup[col]; });
+  return flat;
+}
+
+const PS_BASE_COLS = [
+  {key:'creativeId', label:'Creative ID', fmt:v=>esc(v)},
+  {key:'publisher',  label:'Publisher',   fmt:v=>esc(v)},
+  {key:'funnel',     label:'Funnel',      fmt:v=>esc(v)},
+  {key:'adType',     label:'Ad Type',     fmt:v=>esc(v)},
+  {key:'imps',       label:'Imps',        fmt:fmtN},
+  {key:'m_ctr',      label:'CTR',         fmt:psFmtPct},
+  {key:'m_lpvr',     label:'LPVR',        fmt:psFmtPct},
+  {key:'m_cvr',      label:'CVR',         fmt:psFmtPct},
+  {key:'m_tdor',     label:'TDOR',        fmt:psFmtPct},
+  {key:'m_vcr100',   label:'VCR 100%',    fmt:psFmtPct},
+  {key:'m_vvr25',    label:'VVR 25%',     fmt:psFmtPct},
+  {key:'m_rateOfCompletion', label:'Rate of Completion', fmt:psFmtPct},
+];
+const PS_SOCIAL_COL       = {key:'m_socialEr', label:'Social ER',       fmt:psFmtPct};
+const PS_BENCH_SOCIAL_COL = {key:'b_socialEr', label:'Bench Social ER', fmt:psFmtBenchPct};
+const PS_BENCH_COLS = [
+  {key:'b_ctr',  label:'Bench CTR',  fmt:psFmtBenchPct},
+  {key:'b_lpvr', label:'Bench LPVR', fmt:psFmtBenchPct},
+  {key:'b_cvr',  label:'Bench CVR',  fmt:psFmtBenchPct},
+  {key:'b_tdor', label:'Bench TDOR', fmt:psFmtBenchPct},
+];
+const PS_SCORE_COLS = [
+  {key:'composite', label:'Score', fmt:(v,r)=> v==null
+    ? `<span title="Insufficient data — ${esc(r.compositeMissingMetric||'a required metric')} is undefined for this creative">N/A</span>`
+    : v.toFixed(1)},
+  {key:'peerRankStr', label:'Peer Rank', fmt:v=>v||'—'},
+];
+
+function psDistinctValues(rows, key) {
+  return [...new Set(rows.map(r => r[key]).filter(v => v !== ''))].sort();
+}
+function psPopulateFilterDropdown(id, values, current) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const allOpt = sel.querySelector('option[value="all"]');
+  const allHTML = allOpt ? allOpt.outerHTML : '<option value="all">All</option>';
+  sel.innerHTML = allHTML + values.map(v => `<option value="${esc(v)}"${v===current?' selected':''}>${esc(v)}</option>`).join('');
+}
+function psPopulateExtraFilters() {
+  const container = document.getElementById('psExtraFilters');
+  if (!container) return;
+  container.innerHTML = PS_LOOKUP.extraCols.map(col => {
+    const values = [...new Set(Object.values(PS_LOOKUP.byId).map(e => e[col]).filter(v => v !== undefined && v !== ''))].sort();
+    const current = psState.extraFilters[col] || 'all';
+    return `<select class="an-select" data-col="${esc(col)}">
+      <option value="all"${current==='all'?' selected':''}>All ${esc(col)}</option>
+      ${values.map(v=>`<option value="${esc(v)}"${String(v)===current?' selected':''}>${esc(v)}</option>`).join('')}
+    </select>`;
+  }).join('');
+  container.querySelectorAll('select').forEach(sel => {
+    sel.addEventListener('change', e => {
+      psState.extraFilters[e.target.dataset.col] = e.target.value;
+      renderPerformanceScoring();
+    });
+  });
+}
+
+function psSortRows(rows) {
+  const col = psState.sortCol, dir = psState.sortDir;
+  return [...rows].sort((a,b) => {
+    const av = a[col], bv = b[col];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;  // nulls/N/A always sort last
+    if (bv == null) return -1;
+    if (av > bv) return dir;
+    if (av < bv) return -dir;
+    return 0;
+  });
+}
+
+function renderPerformanceScoring() {
+  const rawRows  = PS_DATASETS[psState.datasetType] || [];
+  const emptyEl  = document.getElementById('psEmptyState');
+  const tableEl  = document.getElementById('psTable');
+  if (!emptyEl || !tableEl) return;
+
+  if (!rawRows.length) {
+    emptyEl.style.display = '';
+    tableEl.style.display = 'none';
+    document.getElementById('psRowCount').textContent = '';
+    psPopulateFilterDropdown('psPublisherFilter', [], 'all');
+    psPopulateFilterDropdown('psFunnelFilter',    [], 'all');
+    psPopulateFilterDropdown('psAdTypeFilter',    [], 'all');
+    psPopulateExtraFilters();
+    return;
+  }
+
+  psRecompute();
+
+  psPopulateFilterDropdown('psPublisherFilter', psDistinctValues(rawRows,'publisher'), psState.publisher);
+  psPopulateFilterDropdown('psFunnelFilter',    psDistinctValues(rawRows,'funnel'),    psState.funnel);
+  psPopulateFilterDropdown('psAdTypeFilter',    psDistinctValues(rawRows,'adType'),    psState.adType);
+  psPopulateExtraFilters();
+
+  const joined = psScoredCache.map(psJoinLookup);
+  let visible = joined.filter(r =>
+    (psState.publisher === 'all' || r.publisher === psState.publisher) &&
+    (psState.funnel    === 'all' || r.funnel    === psState.funnel)    &&
+    (psState.adType    === 'all' || r.adType    === psState.adType)    &&
+    (!psState.search || r.creativeId.toLowerCase().includes(psState.search.toLowerCase()))
+  );
+  Object.keys(psState.extraFilters).forEach(col => {
+    const val = psState.extraFilters[col];
+    if (val && val !== 'all') visible = visible.filter(r => r.lookup && String(r.lookup[col]) === val);
+  });
+
+  const hasSocialCol = psScoredCache.some(r => r.socialColPresent);
+  const extraColDefs = PS_LOOKUP.extraCols.map(col => ({ key:'extra_'+col, label:col, fmt:v=>(v==null||v==='')?'—':esc(v) }));
+  const cols = [...PS_BASE_COLS, ...(hasSocialCol?[PS_SOCIAL_COL]:[]), ...PS_BENCH_COLS,
+                ...(hasSocialCol?[PS_BENCH_SOCIAL_COL]:[]), ...PS_SCORE_COLS, ...extraColDefs];
+
+  const sorted = psSortRows(visible.map(psFlattenRow));
+
+  const thead = document.getElementById('psThead');
+  const tbody = document.getElementById('psTbody');
+  thead.innerHTML = `<tr>${cols.map(c=>`<th data-col="${c.key}" class="${c.key===psState.sortCol?(psState.sortDir===1?'sort-asc':'sort-desc'):''}">${esc(c.label)}</th>`).join('')}</tr>`;
+  tbody.innerHTML = sorted.map(r => {
+    const title = r.benchmarkLowConfidence
+      ? ` title="Benchmark group has only ${r.benchmarkMemberCount} creative${r.benchmarkMemberCount===1?'':'s'} — treat with caution"`
+      : '';
+    return `<tr${title}>${cols.map(c=>`<td>${c.fmt(r[c.key], r)}</td>`).join('')}</tr>`;
+  }).join('') || `<tr><td colspan="${cols.length}" style="text-align:center;padding:32px;color:var(--muted)">No rows match current filters</td></tr>`;
+
+  thead.querySelectorAll('th').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (psState.sortCol === col) psState.sortDir *= -1;
+      else { psState.sortCol = col; psState.sortDir = -1; }
+      renderPerformanceScoring();
+    });
+  });
+
+  document.getElementById('psRowCount').textContent = `${sorted.length} row${sorted.length!==1?'s':''}`;
+  emptyEl.style.display = 'none';
+  tableEl.style.display = '';
+}
+
+/* ── Upload wiring ────────────────────────────────────────── */
+function psShowError(msg) {
+  const el = document.getElementById('psUploadError');
+  if (!el) return;
+  if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
+  el.style.display = '';
+  el.textContent = msg;
+}
+
+function updatePsCrosstabChip() {
+  const chip  = document.getElementById('psCrosstabChip');
+  const label = document.getElementById('psCrosstabChipLabel');
+  if (!chip) return;
+  const counts = Object.keys(PS_DATASETS).map(t => `${t}: ${PS_DATASETS[t].length} row${PS_DATASETS[t].length!==1?'s':''}`)
+    .filter((_,i) => Object.values(PS_DATASETS)[i].length);
+  if (counts.length) { chip.style.display = ''; label.textContent = counts.join(' · '); }
+  else chip.style.display = 'none';
+}
+function updatePsLookupChip() {
+  const chip  = document.getElementById('psLookupChip');
+  const label = document.getElementById('psLookupChipLabel');
+  if (!chip) return;
+  const n = Object.keys(PS_LOOKUP.byId).length;
+  if (n) { chip.style.display = ''; label.textContent = `Lookup: ${n} creative${n!==1?'s':''}, ${PS_LOOKUP.extraCols.length} extra column${PS_LOOKUP.extraCols.length!==1?'s':''}`; }
+  else chip.style.display = 'none';
+}
+
+document.getElementById('psDatasetTypeSelect').addEventListener('change', e => {
+  psState.datasetType = e.target.value;
+  renderPerformanceScoring();
+});
+
+document.getElementById('psCrosstabUploadBtn').addEventListener('click', () => {
+  document.getElementById('psCrosstabFileInput').click();
+});
+document.getElementById('psCrosstabFileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+  const ext = file.name.split('.').pop().toLowerCase();
+  const readAs = ext === 'csv' ? file.text() : file.arrayBuffer();
+  readAs
+    .then(data => parsePerformanceRowsByExt(data, ext))
+    .then(rawRows => {
+      const normalized = psNormalizeCrosstabRows(rawRows);
+      PS_DATASETS[psState.datasetType] = psUpsertRows(PS_DATASETS[psState.datasetType] || [], normalized);
+      psPersistDatasets();
+      psShowError(null);
+      updatePsCrosstabChip();
+      renderPerformanceScoring();
+    })
+    .catch(err => {
+      console.warn('Crosstab upload failed:', err);
+      psShowError(err.message || 'Upload failed — check the file format.');
+    });
+});
+document.getElementById('psCrosstabClearBtn').addEventListener('click', () => {
+  PS_DATASETS[psState.datasetType] = [];
+  psPersistDatasets();
+  updatePsCrosstabChip();
+  renderPerformanceScoring();
+});
+
+document.getElementById('psLookupUploadBtn').addEventListener('click', () => {
+  document.getElementById('psLookupFileInput').click();
+});
+document.getElementById('psLookupFileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+  const ext = file.name.split('.').pop().toLowerCase();
+  const readAs = ext === 'csv' ? file.text() : file.arrayBuffer();
+  readAs
+    .then(data => parsePerformanceRowsByExt(data, ext))
+    .then(rawRows => {
+      PS_LOOKUP = psParseLookupRows(rawRows); // full replace — reference table, not incremental
+      psPersistLookup();
+      psShowError(null);
+      updatePsLookupChip();
+      renderPerformanceScoring();
+    })
+    .catch(err => {
+      console.warn('Lookup table upload failed:', err);
+      psShowError(err.message || 'Upload failed — check the file format.');
+    });
+});
+document.getElementById('psLookupClearBtn').addEventListener('click', () => {
+  PS_LOOKUP = { byId:{}, extraCols:[] };
+  psState.extraFilters = {};
+  psPersistLookup();
+  updatePsLookupChip();
+  renderPerformanceScoring();
+});
+
+document.getElementById('psPublisherFilter').addEventListener('change', e => { psState.publisher = e.target.value; renderPerformanceScoring(); });
+document.getElementById('psFunnelFilter').addEventListener('change',    e => { psState.funnel    = e.target.value; renderPerformanceScoring(); });
+document.getElementById('psAdTypeFilter').addEventListener('change',    e => { psState.adType    = e.target.value; renderPerformanceScoring(); });
+document.getElementById('psSearch').addEventListener('input', e => { psState.search = e.target.value; renderPerformanceScoring(); });
+
+updatePsCrosstabChip();
+updatePsLookupChip();
+
+/* ── View toggle (Creative Library ↔ Performance Scoring) ── */
+document.getElementById('crViewToggle').addEventListener('click', e => {
+  const btn = e.target.closest('[data-view]');
+  if (!btn) return;
+  crViewState.view = btn.dataset.view;
+  document.querySelectorAll('#crViewToggle button').forEach(b => b.classList.toggle('active', b===btn));
+  document.getElementById('crCardsView').style.display   = crViewState.view === 'cards'   ? '' : 'none';
+  document.getElementById('crScoringView').style.display = crViewState.view === 'scoring' ? '' : 'none';
+  const addBtn = document.getElementById('crAddBtnTop');
+  if (addBtn) addBtn.style.display = crViewState.view === 'cards' ? '' : 'none';
+  if (crViewState.view === 'scoring') renderPerformanceScoring();
+  else renderCreatives();
+});
+
+const _prevTabSwitchPS = window.__onTabSwitch;
+window.__onTabSwitch = tab => {
+  if (tab === 'creatives' && crViewState.view === 'scoring') renderPerformanceScoring();
+  if (typeof _prevTabSwitchPS === 'function') _prevTabSwitchPS(tab);
+};
+</script>
+
+<script>
 /* ── One-Sheeter Generator ───────────────────────────────── */
 function generateOneSheet() {
   const btn = document.getElementById('downloadOneSheeterBtn');
@@ -5467,7 +6078,7 @@ const PV_DIMS = {
   creative: { label:'Creative', creativeOnly:true  },
 };
 
-let pvState = { src:'creatives', rowDim:'creative', colDim:'stage', metric:'imps', sortCol:'__total__', sortDir:-1, mkt:'all', q:'all' };
+let pvState = { src:'creatives', rowDim:'creative', colDim:'stage', metrics:['imps'], sortMetric:'imps', sortCol:'__total__', sortDir:-1, mkt:'all', q:'all' };
 
 function pvPool() {
   const raw = pvState.src === 'creatives' ? AN_CREATIVES : AN_STAGES;
@@ -5528,47 +6139,28 @@ function pvUpdateSelects() {
     document.getElementById('pvColDim').value = pvState.colDim;
   }
 
-  const validMetric = isCreative ? pvState.metric : pvState.metric;
-  const metricInvalid = isCreative && PV_METRICS.find(m => m.key === pvState.metric)?.stageOnly;
-  if (metricInvalid) pvState.metric = 'imps';
+  // Drop any selected metrics that don't apply to the current data source
+  // (e.g. stage-only metrics when viewing By Creative) — keep at least one.
+  const availableMetrics = PV_METRICS.filter(m => !m.stageOnly || !isCreative);
+  pvState.metrics = pvState.metrics.filter(k => availableMetrics.some(m => m.key === k));
+  if (!pvState.metrics.length) pvState.metrics = [availableMetrics[0].key];
 
-  const metOpts = PV_METRICS
-    .filter(m => !m.stageOnly || !isCreative)
-    .map(m => `<option value="${m.key}"${m.key===pvState.metric?' selected':''}>${m.label}</option>`).join('');
-  document.getElementById('pvMetric').innerHTML = metOpts;
+  document.getElementById('pvMetricPills').innerHTML = availableMetrics.map(m =>
+    `<button class="tr-metric-pill${pvState.metrics.includes(m.key)?' active':''}" data-metric="${m.key}">${m.label}</button>`
+  ).join('');
 }
 
-function renderPivot() {
-  pvUpdateSelects();
+/* Builds one metric's full pivot table (its own heat-map scale, its own
+   sortable headers) — rowVals order is shared across every stacked metric
+   table so the same creatives/stages line up for comparison, but each
+   table's shading and totals are scoped to that one metric only. */
+function pvBuildMetricTableHTML(metric, pool, rowKey, colKey, colVals, rowVals) {
+  const m = PV_METRICS.find(x => x.key === metric);
 
-  const pool   = pvPool();
-  const rowKey = pvState.rowDim;
-  const colKey = pvState.colDim;
-  const metric = pvState.metric;
-
-  const colVals = [...new Set(pool.map(r => r[colKey]).filter(Boolean))].sort();
-  let   rowVals = [...new Set(pool.map(r => r[rowKey]).filter(Boolean))];
-
-  if (!rowVals.length) {
-    document.getElementById('pvTable').innerHTML = `<tr><td class="pv-empty">No data available for this combination.</td></tr>`;
-    return;
-  }
-
-  // Sort rows by selected sort column
-  rowVals.sort((a, b) => {
-    const v = rv => pvState.sortCol === '__total__'
-      ? pvAggregate(pool.filter(r => r[rowKey]===rv), metric)
-      : pvAggregate(pool.filter(r => r[rowKey]===rv && r[colKey]===pvState.sortCol), metric);
-    return (v(a) - v(b)) * pvState.sortDir;
-  });
-
-  // Build matrix
   const matrix = {};
   rowVals.forEach(rv => {
     matrix[rv] = {};
-    colVals.forEach(cv => {
-      matrix[rv][cv] = pvAggregate(pool.filter(r => r[rowKey]===rv && r[colKey]===cv), metric);
-    });
+    colVals.forEach(cv => { matrix[rv][cv] = pvAggregate(pool.filter(r => r[rowKey]===rv && r[colKey]===cv), metric); });
     matrix[rv]['__total__'] = pvAggregate(pool.filter(r => r[rowKey]===rv), metric);
   });
 
@@ -5576,17 +6168,16 @@ function renderPivot() {
   colVals.forEach(cv => { colTotals[cv] = pvAggregate(pool.filter(r => r[colKey]===cv), metric); });
   colTotals['__total__'] = pvAggregate(pool, metric);
 
-  // Heat map across all data cells
   const allVals = rowVals.flatMap(rv => colVals.map(cv => matrix[rv][cv])).filter(v => v > 0);
   const maxVal  = Math.max(...allVals, 1);
   const heat    = v => v > 0 ? ` style="background:rgba(91,197,0,${(Math.min(v/maxVal,1)*0.2).toFixed(3)})"` : '';
 
-  const si = col => pvState.sortCol===col ? (pvState.sortDir===-1?' ▾':' ▴') : '';
+  const si = col => (pvState.sortMetric===metric && pvState.sortCol===col) ? (pvState.sortDir===-1?' ▾':' ▴') : '';
 
   const thead = `<thead><tr>
     <th class="pv-th-row">${PV_DIMS[rowKey]?.label||rowKey}</th>
-    ${colVals.map(cv=>`<th class="pv-th-col sortable" data-col="${cv}">${cv}${si(cv)}</th>`).join('')}
-    <th class="pv-th-total sortable" data-col="__total__">Total${si('__total__')}</th>
+    ${colVals.map(cv=>`<th class="pv-th-col sortable" data-metric="${metric}" data-col="${cv}">${cv}${si(cv)}</th>`).join('')}
+    <th class="pv-th-total sortable" data-metric="${metric}" data-col="__total__">Total${si('__total__')}</th>
   </tr></thead>`;
 
   const tbody = `<tbody>
@@ -5606,13 +6197,49 @@ function renderPivot() {
     </tr>
   </tbody>`;
 
-  document.getElementById('pvTable').innerHTML = thead + tbody;
+  return `<div class="pv-table-block" data-metric="${metric}">
+    <div class="pv-table-heading">${m?.label||metric}</div>
+    <div class="pv-table-wrap"><table class="pv-table">${thead}${tbody}</table></div>
+  </div>`;
+}
 
-  document.querySelectorAll('#pvTable th.sortable').forEach(th => {
+function renderPivot() {
+  pvUpdateSelects();
+
+  const pool   = pvPool();
+  const rowKey = pvState.rowDim;
+  const colKey = pvState.colDim;
+
+  const colVals = [...new Set(pool.map(r => r[colKey]).filter(Boolean))].sort();
+  let   rowVals = [...new Set(pool.map(r => r[rowKey]).filter(Boolean))];
+
+  const container = document.getElementById('pvTablesContainer');
+  if (!rowVals.length) {
+    container.innerHTML = `<div class="pv-empty">No data available for this combination.</div>`;
+    return;
+  }
+
+  // Shared row order across every stacked metric table, driven by whichever
+  // metric/column was last clicked (falls back to the first selected metric
+  // if that metric got deselected).
+  if (!pvState.metrics.includes(pvState.sortMetric)) {
+    pvState.sortMetric = pvState.metrics[0];
+    pvState.sortCol = '__total__'; pvState.sortDir = -1;
+  }
+  rowVals.sort((a, b) => {
+    const v = rv => pvState.sortCol === '__total__'
+      ? pvAggregate(pool.filter(r => r[rowKey]===rv), pvState.sortMetric)
+      : pvAggregate(pool.filter(r => r[rowKey]===rv && r[colKey]===pvState.sortCol), pvState.sortMetric);
+    return (v(a) - v(b)) * pvState.sortDir;
+  });
+
+  container.innerHTML = pvState.metrics.map(metric => pvBuildMetricTableHTML(metric, pool, rowKey, colKey, colVals, rowVals)).join('');
+
+  container.querySelectorAll('th.sortable').forEach(th => {
     th.addEventListener('click', () => {
-      const col = th.dataset.col;
-      if (pvState.sortCol === col) pvState.sortDir *= -1;
-      else { pvState.sortCol = col; pvState.sortDir = -1; }
+      const metric = th.dataset.metric, col = th.dataset.col;
+      if (pvState.sortMetric === metric && pvState.sortCol === col) pvState.sortDir *= -1;
+      else { pvState.sortMetric = metric; pvState.sortCol = col; pvState.sortDir = -1; }
       renderPivot();
     });
   });
@@ -5662,8 +6289,15 @@ document.getElementById('pvColDim').addEventListener('change', e => {
   renderPivot();
 });
 
-document.getElementById('pvMetric').addEventListener('change', e => {
-  pvState.metric = e.target.value;
+/* Multi-select toggle — same "at least one stays selected" rule already
+   used by the Trends tab's quarter filter. */
+document.getElementById('pvMetricPills').addEventListener('click', e => {
+  const btn = e.target.closest('[data-metric]');
+  if (!btn) return;
+  const key = btn.dataset.metric;
+  const isActive = pvState.metrics.includes(key);
+  if (isActive && pvState.metrics.length === 1) return; // keep at least one selected
+  pvState.metrics = isActive ? pvState.metrics.filter(k => k !== key) : [...pvState.metrics, key];
   renderPivot();
 });
 
@@ -5671,25 +6305,29 @@ document.getElementById('pvExportBtn').addEventListener('click', () => {
   const pool   = pvPool();
   const rowKey = pvState.rowDim;
   const colKey = pvState.colDim;
-  const metric = pvState.metric;
   const colVals = [...new Set(pool.map(r => r[colKey]).filter(Boolean))].sort();
   const rowVals = [...new Set(pool.map(r => r[rowKey]).filter(Boolean))];
   const rowLabel = rv => rowKey === 'creative' ? (offerLabel(rv)||rv) : rv;
-  const aoa = [
-    [PV_DIMS[rowKey]?.label||rowKey, ...colVals, 'Total'],
-    ...rowVals.map(rv => [
-      rowLabel(rv),
-      ...colVals.map(cv => pvAggregate(pool.filter(r => r[rowKey]===rv && r[colKey]===cv), metric)),
-      pvAggregate(pool.filter(r => r[rowKey]===rv), metric),
-    ]),
-    ['Total',
-      ...colVals.map(cv => pvAggregate(pool.filter(r => r[colKey]===cv), metric)),
-      pvAggregate(pool, metric),
-    ],
-  ];
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Pivot');
-  XLSX.writeFile(wb, `CRKT_Pivot_${rowKey}x${colKey}_${metric}_${new Date().toISOString().slice(0,10)}.xlsx`);
+  pvState.metrics.forEach(metric => {
+    const aoa = [
+      [PV_DIMS[rowKey]?.label||rowKey, ...colVals, 'Total'],
+      ...rowVals.map(rv => [
+        rowLabel(rv),
+        ...colVals.map(cv => pvAggregate(pool.filter(r => r[rowKey]===rv && r[colKey]===cv), metric)),
+        pvAggregate(pool.filter(r => r[rowKey]===rv), metric),
+      ]),
+      ['Total',
+        ...colVals.map(cv => pvAggregate(pool.filter(r => r[colKey]===cv), metric)),
+        pvAggregate(pool, metric),
+      ],
+    ];
+    // Sheet names: 31-char limit, no : \ / ? * [ ]
+    const sheetName = (PV_METRICS.find(m => m.key === metric)?.label || metric).replace(/[:\\/?*[\]]/g,'').slice(0,31);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), sheetName);
+  });
+  XLSX.writeFile(wb, `CRKT_Pivot_${rowKey}x${colKey}_${new Date().toISOString().slice(0,10)}.xlsx`);
 });
 
 const _pvPrev = window.__onTabSwitch;
@@ -5885,6 +6523,64 @@ const GLOSSARY_TERMS = [
     full:'Paid Social',
     def:'Advertising on social media platforms (Meta, Reddit, etc.). A separate channel from display/DCO but may share creative concepts.',
   },
+
+  /* ── Performance Scoring (Creatives tab) ──────────────────
+     Independent from the Flashtalking metrics above — a separate
+     module for platform-agnostic creative exports (Meta/Pandora/
+     Spotify/Reddit-style crosstabs). Where a term name would
+     otherwise collide with an existing Flashtalking metric above
+     (e.g. CVR), it's suffixed "(Performance Scoring)" so the two
+     don't read as the same definition. */
+  { term:'Creative_DownloadCrosstab', cat:'scoring',
+    def:'The expected export format for Performance Scoring uploads. Required columns: Creative Id, Publisher, Funnel, Ad Type, Date Breakdown, Impressions, Clicks, Landing Page Visits, Total Device Orders. Optional: 100% Video Completes (or VCOMP), VV25 (or Video Views To 25 Percent), Social Engagements (or Engagements).',
+  },
+  { term:'Lookup Table', cat:'scoring',
+    def:'Any CSV/XLSX with a Creative ID column, uploaded separately from the crosstab. Every other column becomes an extra filterable dimension, joined onto Performance Scoring rows by Creative ID. Replaces the previous lookup table entirely on each upload.',
+  },
+  { term:'Dataset Type', cat:'scoring',
+    def:'Daily, Monthly, or Summary — chosen explicitly at upload time (not auto-detected). Daily is one row per creative × publisher × funnel × date; Monthly is aggregated to month; Summary is full-period totals with no date breakdown. Each is stored and scored independently.',
+  },
+  { term:'VCR 100%', cat:'scoring',
+    full:'Video Completion Rate',
+    def:'How often viewers watch a video ad all the way to the end. Only meaningful for video Ad Types — N/A when Impressions = 0 or Video Completes = 0.',
+    formula:'100% Video Completes ÷ Impressions',
+  },
+  { term:'VVR 25%', cat:'scoring',
+    full:'Video View Rate at 25%',
+    def:'How often viewers reach the 25% point of a video ad. N/A when Impressions = 0 or VV25 = 0.',
+    formula:'VV25 ÷ Impressions',
+  },
+  { term:'Rate of Completion', cat:'scoring',
+    def:'Of viewers who reached the 25% mark, what share went on to watch the full video — a signal of creative hold once initial attention is captured. Computed from raw counts, not from dividing VCR100% by VVR25%. N/A when VV25 = 0.',
+    formula:'100% Video Completes ÷ VV25',
+  },
+  { term:'Social ER', cat:'scoring',
+    full:'Social Engagement Rate',
+    def:'How often an impression drives an active engagement (like, comment, share, save, etc.). Only shown when a Social Engagements/Engagements column exists in the upload — hidden entirely (not shown as N/A) for datasets without one.',
+    formula:'Social Engagements ÷ Impressions',
+  },
+  { term:'CVR (Performance Scoring)', cat:'scoring',
+    def:'Not the same formula as the Flashtalking CVR above — this divides by Landing Page Views, not Clicks. N/A when Landing Page Views = 0.',
+    formula:'Total Device Orders ÷ Landing Page Views',
+  },
+  { term:'Peer Group', cat:'scoring',
+    def:'All creatives sharing the same Publisher × Funnel combination. Percentile Rank and Composite Score are always computed relative to this group.',
+  },
+  { term:'Benchmark Group', cat:'scoring',
+    def:'All creatives sharing the same Publisher × Funnel × Ad Type combination — a narrower grouping than Peer Group. Every creative belongs to exactly one. Groups with fewer than 2 members are flagged as low-confidence.',
+  },
+  { term:'Benchmark', cat:'scoring',
+    def:'The median value of a metric across a Benchmark Group\'s members (median, not mean, since creative performance data is right-skewed). N/A when no member has a valid value for that metric — e.g. video benchmarks are N/A for an all-Static Ad Type group.',
+  },
+  { term:'Percentile Rank', cat:'scoring',
+    def:'For TDOR, CVR, LPVR, and CTR — the fraction of a creative\'s Peer Group with a value less than or equal to its own. Feeds directly into the Composite Score.',
+  },
+  { term:'Composite Score', cat:'scoring',
+    def:'A single 0–100 score blending four percentile ranks within the Peer Group: 35% TDOR + 30% CVR + 20% LPVR + 15% CTR. N/A if any of the four is undefined for that creative (e.g. zero Landing Page Views) — the weight is not redistributed across the remaining metrics.',
+  },
+  { term:'Peer Rank', cat:'scoring',
+    def:'Ordinal position by Composite Score, descending, within the Peer Group — displayed as "position / total scored" (creatives without a Composite Score aren\'t counted in either number).',
+  },
 ];
 
 const CAT_LABELS = {
@@ -5893,6 +6589,7 @@ const CAT_LABELS = {
   markets:   'Markets',
   platforms: 'Platforms',
   ops:       'Ops',
+  scoring:   'Performance Scoring',
 };
 
 let glossState = { cat: 'all', search: '' };
