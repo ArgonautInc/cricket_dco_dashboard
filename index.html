@@ -6062,9 +6062,14 @@ const PV_METRICS = [
   { key:'ctr',    label:'CTR',         stageOnly:false, fmt:v=>(v*100).toFixed(3)+'%' },
   { key:'gmOrd',  label:'GM Orders',   stageOnly:false, fmt:v=>FMT.num(v) },
   { key:'hmOrd',  label:'HM Orders',   stageOnly:true,  fmt:v=>FMT.num(v) },
+  /* lpvr/cvr/tdor combine GM + HM — only computable where HM fields exist
+     (AN_STAGES), so they're stageOnly like the HM-specific metrics below. */
+  { key:'lpvr',   label:'LPVR',        stageOnly:true,  fmt:v=>(v*100).toFixed(3)+'%' },
   { key:'gmLpvr', label:'GM LPVR',     stageOnly:false, fmt:v=>(v*100).toFixed(3)+'%' },
   { key:'hmLpvr', label:'HM LPVR',     stageOnly:true,  fmt:v=>(v*100).toFixed(3)+'%' },
+  { key:'cvr',    label:'CVR',         stageOnly:true,  fmt:v=>(v*100).toFixed(3)+'%' },
   { key:'gmCvr',  label:'GM CVR',      stageOnly:false, fmt:v=>(v*100).toFixed(3)+'%' },
+  { key:'tdor',   label:'TDOR',        stageOnly:true,  fmt:v=>(v*100).toFixed(4)+'%' },
   { key:'gmTdor', label:'GM TDOR',     stageOnly:true,  fmt:v=>(v*100).toFixed(4)+'%' },
   { key:'spend',  label:'Total Cost',  stageOnly:false, fmt:v=>v>0?FMT.dollar(v):'—' },
   { key:'cpc',    label:'CPC',         stageOnly:false, fmt:v=>v>0?'$'+v.toFixed(2):'—' },
@@ -6110,6 +6115,9 @@ function pvAggregate(rows, metric) {
     case 'cpc':    return clicks ? spend/clicks : 0;
     case 'gmLpvr': return imps   ? wGmLp/imps  : 0;
     case 'hmLpvr': return imps   ? wHmLp/imps  : 0;
+    case 'lpvr':   return imps   ? (wGmLp+wHmLp)/imps : 0;
+    case 'cvr':    return clicks ? (gmOrd+hmOrd)/clicks : 0;
+    case 'tdor':   return imps   ? (gmOrd+hmOrd)/imps : 0;
     case 'gmTdor': return imps   ? wGmTd/imps  : 0;
     case 'freq':   return imps   ? wFreq/imps  : 0;
     default: return 0;
