@@ -1539,6 +1539,13 @@ body.compact .chart-card      { padding: 14px 16px; }
             <button class="active" data-q="Q2">Q2</button>
             <button class="active" data-q="Q3">Q3</button>
           </div>
+          <!-- Date range (hidden until day-level data loads) -->
+          <div id="ovDateRangeGroup" style="display:none;align-items:center;gap:6px">
+            <input type="date" id="ovDateFrom" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px" title="Filter to on/after this date">
+            <span style="color:var(--muted);font-size:12px">to</span>
+            <input type="date" id="ovDateTo" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px" title="Filter to on/before this date">
+            <button class="btn-ghost btn-sm" id="ovDateRangeClear" style="padding:4px 10px">Reset</button>
+          </div>
           <button class="btn-ghost btn-sm" id="downloadOneSheeterBtn" onclick="generateOneSheet()" title="Download One-Sheeter" style="display:flex;align-items:center;gap:6px;padding:7px 14px;font-size:13px">
             <svg-icon name="print" size="14"></svg-icon> One-Sheeter
           </button>
@@ -1622,6 +1629,13 @@ body.compact .chart-card      { padding: 14px 16px; }
           <button class="active" data-q="Q1">Q1</button>
           <button class="active" data-q="Q2">Q2</button>
           <button class="active" data-q="Q3">Q3</button>
+        </div>
+        <!-- Date range (hidden until day-level data loads) -->
+        <div id="anDateRangeGroup" style="display:none;align-items:center;gap:6px">
+          <input type="date" id="anDateFrom" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px" title="Filter to on/after this date">
+          <span style="color:var(--muted);font-size:12px">to</span>
+          <input type="date" id="anDateTo" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px" title="Filter to on/before this date">
+          <button class="btn-ghost btn-sm" id="anDateRangeClear" style="padding:4px 10px">Reset</button>
         </div>
         <select class="an-select" id="anStageFilter">
           <option value="all">All Stages</option>
@@ -1783,6 +1797,13 @@ body.compact .chart-card      { padding: 14px 16px; }
             <button class="active" data-q="Q1">Q1</button>
             <button class="active" data-q="Q2">Q2</button>
             <button class="active" data-q="Q3">Q3</button>
+          </div>
+          <!-- Date range (hidden until day-level data loads) -->
+          <div id="crDateRangeGroup" style="display:none;align-items:center;gap:6px">
+            <input type="date" id="crDateFrom" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px" title="Filter to on/after this date">
+            <span style="color:var(--muted);font-size:12px">to</span>
+            <input type="date" id="crDateTo" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px" title="Filter to on/before this date">
+            <button class="btn-ghost btn-sm" id="crDateRangeClear" style="padding:4px 10px">Reset</button>
           </div>
           <select class="an-select" id="crStageFilter">
             <option value="all">All Stages</option>
@@ -2241,6 +2262,13 @@ body.compact .chart-card      { padding: 14px 16px; }
             <button class="active" data-q="Q3">Q3</button>
           </div>
         </div>
+        <div class="pv-control-group" id="pvDateRangeGroup" style="display:none;align-items:center;gap:6px">
+          <span class="pv-label">Date Range</span>
+          <input type="date" id="pvDateFrom" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px">
+          <span style="color:var(--muted);font-size:12px">to</span>
+          <input type="date" id="pvDateTo" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px">
+          <button class="btn-ghost btn-sm" id="pvDateRangeClear" style="padding:4px 10px">Reset</button>
+        </div>
         <div class="pv-control-group">
           <span class="pv-label">Data</span>
           <div class="seg-tabs" id="pvSrcToggle">
@@ -2671,6 +2699,204 @@ async function loadBigQueryData() {
   } catch(e) {
     console.warn('BigQuery load failed, using static data:', e);
   }
+}
+
+/* ── Day-level stage/creative breakdown ───────────────────────
+   Powers the date-range filter on Overview/Analytics/Pivot/Creatives
+   Library. Same source view and date-field-detection approach as
+   tryLoadTrendDailyData (Trends tab) — tries several likely column
+   names since the exact date field isn't guaranteed, and fails
+   silently (date-range controls simply stay hidden) if none match.
+   Raw counts are stored (not pre-divided ratios) so a selected date
+   window can sum-then-divide correctly instead of averaging rates. */
+let AN_DAILY_STAGE_RAW    = [];
+let AN_DAILY_CREATIVE_RAW = [];
+let anDailyLoaded    = false;
+let anDailyAttempted = false;
+
+async function tryLoadStageCreativeDailyData() {
+  if (!ACCESS_TOKEN || anDailyAttempted) return;
+  anDailyAttempted = true;
+  const dateFields = ['Date Breakdown', 'Date', 'Report Date', 'Day'];
+
+  for (const field of dateFields) {
+    try {
+      const [stageRows, creativeRows] = await Promise.all([
+        bqQuery(`
+          SELECT
+            CAST(\`${field}\` AS STRING) as day,
+            \`Flight\` as q,
+            CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
+            \`Segment\` as stage,
+            SUM(\`Total Ads Requested\`) as imps,
+            SUM(\`Clicks\`) as clicks,
+            SUM(\`CKT_bNON_HISPANIC_ORDER Count\`) as gmOrdCount,
+            SUM(\`CKT_bHISPANIC_ORDER Count\`) as hmOrdCount,
+            SUM(\`CKT_bNON_HISPANIC_GLOBAL_RT Count\`) as gmLpvCount,
+            SUM(\`CKT_bHISPANIC_GLOBAL_RT Count\`) as hmLpvCount,
+            SUM(\`Total Cost\`) as spend,
+            SUM(\`Cookie ID Reach: Total Ad Reach\`) as reach
+          FROM \`crk-dco-dash.reporting_data.deliveries_view\`
+          WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
+          GROUP BY day, q, mkt, stage
+        `),
+        bqQuery(`
+          SELECT
+            CAST(\`${field}\` AS STRING) as day,
+            \`Flight\` as q,
+            CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
+            \`Segment\` as stage,
+            \`Creative Offer Name\` as creative,
+            SUM(\`Total Ads Requested\`) as imps,
+            SUM(\`Clicks\`) as clicks,
+            SUM(\`CKT_bNON_HISPANIC_ORDER Count\`) as gmOrdCount,
+            SUM(\`CKT_bNON_HISPANIC_GLOBAL_RT Count\`) as gmLpvCount,
+            SUM(\`Total Cost\`) as spend
+          FROM \`crk-dco-dash.reporting_data.deliveries_view\`
+          WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
+            AND \`Creative Offer Name\` IS NOT NULL
+          GROUP BY day, q, mkt, stage, creative
+        `),
+      ]);
+
+      if (stageRows.length || creativeRows.length) {
+        AN_DAILY_STAGE_RAW = stageRows.map(r => ({
+          day: r.day, q: r.q, mkt: r.mkt, stage: r.stage,
+          imps:   Number(r.imps)   || 0,
+          clicks: Number(r.clicks) || 0,
+          gmOrdCount: Number(r.gmOrdCount) || 0,
+          hmOrdCount: Number(r.hmOrdCount) || 0,
+          gmLpvCount: Number(r.gmLpvCount) || 0,
+          hmLpvCount: Number(r.hmLpvCount) || 0,
+          spend:  Number(r.spend)  || 0,
+          reach:  Number(r.reach)  || 0,
+        }));
+        AN_DAILY_CREATIVE_RAW = creativeRows.map(r => ({
+          day: r.day, q: r.q, mkt: r.mkt, stage: r.stage, creative: r.creative || '',
+          imps:   Number(r.imps)   || 0,
+          clicks: Number(r.clicks) || 0,
+          gmOrdCount: Number(r.gmOrdCount) || 0,
+          gmLpvCount: Number(r.gmLpvCount) || 0,
+          spend:  Number(r.spend)  || 0,
+        }));
+        anDailyLoaded = true;
+        if (typeof onStageCreativeDailyLoaded === 'function') onStageCreativeDailyLoaded();
+        return;
+      }
+    } catch(e) { /* try next field name */ }
+  }
+  /* All field names failed — the date-range controls on Overview/
+     Analytics/Pivot/Creatives Library simply stay hidden (same graceful
+     fallback as Trends' "Daily view unavailable" case). */
+}
+
+/* Raw-count aggregator — sums first, divides once, matching the
+   sum-then-divide convention used everywhere else in this file
+   (pvAggregate, psComputeMetrics) rather than averaging pre-computed
+   rates across days. */
+function aggStageRawRows(rows) {
+  const groups = new Map();
+  rows.forEach(r => {
+    const key = `${r.q}|${r.mkt}|${r.stage}`;
+    if (!groups.has(key)) groups.set(key, { q:r.q, mkt:r.mkt, stage:r.stage,
+      imps:0, clicks:0, gmOrdCount:0, hmOrdCount:0, gmLpvCount:0, hmLpvCount:0, spend:0, reach:0 });
+    const g = groups.get(key);
+    g.imps += r.imps; g.clicks += r.clicks;
+    g.gmOrdCount += r.gmOrdCount; g.hmOrdCount += r.hmOrdCount;
+    g.gmLpvCount += r.gmLpvCount; g.hmLpvCount += r.hmLpvCount;
+    g.spend += r.spend; g.reach += r.reach;
+  });
+  return [...groups.values()].map(g => ({
+    q: g.q, mkt: g.mkt, stage: g.stage,
+    imps: g.imps, clicks: g.clicks,
+    ctr:    g.imps   ? g.clicks/g.imps       : 0,
+    gmOrd:  g.gmOrdCount, hmOrd: g.hmOrdCount,
+    gmLpvr: g.imps   ? g.gmLpvCount/g.imps   : 0,
+    hmLpvr: g.imps   ? g.hmLpvCount/g.imps   : 0,
+    gmTdor: g.imps   ? g.gmOrdCount/g.imps   : 0,
+    hmTdor: g.imps   ? g.hmOrdCount/g.imps   : 0,
+    gmCvr:  g.clicks ? g.gmOrdCount/g.clicks : 0,
+    hmCvr:  g.clicks ? g.hmOrdCount/g.clicks : 0,
+    spend:  g.spend,
+    cpc:    g.clicks ? g.spend/g.clicks      : 0,
+    freq:   g.reach  ? g.imps/g.reach        : 1,
+  }));
+}
+
+function aggCreativeRawRows(rows) {
+  const groups = new Map();
+  rows.forEach(r => {
+    const key = `${r.q}|${r.mkt}|${r.stage}|${r.creative}`;
+    if (!groups.has(key)) groups.set(key, { q:r.q, mkt:r.mkt, stage:r.stage, creative:r.creative,
+      imps:0, clicks:0, gmOrdCount:0, gmLpvCount:0, spend:0 });
+    const g = groups.get(key);
+    g.imps += r.imps; g.clicks += r.clicks;
+    g.gmOrdCount += r.gmOrdCount; g.gmLpvCount += r.gmLpvCount; g.spend += r.spend;
+  });
+  return [...groups.values()].map(g => ({
+    q: g.q, mkt: g.mkt, stage: g.stage, creative: g.creative,
+    imps: g.imps, clicks: g.clicks,
+    ctr:    g.imps   ? g.clicks/g.imps       : 0,
+    gmOrd:  g.gmOrdCount,
+    gmLpvr: g.imps   ? g.gmLpvCount/g.imps   : 0,
+    gmCvr:  g.clicks ? g.gmOrdCount/g.clicks : 0,
+    spend:  g.spend,
+    cpc:    g.clicks ? g.spend/g.clicks      : 0,
+  }));
+}
+
+/* Remaps a date-windowed aggregation back onto the STATIC AN_STAGES/
+   AN_CREATIVES array's exact shape/order (never a differently-sized/
+   ordered array) — rows with no data in the selected window show as
+   zeroed rather than disappearing or shifting position. This matters
+   because the Creatives tab keys per-row overrides (Innovid URL,
+   uploaded thumbnail) by array position — swapping in a differently-
+   shaped array when a date filter is active would silently misapply
+   those saved overrides to the wrong creative. */
+function effectiveStageRows(dateFrom, dateTo) {
+  if (!anDailyLoaded || (!dateFrom && !dateTo)) return AN_STAGES;
+  let rows = AN_DAILY_STAGE_RAW;
+  if (dateFrom) rows = rows.filter(r => r.day >= dateFrom);
+  if (dateTo)   rows = rows.filter(r => r.day <= dateTo);
+  const byKey = new Map(aggStageRawRows(rows).map(g => [`${g.q}|${g.mkt}|${g.stage}`, g]));
+  const zero  = { imps:0, clicks:0, ctr:0, gmOrd:0, hmOrd:0, gmLpvr:0, hmLpvr:0, gmTdor:0, hmTdor:0, gmCvr:0, hmCvr:0, spend:0, cpc:0, freq:1 };
+  return AN_STAGES.map(s => ({ ...s, ...(byKey.get(`${s.q}|${s.mkt}|${s.stage}`) || zero) }));
+}
+
+function effectiveCreativeRows(dateFrom, dateTo) {
+  if (!anDailyLoaded || (!dateFrom && !dateTo)) return AN_CREATIVES;
+  let rows = AN_DAILY_CREATIVE_RAW;
+  if (dateFrom) rows = rows.filter(r => r.day >= dateFrom);
+  if (dateTo)   rows = rows.filter(r => r.day <= dateTo);
+  const byKey = new Map(aggCreativeRawRows(rows).map(g => [`${g.q}|${g.mkt}|${g.stage}|${g.creative}`, g]));
+  const zero  = { imps:0, clicks:0, ctr:0, gmOrd:0, gmLpvr:0, gmCvr:0, spend:0, cpc:0 };
+  return AN_CREATIVES.map(c => ({ ...c, ...(byKey.get(`${c.q}|${c.mkt}|${c.stage}|${c.creative}`) || zero) }));
+}
+
+/* Reveals the date-range picker on every tab that has one, bounds each to
+   the loaded data's actual date span, and re-renders. Called once, after
+   the daily breakdown load succeeds — by call-time every render function
+   referenced below is already defined regardless of script-tag order,
+   since this only ever fires asynchronously after the full page loads. */
+function onStageCreativeDailyLoaded() {
+  const days = [...new Set([
+    ...AN_DAILY_STAGE_RAW.map(r => r.day),
+    ...AN_DAILY_CREATIVE_RAW.map(r => r.day),
+  ])].sort();
+  if (!days.length) return;
+  ['ov','an','pv','cr'].forEach(prefix => {
+    const group = document.getElementById(prefix + 'DateRangeGroup');
+    const from  = document.getElementById(prefix + 'DateFrom');
+    const to    = document.getElementById(prefix + 'DateTo');
+    if (!group || !from || !to) return;
+    group.style.display = 'flex';
+    from.min = to.min = days[0];
+    from.max = to.max = days[days.length - 1];
+  });
+  if (typeof renderOverview  === 'function') renderOverview();
+  if (typeof renderAnalytics === 'function') renderAnalytics();
+  if (typeof renderPivot     === 'function') renderPivot();
+  if (typeof renderCreatives === 'function') renderCreatives();
 }
 
 /* ── Cloud Storage delivery-report fallback ──────────────────
@@ -3164,6 +3390,14 @@ function toggleQuarter(current, q) {
                   : ALL_QS.filter(x => current.includes(x) || x === q);
 }
 function qsLabel(qs) { return qs.length === 3 ? 'Q1 + Q2 + Q3' : qs.join(' + '); }
+/* Local-calendar-date ISO string (YYYY-MM-DD) — deliberately avoids
+   Date.toISOString(), which converts to UTC and can shift the date near
+   midnight depending on the browser's timezone offset. Matches against
+   the plain YYYY-MM-DD strings used by <input type="date"> and returned
+   by BigQuery's CAST(... AS STRING) date columns. */
+function isoLocal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
 /** Switch visible tab and update sidebar highlight */
 function switchTab(name) {
@@ -3447,7 +3681,50 @@ function filterQuarters(qSel) {
   return result;
 }
 
-function computeTotals(qSel, mktSel) {
+/* Date-filtered path: aggregate directly from the day-level breakdown
+   (AN_DAILY_STAGE_RAW) instead of the quarter-level PIVOT_DATA.quarters,
+   summing raw counts per market before dividing. Only engaged when a date
+   window is set and the daily breakdown has loaded — with no window, the
+   original quarter-level behavior below is untouched. */
+function computeTotalsDateFiltered(qKeys, mktSel, dateFrom, dateTo) {
+  let rows = AN_DAILY_STAGE_RAW.filter(r => qKeys.includes(r.q));
+  if (dateFrom) rows = rows.filter(r => r.day >= dateFrom);
+  if (dateTo)   rows = rows.filter(r => r.day <= dateTo);
+
+  const byMkt = { GM:{imps:0,clicks:0,gmOrd:0,hmOrd:0,spend:0,_lpv:0}, USH:{imps:0,clicks:0,gmOrd:0,hmOrd:0,spend:0,_lpv:0} };
+  rows.forEach(r => {
+    const b = byMkt[r.mkt]; if (!b) return;
+    b.imps += r.imps; b.clicks += r.clicks;
+    b.gmOrd += r.gmOrdCount; b.hmOrd += r.hmOrdCount;
+    b.spend += r.spend; b._lpv += r.gmLpvCount;
+  });
+  ['GM','USH'].forEach(m => {
+    const b = byMkt[m];
+    b.ctr    = b.imps   ? b.clicks/b.imps  : 0;
+    b.gmLpvr = b.imps   ? b._lpv/b.imps    : 0;
+    b.gmCvr  = b.clicks ? b.gmOrd/b.clicks : 0;
+    b.cpc    = b.clicks ? b.spend/b.clicks : 0;
+  });
+
+  const mkts = mktSel === 'all' ? ['GM','USH'] : [mktSel];
+  const t = { imps:0, clicks:0, gmOrd:0, hmOrd:0, spend:0 };
+  mkts.forEach(m => {
+    t.imps   += byMkt[m].imps;
+    t.clicks += byMkt[m].clicks;
+    t.gmOrd  += byMkt[m].gmOrd;
+    t.hmOrd  += byMkt[m].hmOrd;
+    t.spend  += byMkt[m].spend;
+  });
+  t.ctr    = t.imps   ? t.clicks / t.imps : 0;
+  t.gmLpvr = mkts.reduce((s,m)=>s+(byMkt[m].gmLpvr||0),0) / mkts.length;
+  t.gmCvr  = t.clicks ? t.gmOrd  / t.clicks : 0;
+  t.cpc    = t.clicks ? t.spend  / t.clicks : 0;
+  t.byMkt  = byMkt;
+  return t;
+}
+
+function computeTotals(qSel, mktSel, dateFrom, dateTo) {
+  if (anDailyLoaded && (dateFrom || dateTo)) return computeTotalsDateFiltered(normQs(qSel), mktSel, dateFrom, dateTo);
   const byMkt = filterQuarters(qSel);
   const mkts  = mktSel === 'all' ? ['GM','USH'] : [mktSel];
   const t = { imps:0, clicks:0, gmOrd:0, hmOrd:0, spend:0 };
@@ -3466,8 +3743,29 @@ function computeTotals(qSel, mktSel) {
   return t;
 }
 
-function computeStages(qSel, mktSel) {
+function computeStages(qSel, mktSel, dateFrom, dateTo) {
   const qKeys = normQs(qSel);
+
+  if (anDailyLoaded && (dateFrom || dateTo)) {
+    let rows = AN_DAILY_STAGE_RAW.filter(r => qKeys.includes(r.q) && (mktSel === 'all' || r.mkt === mktSel));
+    if (dateFrom) rows = rows.filter(r => r.day >= dateFrom);
+    if (dateTo)   rows = rows.filter(r => r.day <= dateTo);
+    const map = {};
+    rows.forEach(r => {
+      if (!map[r.stage]) map[r.stage] = { stage:r.stage, imps:0, clicks:0, gmOrd:0, _lpv:0 };
+      map[r.stage].imps   += r.imps;
+      map[r.stage].clicks += r.clicks;
+      map[r.stage].gmOrd  += r.gmOrdCount;
+      map[r.stage]._lpv   += r.gmLpvCount;
+    });
+    return Object.values(map).map(s => ({
+      stage: s.stage, imps: s.imps, clicks: s.clicks, gmOrd: s.gmOrd,
+      ctr:    s.imps   ? s.clicks / s.imps : 0,
+      gmLpvr: s.imps   ? s._lpv   / s.imps : 0,
+      gmCvr:  s.clicks ? s.gmOrd  / s.clicks : 0,
+    })).sort((a,b) => b.imps - a.imps);
+  }
+
   const rows = PIVOT_DATA.stages.filter(r =>
     qKeys.includes(r.q) &&
     (mktSel === 'all' || r.mkt === mktSel)
@@ -3541,9 +3839,11 @@ function renderOvKpis(t, qSel, prevQ) {
 }
 
 /* ── Trend chart render ─────────────────────────────────── */
-function renderOvTrend(qSel) {
+function renderOvTrend(qSel, dateFrom, dateTo) {
   const qKeys = normQs(qSel);
-  const days = DAILY_DATA.filter(d => qKeys.includes(d.q));
+  let days = DAILY_DATA.filter(d => qKeys.includes(d.q));
+  if (dateFrom) days = days.filter(d => isoLocal(d.d) >= dateFrom);
+  if (dateTo)   days = days.filter(d => isoLocal(d.d) <= dateTo);
   const vals = days.map(d => d.imps);
   document.getElementById('ovTrendChart').innerHTML = svgLine(vals, {h:190,color:'#5BC500'});
 
@@ -3612,14 +3912,16 @@ function renderOvFunnelTable(stages) {
 /* ── Top-level overview render ──────────────────────────── */
 let ovQs  = [...ALL_QS];
 let ovMkt = 'all';
+let ovDateFrom = null;
+let ovDateTo   = null;
 
 function renderOverview() {
-  const totals = computeTotals(ovQs, ovMkt);
-  const stages = computeStages(ovQs, ovMkt);
+  const totals = computeTotals(ovQs, ovMkt, ovDateFrom, ovDateTo);
+  const stages = computeStages(ovQs, ovMkt, ovDateFrom, ovDateTo);
   const mktLabel = ovMkt === 'all' ? 'GM + USH' : ovMkt;
   const qLabel   = qsLabel(ovQs);
   renderOvKpis(totals, ovQs);
-  renderOvTrend(ovQs);
+  renderOvTrend(ovQs, ovDateFrom, ovDateTo);
   if (ovMkt !== 'all') {
     // When a single market is selected, show stage donut instead
     const stagePalette = stages.slice(0,4).map((s,i)=>({
@@ -3658,12 +3960,27 @@ function wireOverviewFilters() {
     btn.classList.add('active');
     renderOverview();
   });
+  document.getElementById('ovDateFrom').addEventListener('change', e => {
+    ovDateFrom = e.target.value || null;
+    renderOverview();
+  });
+  document.getElementById('ovDateTo').addEventListener('change', e => {
+    ovDateTo = e.target.value || null;
+    renderOverview();
+  });
+  document.getElementById('ovDateRangeClear').addEventListener('click', () => {
+    ovDateFrom = ovDateTo = null;
+    document.getElementById('ovDateFrom').value = '';
+    document.getElementById('ovDateTo').value   = '';
+    renderOverview();
+  });
 }
 
 /* ── Register with shell ────────────────────────────────── */
 window.__onShellReady = function(user) {
   wireOverviewFilters();
   renderOverview();
+  if (typeof tryLoadStageCreativeDailyData === 'function') tryLoadStageCreativeDailyData();
   // Re-render when tab becomes active (in case data changes)
   const prev = window.__onTabSwitch;
   window.__onTabSwitch = function(tab) {
@@ -3877,7 +4194,7 @@ async function autoLoadCloudOfferMap() {
 }
 
 /* ── Filter state ────────────────────────────────────────── */
-const anState = { qs:[...ALL_QS], mkt:'all', stage:'all', view:'stage', search:'', sortCol:'imps', sortDir:-1 };
+const anState = { qs:[...ALL_QS], mkt:'all', stage:'all', view:'stage', search:'', dateFrom:null, dateTo:null, sortCol:'imps', sortDir:-1 };
 
 function anFilter(rows) {
   return rows.filter(r =>
@@ -4022,11 +4339,13 @@ function renderAnTable(rows, cols) {
 
 /* ── Top-level render ────────────────────────────────────── */
 function renderAnalytics() {
-  const isCreative = anState.view === 'creative';
-  const pool  = isCreative ? AN_CREATIVES : AN_STAGES;
+  const isCreative  = anState.view === 'creative';
+  const stageRows   = effectiveStageRows(anState.dateFrom, anState.dateTo);
+  const creativeRows = effectiveCreativeRows(anState.dateFrom, anState.dateTo);
+  const pool  = isCreative ? creativeRows : stageRows;
   const rows  = anFilter(pool);
-  renderAnKpis(anFilter(AN_STAGES));     // KPIs always from stage data
-  renderAnCharts(anFilter(AN_STAGES));   // Charts always from stage data
+  renderAnKpis(anFilter(stageRows));     // KPIs always from stage data
+  renderAnCharts(anFilter(stageRows));   // Charts always from stage data
   renderAnTable(rows, isCreative ? CREATIVE_COLS : STAGE_COLS);
 }
 
@@ -4043,8 +4362,8 @@ function exportAnXlsx() {
   }
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheetFromData(STAGE_COLS,    anFilter(AN_STAGES)),    'By Stage');
-  XLSX.utils.book_append_sheet(wb, sheetFromData(CREATIVE_COLS, anFilter(AN_CREATIVES)), 'By Creative');
+  XLSX.utils.book_append_sheet(wb, sheetFromData(STAGE_COLS,    anFilter(effectiveStageRows(anState.dateFrom, anState.dateTo))),    'By Stage');
+  XLSX.utils.book_append_sheet(wb, sheetFromData(CREATIVE_COLS, anFilter(effectiveCreativeRows(anState.dateFrom, anState.dateTo))), 'By Creative');
 
   const filename = `CRKT_Analytics_${q}_${mkt}_${new Date().toISOString().slice(0,10)}.xlsx`;
   XLSX.writeFile(wb, filename);
@@ -4068,6 +4387,20 @@ document.getElementById('anQFilter').addEventListener('click', e => {
   if (!next) return; // can't deselect the last remaining quarter
   anState.qs = next;
   btn.classList.toggle('active', anState.qs.includes(btn.dataset.q));
+  renderAnalytics();
+});
+document.getElementById('anDateFrom').addEventListener('change', e => {
+  anState.dateFrom = e.target.value || null;
+  renderAnalytics();
+});
+document.getElementById('anDateTo').addEventListener('change', e => {
+  anState.dateTo = e.target.value || null;
+  renderAnalytics();
+});
+document.getElementById('anDateRangeClear').addEventListener('click', () => {
+  anState.dateFrom = anState.dateTo = null;
+  document.getElementById('anDateFrom').value = '';
+  document.getElementById('anDateTo').value   = '';
   renderAnalytics();
 });
 
@@ -4341,7 +4674,15 @@ function crSaveUserList() { localStorage.setItem(CR_KEY+'_user', JSON.stringify(
 
 /* ── Merge base + user creatives ─────────────────────────── */
 function crGetAll() {
-  const base = (typeof AN_CREATIVES !== 'undefined' ? AN_CREATIVES : []).map((c, i) => {
+  // effectiveCreativeRows() preserves AN_CREATIVES's exact length/order
+  // (rows with no data in the selected date window come back zeroed, not
+  // dropped) — so positional ids ('base_'+i) stay stable across date
+  // filter changes, and crSaved overrides (Innovid URL, uploaded
+  // thumbnail) never silently apply to the wrong creative.
+  const source = (typeof AN_CREATIVES !== 'undefined')
+    ? effectiveCreativeRows(crState.dateFrom, crState.dateTo)
+    : [];
+  const base = source.map((c, i) => {
     const id = 'base_' + i;
     const ov = crSaved[id] || {};
     return { ...c, id, innovidUrl: ov.innovidUrl ?? '', thumbDataUrl: ov.thumbDataUrl ?? null };
@@ -4350,7 +4691,7 @@ function crGetAll() {
 }
 
 /* ── Filter state ────────────────────────────────────────── */
-const crState = { qs:[...ALL_QS], mkt:'all', stage:'all', search:'' };
+const crState = { qs:[...ALL_QS], mkt:'all', stage:'all', search:'', dateFrom:null, dateTo:null };
 
 function crFilter(rows) {
   return rows.filter(r =>
@@ -4690,6 +5031,20 @@ document.getElementById('crQFilter').addEventListener('click', e => {
   if (!next) return; // can't deselect the last remaining quarter
   crState.qs = next;
   btn.classList.toggle('active', crState.qs.includes(btn.dataset.q));
+  renderCreatives();
+});
+document.getElementById('crDateFrom').addEventListener('change', e => {
+  crState.dateFrom = e.target.value || null;
+  renderCreatives();
+});
+document.getElementById('crDateTo').addEventListener('change', e => {
+  crState.dateTo = e.target.value || null;
+  renderCreatives();
+});
+document.getElementById('crDateRangeClear').addEventListener('click', () => {
+  crState.dateFrom = crState.dateTo = null;
+  document.getElementById('crDateFrom').value = '';
+  document.getElementById('crDateTo').value   = '';
   renderCreatives();
 });
 document.getElementById('crStageFilter').addEventListener('change', e => {
@@ -6159,10 +6514,12 @@ const PV_DIMS = {
   creative: { label:'Creative', creativeOnly:true  },
 };
 
-let pvState = { src:'creatives', rowDim:'creative', colDim:'stage', metrics:['imps'], sortMetric:'imps', sortCol:'__total__', sortDir:-1, mkt:'all', qs:[...ALL_QS] };
+let pvState = { src:'creatives', rowDim:'creative', colDim:'stage', metrics:['imps'], sortMetric:'imps', sortCol:'__total__', sortDir:-1, mkt:'all', qs:[...ALL_QS], dateFrom:null, dateTo:null };
 
 function pvPool() {
-  const raw = pvState.src === 'creatives' ? AN_CREATIVES : AN_STAGES;
+  const raw = pvState.src === 'creatives'
+    ? effectiveCreativeRows(pvState.dateFrom, pvState.dateTo)
+    : effectiveStageRows(pvState.dateFrom, pvState.dateTo);
   return raw.filter(r =>
     (pvState.mkt === 'all' || r.mkt === pvState.mkt) &&
     pvState.qs.includes(r.q)
@@ -6346,6 +6703,23 @@ document.getElementById('pvQFilter').addEventListener('click', e => {
   if (!next) return; // can't deselect the last remaining quarter
   pvState.qs = next;
   btn.classList.toggle('active', pvState.qs.includes(btn.dataset.q));
+  pvState.sortCol = '__total__'; pvState.sortDir = -1;
+  renderPivot();
+});
+document.getElementById('pvDateFrom').addEventListener('change', e => {
+  pvState.dateFrom = e.target.value || null;
+  pvState.sortCol = '__total__'; pvState.sortDir = -1;
+  renderPivot();
+});
+document.getElementById('pvDateTo').addEventListener('change', e => {
+  pvState.dateTo = e.target.value || null;
+  pvState.sortCol = '__total__'; pvState.sortDir = -1;
+  renderPivot();
+});
+document.getElementById('pvDateRangeClear').addEventListener('click', () => {
+  pvState.dateFrom = pvState.dateTo = null;
+  document.getElementById('pvDateFrom').value = '';
+  document.getElementById('pvDateTo').value   = '';
   pvState.sortCol = '__total__'; pvState.sortDir = -1;
   renderPivot();
 });
