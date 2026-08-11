@@ -1533,12 +1533,11 @@ body.compact .chart-card      { padding: 14px 16px; }
             <button data-mkt="GM">GM</button>
             <button data-mkt="USH">USH</button>
           </div>
-          <!-- Quarter filter -->
-          <div class="seg-tabs" id="ovQFilter">
-            <button data-q="all" class="active">All</button>
-            <button data-q="Q1">Q1</button>
-            <button data-q="Q2">Q2</button>
-            <button data-q="Q3">Q3</button>
+          <!-- Quarter filter (multi-select; at least one always on) -->
+          <div class="seg-tabs green" id="ovQFilter">
+            <button class="active" data-q="Q1">Q1</button>
+            <button class="active" data-q="Q2">Q2</button>
+            <button class="active" data-q="Q3">Q3</button>
           </div>
           <button class="btn-ghost btn-sm" id="downloadOneSheeterBtn" onclick="generateOneSheet()" title="Download One-Sheeter" style="display:flex;align-items:center;gap:6px;padding:7px 14px;font-size:13px">
             <svg-icon name="print" size="14"></svg-icon> One-Sheeter
@@ -1619,11 +1618,10 @@ body.compact .chart-card      { padding: 14px 16px; }
           <button data-mkt="GM">GM</button>
           <button data-mkt="USH">USH</button>
         </div>
-        <div class="seg-tabs" id="anQFilter">
-          <button class="active" data-q="all">All Quarters</button>
-          <button data-q="Q1">Q1</button>
-          <button data-q="Q2">Q2</button>
-          <button data-q="Q3">Q3</button>
+        <div class="seg-tabs green" id="anQFilter">
+          <button class="active" data-q="Q1">Q1</button>
+          <button class="active" data-q="Q2">Q2</button>
+          <button class="active" data-q="Q3">Q3</button>
         </div>
         <select class="an-select" id="anStageFilter">
           <option value="all">All Stages</option>
@@ -1781,11 +1779,10 @@ body.compact .chart-card      { padding: 14px 16px; }
             <button data-mkt="GM">GM</button>
             <button data-mkt="USH">USH</button>
           </div>
-          <div class="seg-tabs" id="crQFilter">
-            <button class="active" data-q="all">All Quarters</button>
-            <button data-q="Q1">Q1</button>
-            <button data-q="Q2">Q2</button>
-            <button data-q="Q3">Q3</button>
+          <div class="seg-tabs green" id="crQFilter">
+            <button class="active" data-q="Q1">Q1</button>
+            <button class="active" data-q="Q2">Q2</button>
+            <button class="active" data-q="Q3">Q3</button>
           </div>
           <select class="an-select" id="crStageFilter">
             <option value="all">All Stages</option>
@@ -1873,6 +1870,12 @@ body.compact .chart-card      { padding: 14px 16px; }
           <select class="an-select" id="psFunnelFilter"><option value="all">All Funnels</option></select>
           <select class="an-select" id="psAdTypeFilter"><option value="all">All Ad Types</option></select>
           <div id="psExtraFilters" style="display:contents"></div>
+          <div id="psDateRangeGroup" style="display:none;align-items:center;gap:6px">
+            <input type="date" id="psDateFrom" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px" title="Filter to on/after this date">
+            <span style="color:var(--muted);font-size:12px">to</span>
+            <input type="date" id="psDateTo" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px" title="Filter to on/before this date">
+            <button class="btn-ghost btn-sm" id="psDateRangeClear" style="padding:4px 10px">Reset</button>
+          </div>
           <div class="an-search">
             <svg-icon name="search" size="13" color="var(--muted)"></svg-icon>
             <input id="psSearch" type="text" placeholder="Search creative ID…"/>
@@ -2232,11 +2235,10 @@ body.compact .chart-card      { padding: 14px 16px; }
         </div>
         <div class="pv-control-group">
           <span class="pv-label">Quarter</span>
-          <div class="seg-tabs" id="pvQFilter">
-            <button class="active" data-q="all">All</button>
-            <button data-q="Q1">Q1</button>
-            <button data-q="Q2">Q2</button>
-            <button data-q="Q3">Q3</button>
+          <div class="seg-tabs green" id="pvQFilter">
+            <button class="active" data-q="Q1">Q1</button>
+            <button class="active" data-q="Q2">Q2</button>
+            <button class="active" data-q="Q3">Q3</button>
           </div>
         </div>
         <div class="pv-control-group">
@@ -3148,6 +3150,21 @@ const TAB_TITLES = {
 /* ── Active tab state ────────────────────────────────────── */
 let activeTab = 'overview';
 
+/* ── Shared multi-quarter selection helpers ──────────────────
+   Used by every data tab's quarter filter (Overview, Analytics,
+   Pivot, Creatives, Trends) so they behave identically. */
+const ALL_QS = ['Q1','Q2','Q3'];
+/* Returns the new selected-quarters array after clicking `q`, preserving
+   Q1<Q2<Q3 order — or null if the click should be ignored (can't deselect
+   the last remaining quarter). */
+function toggleQuarter(current, q) {
+  const isActive = current.includes(q);
+  if (isActive && current.length === 1) return null;
+  return isActive ? current.filter(x => x !== q)
+                  : ALL_QS.filter(x => current.includes(x) || x === q);
+}
+function qsLabel(qs) { return qs.length === 3 ? 'Q1 + Q2 + Q3' : qs.join(' + '); }
+
 /** Switch visible tab and update sidebar highlight */
 function switchTab(name) {
   if (!TAB_TITLES[name]) return;
@@ -3397,11 +3414,18 @@ function buildDailyData() {
 let DAILY_DATA = buildDailyData();
 
 /* ── Data aggregation helpers ───────────────────────────── */
+/* Accepts a selected-quarters array (['Q1','Q3']), the legacy 'all', or a
+   single quarter string — normalizes all three to an array of quarters. */
+function normQs(qSel) {
+  if (Array.isArray(qSel)) return qSel;
+  return qSel === 'all' ? [...ALL_QS] : [qSel];
+}
+
 function filterQuarters(qSel) {
   const qs = PIVOT_DATA.quarters;
   const mkts = ['GM','USH'];
   const result = {};
-  const qKeys = qSel === 'all' ? ['Q1','Q2','Q3'] : [qSel];
+  const qKeys = normQs(qSel);
   mkts.forEach(m => {
     result[m] = { imps:0, clicks:0, gmOrd:0, hmOrd:0, ctr:0, gmLpvr:0, gmCvr:0, spend:0, cpc:0, _n:0 };
     qKeys.forEach(q => {
@@ -3443,8 +3467,9 @@ function computeTotals(qSel, mktSel) {
 }
 
 function computeStages(qSel, mktSel) {
+  const qKeys = normQs(qSel);
   const rows = PIVOT_DATA.stages.filter(r =>
-    (qSel  === 'all' || r.q   === qSel)  &&
+    qKeys.includes(r.q) &&
     (mktSel === 'all' || r.mkt === mktSel)
   );
   // Aggregate by stage name
@@ -3467,10 +3492,15 @@ function computeStages(qSel, mktSel) {
 
 /* ── KPI render ─────────────────────────────────────────── */
 function renderOvKpis(t, qSel, prevQ) {
-  // Simple period delta: compare single quarters if possible
+  // QoQ delta pills only make sense against a single prior quarter — so they
+  // show only when exactly one quarter is selected (Q2 vs Q1, Q3 vs Q2). With
+  // multiple quarters selected there's no single baseline, so deltas stay 0
+  // (and the pills hide themselves when delta === 0).
   let deltas = { imps:0, clicks:0, ctr:0, gmOrd:0, gmLpvr:0, gmCvr:0, spend:0, cpc:0 };
-  if (qSel === 'Q2') {
-    const p = computeTotals('Q1', 'all');
+  const qKeys = normQs(qSel);
+  const prevOf = { Q2:'Q1', Q3:'Q2' };
+  if (qKeys.length === 1 && prevOf[qKeys[0]]) {
+    const p = computeTotals(prevOf[qKeys[0]], 'all');
     deltas.imps   = (t.imps   - p.imps)   / (p.imps   || 1);
     deltas.clicks = (t.clicks - p.clicks)  / (p.clicks || 1);
     deltas.ctr    = (t.ctr    - p.ctr)     / (p.ctr    || 1);
@@ -3512,7 +3542,8 @@ function renderOvKpis(t, qSel, prevQ) {
 
 /* ── Trend chart render ─────────────────────────────────── */
 function renderOvTrend(qSel) {
-  const days = DAILY_DATA.filter(d => qSel === 'all' || d.q === qSel);
+  const qKeys = normQs(qSel);
+  const days = DAILY_DATA.filter(d => qKeys.includes(d.q));
   const vals = days.map(d => d.imps);
   document.getElementById('ovTrendChart').innerHTML = svgLine(vals, {h:190,color:'#5BC500'});
 
@@ -3521,7 +3552,11 @@ function renderOvTrend(qSel) {
   document.getElementById('ovTrendAxis').innerHTML =
     picks.map(d => `<span>${d.label}</span>`).join('');
 
-  const label = qSel === 'all' ? 'Jan – Present 2026 (Q1 + Q2 + Q3)' : qSel === 'Q1' ? 'Jan – Mar 2026' : qSel === 'Q2' ? 'Apr – Jun 2026' : 'Jul 2026 – Present';
+  // Single-quarter selections get their calendar range; multi/all get a generic label.
+  const singleRange = { Q1:'Jan – Mar 2026', Q2:'Apr – Jun 2026', Q3:'Jul 2026 – Present' };
+  const label = qKeys.length === 3 ? 'Jan – Present 2026 (Q1 + Q2 + Q3)'
+              : qKeys.length === 1 ? singleRange[qKeys[0]]
+              : qsLabel(qKeys) + ' 2026';
   document.getElementById('ovTrendSub').textContent = label;
 }
 
@@ -3575,16 +3610,16 @@ function renderOvFunnelTable(stages) {
 }
 
 /* ── Top-level overview render ──────────────────────────── */
-let ovQ   = 'all';
+let ovQs  = [...ALL_QS];
 let ovMkt = 'all';
 
 function renderOverview() {
-  const totals = computeTotals(ovQ, ovMkt);
-  const stages = computeStages(ovQ, ovMkt);
+  const totals = computeTotals(ovQs, ovMkt);
+  const stages = computeStages(ovQs, ovMkt);
   const mktLabel = ovMkt === 'all' ? 'GM + USH' : ovMkt;
-  const qLabel   = ovQ   === 'all' ? 'Q1 + Q2 + Q3' : ovQ;
-  renderOvKpis(totals, ovQ);
-  renderOvTrend(ovQ);
+  const qLabel   = qsLabel(ovQs);
+  renderOvKpis(totals, ovQs);
+  renderOvTrend(ovQs);
   if (ovMkt !== 'all') {
     // When a single market is selected, show stage donut instead
     const stagePalette = stages.slice(0,4).map((s,i)=>({
@@ -3609,9 +3644,10 @@ function wireOverviewFilters() {
   document.getElementById('ovQFilter').addEventListener('click', e => {
     const btn = e.target.closest('button[data-q]');
     if (!btn) return;
-    ovQ = btn.dataset.q;
-    document.querySelectorAll('#ovQFilter button').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
+    const next = toggleQuarter(ovQs, btn.dataset.q);
+    if (!next) return; // can't deselect the last remaining quarter
+    ovQs = next;
+    btn.classList.toggle('active', ovQs.includes(btn.dataset.q));
     renderOverview();
   });
   document.getElementById('ovMarketFilter').addEventListener('click', e => {
@@ -3841,11 +3877,11 @@ async function autoLoadCloudOfferMap() {
 }
 
 /* ── Filter state ────────────────────────────────────────── */
-const anState = { q:'all', mkt:'all', stage:'all', view:'stage', search:'', sortCol:'imps', sortDir:-1 };
+const anState = { qs:[...ALL_QS], mkt:'all', stage:'all', view:'stage', search:'', sortCol:'imps', sortDir:-1 };
 
 function anFilter(rows) {
   return rows.filter(r =>
-    (anState.q    === 'all' || r.q    === anState.q)    &&
+    anState.qs.includes(r.q) &&
     (anState.mkt  === 'all' || r.mkt  === anState.mkt)  &&
     (anState.stage === 'all' || r.stage === anState.stage) &&
     (!anState.search || (r.creative || r.stage || '').toLowerCase().includes(anState.search.toLowerCase()))
@@ -3996,7 +4032,7 @@ function renderAnalytics() {
 
 /* ── XLSX export (two sheets: By Stage + By Creative) ─────── */
 function exportAnXlsx() {
-  const q   = anState.q   !== 'all' ? anState.q   : 'All';
+  const q   = anState.qs.length === 3 ? 'All' : anState.qs.join('-');
   const mkt = anState.mkt !== 'all' ? anState.mkt : 'All';
 
   function sheetFromData(cols, rows) {
@@ -4028,8 +4064,10 @@ document.getElementById('anMarketFilter').addEventListener('click', e => {
 document.getElementById('anQFilter').addEventListener('click', e => {
   const btn = e.target.closest('[data-q]');
   if (!btn) return;
-  anState.q = btn.dataset.q;
-  document.querySelectorAll('#anQFilter button').forEach(b=>b.classList.toggle('active', b===btn));
+  const next = toggleQuarter(anState.qs, btn.dataset.q);
+  if (!next) return; // can't deselect the last remaining quarter
+  anState.qs = next;
+  btn.classList.toggle('active', anState.qs.includes(btn.dataset.q));
   renderAnalytics();
 });
 
@@ -4312,11 +4350,11 @@ function crGetAll() {
 }
 
 /* ── Filter state ────────────────────────────────────────── */
-const crState = { q:'all', mkt:'all', stage:'all', search:'' };
+const crState = { qs:[...ALL_QS], mkt:'all', stage:'all', search:'' };
 
 function crFilter(rows) {
   return rows.filter(r =>
-    (crState.q     === 'all' || r.q     === crState.q)     &&
+    crState.qs.includes(r.q) &&
     (crState.mkt   === 'all' || r.mkt   === crState.mkt)   &&
     (crState.stage === 'all' || r.stage === crState.stage) &&
     (!crState.search || (r.creative||'').toLowerCase().includes(crState.search.toLowerCase()))
@@ -4648,8 +4686,10 @@ document.getElementById('crMarketFilter').addEventListener('click', e => {
 });
 document.getElementById('crQFilter').addEventListener('click', e => {
   const btn = e.target.closest('[data-q]'); if (!btn) return;
-  crState.q = btn.dataset.q;
-  document.querySelectorAll('#crQFilter button').forEach(b=>b.classList.toggle('active',b===btn));
+  const next = toggleQuarter(crState.qs, btn.dataset.q);
+  if (!next) return; // can't deselect the last remaining quarter
+  crState.qs = next;
+  btn.classList.toggle('active', crState.qs.includes(btn.dataset.q));
   renderCreatives();
 });
 document.getElementById('crStageFilter').addEventListener('change', e => {
@@ -4918,13 +4958,18 @@ let PS_LOOKUP   = psLoadLookup();
 let crViewState = { view: 'cards' };
 const psState = {
   datasetType: 'daily', publisher:'all', funnel:'all', adType:'all',
-  extraFilters:{}, search:'', sortCol:'composite', sortDir:-1,
+  extraFilters:{}, search:'', dateFrom:null, dateTo:null, sortCol:'composite', sortDir:-1,
 };
 let psScoredCache = []; // full-dataset scored rows (unfiltered) — benchmarks/peer rank
                          // always reflect the whole loaded dataset, not the current filter view
 
 function psRecompute() {
-  const rows = PS_DATASETS[psState.datasetType] || [];
+  let rows = PS_DATASETS[psState.datasetType] || [];
+  // Date-range window is applied BEFORE scoring so benchmarks/percentiles
+  // reflect only the selected window (dateBreakdown is an ISO YYYY-MM-DD
+  // string, which compares correctly as a string).
+  if (psState.dateFrom) rows = rows.filter(r => r.dateBreakdown && r.dateBreakdown >= psState.dateFrom);
+  if (psState.dateTo)   rows = rows.filter(r => r.dateBreakdown && r.dateBreakdown <= psState.dateTo);
   psScoredCache = rows.length ? psScoreRows(rows) : [];
 }
 
@@ -5025,11 +5070,27 @@ function psSortRows(rows) {
   });
 }
 
+/* Show the date-range picker only when the current dataset actually has
+   dates to filter on, and bound the inputs to the range present. */
+function psSyncDateRange(rawRows) {
+  const group = document.getElementById('psDateRangeGroup');
+  if (!group) return;
+  const days = [...new Set(rawRows.map(r => r.dateBreakdown).filter(Boolean))].sort();
+  if (days.length < 2) { group.style.display = 'none'; return; }
+  group.style.display = 'flex';
+  const from = document.getElementById('psDateFrom');
+  const to   = document.getElementById('psDateTo');
+  from.min = to.min = days[0];
+  from.max = to.max = days[days.length - 1];
+}
+
 function renderPerformanceScoring() {
   const rawRows  = PS_DATASETS[psState.datasetType] || [];
   const emptyEl  = document.getElementById('psEmptyState');
   const tableEl  = document.getElementById('psTable');
   if (!emptyEl || !tableEl) return;
+
+  psSyncDateRange(rawRows);
 
   if (!rawRows.length) {
     emptyEl.style.display = '';
@@ -5121,6 +5182,26 @@ function updatePsLookupChip() {
 
 document.getElementById('psDatasetTypeSelect').addEventListener('change', e => {
   psState.datasetType = e.target.value;
+  // Date window is per-dataset — clear it so a filter set on Daily doesn't
+  // silently blank out a Summary/Monthly dataset that has different dates.
+  psState.dateFrom = psState.dateTo = null;
+  document.getElementById('psDateFrom').value = '';
+  document.getElementById('psDateTo').value   = '';
+  renderPerformanceScoring();
+});
+
+document.getElementById('psDateFrom').addEventListener('change', e => {
+  psState.dateFrom = e.target.value || null;
+  renderPerformanceScoring();
+});
+document.getElementById('psDateTo').addEventListener('change', e => {
+  psState.dateTo = e.target.value || null;
+  renderPerformanceScoring();
+});
+document.getElementById('psDateRangeClear').addEventListener('click', () => {
+  psState.dateFrom = psState.dateTo = null;
+  document.getElementById('psDateFrom').value = '';
+  document.getElementById('psDateTo').value   = '';
   renderPerformanceScoring();
 });
 
@@ -5225,16 +5306,16 @@ function generateOneSheet() {
 function _generateOneSheet() {
   const today    = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'2-digit'});
   const todayLong= new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
-  const selQ   = typeof ovQ   !== 'undefined' ? ovQ   : 'all';
+  const selQs  = typeof ovQs !== 'undefined' ? ovQs : ['Q1','Q2','Q3'];
   const selMkt = typeof ovMkt !== 'undefined' ? ovMkt : 'all';
 
   const allQs    = ['Q1','Q2','Q3'];
-  const activeQs = selQ === 'all' ? allQs.filter(q => PIVOT_DATA.quarters[q]) : [selQ];
+  const activeQs = allQs.filter(q => selQs.includes(q) && PIVOT_DATA.quarters[q]);
   const qColors  = { Q1:'#2e7d32', Q2:'#1565c0', Q3:'#e65100' };
   const qRanges  = { Q1:'Jan 1 – Mar 31, 2026', Q2:'Apr 1 – Jun 30, 2026', Q3:'Jul 1 – Present, 2026' };
 
   const mktFilter = r => selMkt === 'all' || r.mkt === selMkt;
-  const qFilter   = r => selQ   === 'all' || r.q   === selQ;
+  const qFilter   = r => selQs.includes(r.q);
   const crRows    = AN_CREATIVES.filter(r => mktFilter(r) && qFilter(r));
 
   // ── Aggregate totals ──
@@ -5315,7 +5396,7 @@ function _generateOneSheet() {
   if (activeQs.length > 1) recs.push(`Review the Trends tab for QoQ CTR and LPVR shifts to inform next quarter's creative strategy and budget allocation.`);
   if (!recs.length) recs.push('Continue monitoring weekly delivery pacing; flag any creative with <0.03% CTR to the agency team for review or refresh.');
 
-  const titleQ  = selQ === 'all' ? activeQs.join(' + ') : selQ;
+  const titleQ  = activeQs.join(' + ');
   const mktLabel = selMkt === 'all' ? 'GM + USH' : selMkt;
 
   const html = `<!DOCTYPE html>
@@ -6004,19 +6085,14 @@ document.getElementById('trMktFilter').addEventListener('click', e => {
 });
 
 /* Quarter filter is multi-select — each button toggles independently,
-   with at least one quarter always kept selected. */
+   with at least one quarter always kept selected (shared toggleQuarter). */
 document.getElementById('trQuarterFilter').addEventListener('click', e => {
   const btn = e.target.closest('[data-q]');
   if (!btn) return;
-  const q = btn.dataset.q;
-  const isActive = btn.classList.contains('active');
-  if (isActive && trState.quarters.length === 1) return; // keep at least one selected
-  if (isActive) {
-    trState.quarters = trState.quarters.filter(x => x !== q);
-  } else {
-    trState.quarters = TR_QS.filter(x => trState.quarters.includes(x) || x === q);
-  }
-  btn.classList.toggle('active', !isActive);
+  const next = toggleQuarter(trState.quarters, btn.dataset.q);
+  if (!next) return; // keep at least one selected
+  trState.quarters = next;
+  btn.classList.toggle('active', trState.quarters.includes(btn.dataset.q));
   renderTrendChart();
 });
 
@@ -6083,13 +6159,13 @@ const PV_DIMS = {
   creative: { label:'Creative', creativeOnly:true  },
 };
 
-let pvState = { src:'creatives', rowDim:'creative', colDim:'stage', metrics:['imps'], sortMetric:'imps', sortCol:'__total__', sortDir:-1, mkt:'all', q:'all' };
+let pvState = { src:'creatives', rowDim:'creative', colDim:'stage', metrics:['imps'], sortMetric:'imps', sortCol:'__total__', sortDir:-1, mkt:'all', qs:[...ALL_QS] };
 
 function pvPool() {
   const raw = pvState.src === 'creatives' ? AN_CREATIVES : AN_STAGES;
   return raw.filter(r =>
     (pvState.mkt === 'all' || r.mkt === pvState.mkt) &&
-    (pvState.q   === 'all' || r.q   === pvState.q)
+    pvState.qs.includes(r.q)
   );
 }
 
@@ -6266,8 +6342,10 @@ document.getElementById('pvMktFilter').addEventListener('click', e => {
 document.getElementById('pvQFilter').addEventListener('click', e => {
   const btn = e.target.closest('[data-q]');
   if (!btn) return;
-  pvState.q = btn.dataset.q;
-  document.querySelectorAll('#pvQFilter button').forEach(b => b.classList.toggle('active', b===btn));
+  const next = toggleQuarter(pvState.qs, btn.dataset.q);
+  if (!next) return; // can't deselect the last remaining quarter
+  pvState.qs = next;
+  btn.classList.toggle('active', pvState.qs.includes(btn.dataset.q));
   pvState.sortCol = '__total__'; pvState.sortDir = -1;
   renderPivot();
 });
