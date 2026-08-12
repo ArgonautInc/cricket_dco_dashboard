@@ -4283,11 +4283,17 @@ function renderAnCharts(stages) {
 }
 
 /* ── Stage table ─────────────────────────────────────────── */
+/* 'reach' (Unique IDs) isn't a field BigQuery/the static data returns
+   directly — it's the exact inverse of the already-stored Freq ratio
+   (Freq = Impressions ÷ Unique IDs), derived once by withReach() below so
+   Impressions/Unique IDs/Freq all sit side by side and Freq is checkable
+   by hand. */
 const STAGE_COLS = [
   {key:'q',      label:'Qtr',      fmt:v=>`<span class="data-badge ${v.toLowerCase()}">${v}</span>`},
   {key:'mkt',    label:'Market',   fmt:v=>`<span class="data-badge ${v.toLowerCase()}">${v}</span>`},
   {key:'stage',  label:'Stage',    fmt:v=>v},
   {key:'imps',   label:'Imps',     fmt:fmtN},
+  {key:'reach',  label:'Unique IDs', fmt:fmtN},
   {key:'freq',   label:'Freq',     fmt:v=>v.toFixed(2)},
   {key:'clicks', label:'Clicks',   fmt:fmtN},
   {key:'ctr',    label:'CTR',      fmt:fmtPct},
@@ -4318,6 +4324,13 @@ const CREATIVE_COLS = [
   {key:'cpc',     label:'CPC',    fmt:v=>v>0 ? '$'+v.toFixed(2) : '—'},
 ];
 
+/* Derives Unique IDs (reach) from the already-stored imps/freq — the
+   exact inverse of Freq = Impressions ÷ Unique IDs — so the table can
+   show the actual count feeding the ratio, not just the ratio itself. */
+function withReach(rows) {
+  return rows.map(r => ({ ...r, reach: r.freq ? Math.round(r.imps / r.freq) : r.imps }));
+}
+
 function renderAnTable(rows, cols) {
   const sorted = [...rows].sort((a,b)=>(a[anState.sortCol]>b[anState.sortCol]?1:-1)*anState.sortDir);
   const thead = document.getElementById('anThead');
@@ -4340,7 +4353,7 @@ function renderAnTable(rows, cols) {
 /* ── Top-level render ────────────────────────────────────── */
 function renderAnalytics() {
   const isCreative  = anState.view === 'creative';
-  const stageRows   = effectiveStageRows(anState.dateFrom, anState.dateTo);
+  const stageRows   = withReach(effectiveStageRows(anState.dateFrom, anState.dateTo));
   const creativeRows = effectiveCreativeRows(anState.dateFrom, anState.dateTo);
   const pool  = isCreative ? creativeRows : stageRows;
   const rows  = anFilter(pool);
@@ -4362,8 +4375,8 @@ function exportAnXlsx() {
   }
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheetFromData(STAGE_COLS,    anFilter(effectiveStageRows(anState.dateFrom, anState.dateTo))),    'By Stage');
-  XLSX.utils.book_append_sheet(wb, sheetFromData(CREATIVE_COLS, anFilter(effectiveCreativeRows(anState.dateFrom, anState.dateTo))), 'By Creative');
+  XLSX.utils.book_append_sheet(wb, sheetFromData(STAGE_COLS,    anFilter(withReach(effectiveStageRows(anState.dateFrom, anState.dateTo)))), 'By Stage');
+  XLSX.utils.book_append_sheet(wb, sheetFromData(CREATIVE_COLS, anFilter(effectiveCreativeRows(anState.dateFrom, anState.dateTo))),         'By Creative');
 
   const filename = `CRKT_Analytics_${q}_${mkt}_${new Date().toISOString().slice(0,10)}.xlsx`;
   XLSX.writeFile(wb, filename);
@@ -6843,6 +6856,9 @@ const GLOSSARY_TERMS = [
   { term:'Frequency', abbr:'Freq', cat:'metrics',
     def:'Average number of times a unique user was served an ad in the reporting period. High frequency without proportional performance lift is an indicator of creative fatigue.',
     formula:'Total Impressions ÷ Unique Reach',
+  },
+  { term:'Unique IDs', abbr:'Reach', cat:'metrics',
+    def:'Count of distinct users (by Cookie ID) served an ad — the denominator behind Frequency. Shown next to Impressions in the Analytics table so Frequency can be checked by hand: Impressions ÷ Unique IDs = Frequency.',
   },
   { term:'GM Ord', cat:'metrics',
     full:'General Market Orders',
