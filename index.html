@@ -3439,6 +3439,16 @@ function switchTab(name) {
 }
 
 /* ── Shell init (called after auth succeeds) ─────────────── */
+/* Guards the one-time wiring below against running more than once per
+   page load. __onAuth can legitimately fire twice in the same tab (e.g.
+   a stale cached session restores via bootstrap(), then the user signs
+   in again for a fresh consent grant) — without this guard, every
+   addEventListener call here (and everything wired further down the
+   chain via __onShellReady -> wireOverviewFilters -> __onTabSwitch)
+   stacks a duplicate listener, so a single click fires the handler
+   twice and silently undoes itself (exactly what broke the theme
+   toggle: it flips the theme, then immediately flips it back). */
+let __shellWired = false;
 window.__onAuth = function(user) {
 
   /* Populate user chip */
@@ -3455,6 +3465,9 @@ window.__onAuth = function(user) {
   if (user.role === 'admin') {
     document.getElementById('sidebarUploadBox').style.display = 'block';
   }
+
+  if (__shellWired) return;
+  __shellWired = true;
 
   /* Wire sidebar nav */
   document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
