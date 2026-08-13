@@ -2462,6 +2462,12 @@ const GOOGLE_CLIENT_ID = '625036036670-tk3t8mmoah5l9gjq1a6rkl0vqbtqj0od.apps.goo
 const BQ_PROJECT       = 'crk-dco-dash';
 const BQ_SCOPE         = 'https://www.googleapis.com/auth/bigquery.readonly';
 const GCS_SCOPE        = 'https://www.googleapis.com/auth/devstorage.read_only';
+/* Basic, non-sensitive scopes — needed so /oauth2/v3/userinfo actually
+   returns name/email. Without these the endpoint returns neither field
+   at all (not just a missing name), which is why every sign-in has been
+   silently treated as role:'viewer' regardless of the account's real
+   email. */
+const IDENTITY_SCOPE   = 'email profile';
 const GCS_BUCKET       = 'crk-dco-bucket-daily-performance';
 const GCS_REPORTS_PREFIX = 'reports/';
 const SESSION_KEY      = 'crkt_gsession';
@@ -3322,7 +3328,7 @@ async function handleGoogleToken(resp) {
 function initGoogleAuth() {
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
-    scope:     `${BQ_SCOPE} ${GCS_SCOPE}`,
+    scope:     `${BQ_SCOPE} ${GCS_SCOPE} ${IDENTITY_SCOPE}`,
     callback:  handleGoogleToken,
   });
   document.getElementById('googleSignInBtn').addEventListener('click', () => {
