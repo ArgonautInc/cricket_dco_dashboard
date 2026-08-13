@@ -5905,6 +5905,21 @@ function oneSheetTopNByCpo(rows, n = 5) {
 
 function oneSheetStageLabel(stage) { return String(stage||'').replace(/^\d+ - /, ''); }
 
+/* Strips the first two hyphen-delimited segments from a creative name
+   (e.g. "Q3-DoTheMost-HeroBanner" -> "HeroBanner") for the one-sheeter's
+   Top 5 tables — the quarter/campaign-code prefix repeats across every
+   row and adds length without adding information (the period is already
+   in the header, the segment already has its own column). Falls back to
+   the name unchanged if it doesn't have at least 3 hyphen-delimited
+   segments to strip from (e.g. an already-friendly em-dash-style label
+   from OFFER_MAP passes through untouched, since it won't match '-'). */
+function oneSheetShortenCreativeName(name) {
+  const s = String(name || '');
+  const parts = s.split('-');
+  if (parts.length <= 2) return s;
+  return parts.slice(2).join('-').trim();
+}
+
 /* Auto-drafts a starting set of Key Insights bullets from the computed
    model — pure, DOM-free (only uses esc/offerLabel/FMT, all already
    globals). This is a STARTING DRAFT, not a final product: the reference
@@ -5969,22 +5984,46 @@ function oneSheetDraftRecommendations(model) {
 
 /* ── One-Sheeter: HTML templating (thin layer over the pure model) ── */
 
-function oneSheetRenderTopTable(title, icon, rows, cols, opts) {
+function oneSheetRenderTopTable(title, rows, cols, opts) {
   opts = opts || {};
   const showQBadge = !!opts.showQBadge;
-  if (!rows.length) return `<div class="tbl-wrap"><div class="tbl-head"><span class="tbl-head-icon">${icon}</span> ${esc(title)}</div><p class="no-data">No data available</p></div>`;
+  if (!rows.length) return `<div class="tbl-wrap"><div class="tbl-head">${esc(title)}</div><p class="no-data">No data available</p></div>`;
+
+  /* Fixed column widths, matching the approved Top 5 — Orders layout
+     exactly — rank/name/segment/each metric slot use the SAME width AND
+     the same number of slots (4, Orders' count, the most of any of the
+     four tables) in every table, so Segment and every metric column
+     start at the identical horizontal position across all four tables
+     regardless of how many real metric columns a given table has. Tables
+     with fewer than 4 metrics (CPO/LPVR/CTR) get blank trailing cells for
+     the unused slots rather than letting Creative/Offer stretch to fill
+     the gap — that stretching is what made Segment drift out of
+     alignment between tables in the first place. */
+  const MAX_METRIC_SLOTS = 4;
+  const rankPct = 3, namePct = 39, segPct = 14, metricPct = 11;
+  const blankSlots = Math.max(0, MAX_METRIC_SLOTS - cols.length);
+  const colgroup = `<colgroup>
+    <col style="width:${rankPct}%">
+    <col style="width:${namePct}%">
+    <col style="width:${segPct}%">
+    ${Array(MAX_METRIC_SLOTS).fill(0).map(()=>`<col style="width:${metricPct}%">`).join('')}
+  </colgroup>`;
+  const blankTh = '<th></th>'.repeat(blankSlots);
+  const blankTd = '<td></td>'.repeat(blankSlots);
+
   return `<div class="tbl-wrap">
-    <div class="tbl-head"><span class="tbl-head-icon">${icon}</span> ${esc(title)}</div>
+    <div class="tbl-head">${esc(title)}</div>
     <table class="os-table">
-      <thead><tr><th>#</th><th>Creative / Offer</th><th>Segment</th>${cols.map(c=>`<th>${esc(c.label)}</th>`).join('')}</tr></thead>
+      ${colgroup}
+      <thead><tr><th>#</th><th>Creative / Offer</th><th>Segment</th>${cols.map(c=>`<th>${esc(c.label)}</th>`).join('')}${blankTh}</tr></thead>
       <tbody>${rows.map((r,i)=>`<tr class="${i%2===0?'even':''}">
         <td class="rank">${i+1}</td>
         <td class="cr-cell">
           ${showQBadge ? `<div class="cr-badges"><span class="badge ${esc(r.q.toLowerCase())}">${esc(r.q)}</span></div>` : ''}
-          <div class="cr-name" title="${esc(offerLabel(r.creative)||'—')}">${esc(offerLabel(r.creative)||'—')}${r.lowSample ? ' *' : ''}</div>
+          <div class="cr-name">${esc(oneSheetShortenCreativeName(offerLabel(r.creative))||'—')}${r.lowSample ? ' *' : ''}</div>
         </td>
         <td class="seg-cell">${esc(oneSheetStageLabel(r.stage))}</td>
-        ${cols.map(c=>`<td class="val">${c.fmt(r[c.key])}</td>`).join('')}
+        ${cols.map(c=>`<td class="val">${c.fmt(r[c.key])}</td>`).join('')}${blankTd}
       </tr>`).join('')}</tbody></table>
     ${rows.some(r=>r.lowSample) ? `<div class="no-data">* fewer than ${FMT.abbr(ONESHEET_LOW_SAMPLE_IMPS)} impressions this period — small sample</div>` : ''}
   </div>`;
@@ -6148,17 +6187,16 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
 
   .tbl-wrap{border:1px solid #ebebeb;border-radius:6px;overflow:hidden;margin-bottom:14px}
   .tbl-head{background:#1a1a1a;color:#fff;padding:7px 11px;font-size:10px;font-weight:700;display:flex;align-items:center;gap:7px}
-  .os-table{width:100%;border-collapse:collapse;font-size:9.5px}
-  .os-table th{background:#f5f5f5;padding:5px 8px;text-align:left;font-weight:600;font-size:8.5px;text-transform:uppercase;letter-spacing:.4px;color:#777;border-bottom:1px solid #e4e4e4}
+  .os-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:9.5px}
+  .os-table th{background:#f5f5f5;padding:5px 8px;text-align:left;font-weight:600;font-size:8.5px;text-transform:uppercase;letter-spacing:.4px;color:#777;border-bottom:1px solid #e4e4e4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .os-table td{padding:5px 8px;border-bottom:1px solid #f5f5f5;vertical-align:top}
   .os-table tr.even td{background:#fafafa}
   .os-table tr:last-child td{border-bottom:none}
-  .rank{color:#ccc;font-weight:800;font-size:11px;width:16px;padding-right:4px}
-  .val{font-weight:700;color:#111;white-space:nowrap}
-  .cr-cell{max-width:0}
+  .rank{color:#ccc;font-weight:800;font-size:11px;padding-right:4px}
+  .val{font-weight:700;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cr-badges{margin-bottom:2px}
-  .cr-name{font-size:9px;color:#444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
-  .seg-cell{font-size:9px;color:#666;white-space:nowrap}
+  .cr-name{font-size:9px;color:#444;white-space:normal;word-break:break-word;line-height:1.3}
+  .seg-cell{font-size:9px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .badge{display:inline-block;font-size:7.5px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:3px;text-transform:uppercase;letter-spacing:.3px}
   .badge.q1{background:#e8f5e9;color:#2e7d32}
   .badge.q2{background:#e3f2fd;color:#1565c0}
@@ -6178,8 +6216,13 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
 
   .os-footer{margin-top:10px;padding-top:8px;border-top:1px solid #e8e8e8;display:flex;justify-content:space-between;font-size:8.5px;color:#bbb}
 
+  /* The whole page is one editable region — a persistent dashed border
+     signals that, rather than a per-element hover (which wouldn't fire
+     on nested cells/text since only the outer .page carries the
+     contenteditable attribute). */
   @media screen{
-    [contenteditable="true"]:hover,[contenteditable="true"]:focus{background:#fffef2;box-shadow:0 0 0 2px #fff3b0}
+    .page[contenteditable="true"]{outline:2px dashed #cde8ae;outline-offset:6px}
+    .page[contenteditable="true"]:focus-within{outline-color:#5BC500}
   }
   @media print{
     body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -6189,9 +6232,9 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
 </style>
 </head>
 <body>
-<div class="page">
+<div class="page" id="oneSheetPage" contenteditable="${editable}">
 
-  <div class="os-header" id="oneSheetHeaderBlock" contenteditable="${editable}">${headerHtml}</div>
+  <div class="os-header" id="oneSheetHeaderBlock">${headerHtml}</div>
 
   ${oneSheetRenderKpiBar(model)}
   ${oneSheetRenderComparisonBox(model)}
@@ -6199,24 +6242,24 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
   <div class="section-label">Funnel Efficiency: All Stage Buckets</div>
   ${oneSheetRenderFunnelTable(model.funnelRows)}
 
-  ${oneSheetRenderTopTable('Top 5 Creatives: Orders', '🏆', topOrders, [
+  ${oneSheetRenderTopTable('Top 5 Creatives: Orders', topOrders, [
     {key:'gmOrd', label:'Orders', fmt:v=>FMT.num(v)},
     {key:'cpo',   label:'CPO',    fmt:v=>v!=null?'$'+v.toFixed(2):'—'},
     {key:'imps',  label:'Imps',   fmt:v=>FMT.abbr(v)},
     {key:'tdor',  label:'TDOR',   fmt:v=>(v*100).toFixed(4)+'%'},
   ], {showQBadge: multiQ})}
 
-  ${oneSheetRenderTopTable('Top 5 Creatives: CPO (Spend ÷ Orders)', '💵', topCpo, [
+  ${oneSheetRenderTopTable('Top 5 Creatives: CPO (Spend ÷ Orders)', topCpo, [
     {key:'gmOrd', label:'Orders', fmt:v=>FMT.num(v)},
     {key:'cpo',   label:'CPO',    fmt:v=>'$'+v.toFixed(2)},
   ], {showQBadge: multiQ})}
 
-  ${oneSheetRenderTopTable('Top 5 Creatives: LPVR (Global Spotlight Hits ÷ Impressions)', '📍', topLpvr, [
+  ${oneSheetRenderTopTable('Top 5 Creatives: LPVR (Global Spotlight Hits ÷ Impressions)', topLpvr, [
     {key:'imps',   label:'Imps', fmt:v=>FMT.abbr(v)},
     {key:'gmLpvr', label:'LPVR', fmt:v=>FMT.pct2(v)},
   ], {showQBadge: multiQ})}
 
-  ${oneSheetRenderTopTable('Top 5 Creatives: CTR', '🖱', topCtr, [
+  ${oneSheetRenderTopTable('Top 5 Creatives: CTR', topCtr, [
     {key:'imps', label:'Imps', fmt:v=>FMT.abbr(v)},
     {key:'ctr',  label:'CTR',  fmt:v=>FMT.pct(v)},
   ], {showQBadge: multiQ})}
@@ -6224,11 +6267,11 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
   <div class="two-col">
     <div class="insights-box">
       <div class="box-title">Key Insights</div>
-      <ul id="oneSheetInsightsList" contenteditable="${editable}">${insightsHtml}</ul>
+      <ul id="oneSheetInsightsList">${insightsHtml}</ul>
     </div>
     <div class="recs-box">
       <div class="box-title">Recommendations</div>
-      <ul id="oneSheetRecsList" contenteditable="${editable}">${recsHtml}</ul>
+      <ul id="oneSheetRecsList">${recsHtml}</ul>
     </div>
   </div>
 
@@ -6290,7 +6333,7 @@ function _showOneSheeter(model, previewHtml) {
   toolbar.style.cssText = 'display:flex;gap:10px;margin-bottom:14px;flex-shrink:0;align-items:center;';
 
   const hint = document.createElement('span');
-  hint.textContent = 'Tip: click into Key Insights / Recommendations below to edit before exporting.';
+  hint.textContent = 'Tip: click anywhere in the sheet below to edit text or numbers before exporting.';
   hint.style.cssText = 'color:#fff;font-size:12px;opacity:.75;';
 
   const printBtn = document.createElement('button');
@@ -6321,23 +6364,31 @@ function _showOneSheeter(model, previewHtml) {
   closeBtn.addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  /* Reads the CURRENT (possibly hand-edited) header/insights/recs straight
-     out of the live preview iframe's DOM, rather than closing over the
-     original auto-drafted strings — this is what makes edits actually
-     stick when printing/downloading. */
+  /* The whole page is one editable region now (not just header/insights/
+     recs), so the final export is built by serializing the LIVE, possibly
+     hand-edited document straight out of the preview iframe — any edit
+     anywhere (a table number, a header word, a segment name) carries
+     through — rather than re-templating from three separate content
+     blobs. */
   function currentFinalHtml() {
-    let headerHtml, insightsHtml, recsHtml;
-    try {
-      headerHtml   = frame.contentDocument.getElementById('oneSheetHeaderBlock').innerHTML;
-      insightsHtml = frame.contentDocument.getElementById('oneSheetInsightsList').innerHTML;
-      recsHtml     = frame.contentDocument.getElementById('oneSheetRecsList').innerHTML;
-    } catch (e) { headerHtml = insightsHtml = recsHtml = null; }
-    if (headerHtml == null || insightsHtml == null || recsHtml == null) {
-      headerHtml   = oneSheetRenderHeaderInner(model);
-      insightsHtml = oneSheetDraftInsights(model).map(i => `<li>${i}</li>`).join('');
-      recsHtml     = oneSheetDraftRecommendations(model).map(r => `<li>${r}</li>`).join('');
+    let doc;
+    try { doc = frame.contentDocument; } catch (e) { doc = null; }
+    if (!doc || !doc.getElementById('oneSheetPage')) {
+      // Preview DOM unreachable for some reason — re-draft fresh rather
+      // than fail silently.
+      const headerHtml   = oneSheetRenderHeaderInner(model);
+      const insightsHtml = oneSheetDraftInsights(model).map(i => `<li>${i}</li>`).join('');
+      const recsHtml     = oneSheetDraftRecommendations(model).map(r => `<li>${r}</li>`).join('');
+      return buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, { autoPrint: true });
     }
-    return buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, { autoPrint: true });
+    const clone = doc.documentElement.cloneNode(true);
+    const page = clone.querySelector('#oneSheetPage');
+    if (page) page.removeAttribute('contenteditable');
+    clone.querySelectorAll('script').forEach(el => el.remove());
+    const printScript = doc.createElement('script');
+    printScript.textContent = 'window.onload = function(){ window.print(); };';
+    (clone.querySelector('body') || clone).appendChild(printScript);
+    return '<!DOCTYPE html>\n' + clone.outerHTML;
   }
 
   printBtn.addEventListener('click', () => {
