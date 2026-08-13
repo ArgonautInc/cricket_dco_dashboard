@@ -5700,120 +5700,422 @@ window.__onTabSwitch = tab => {
 </script>
 
 <script>
-/* ── One-Sheeter Generator ───────────────────────────────── */
-function generateOneSheet() {
-  const btn = document.getElementById('downloadOneSheeterBtn');
-  if (btn) { btn.textContent = 'Generating…'; setTimeout(() => btn.innerHTML = '<svg-icon name="print" size="14"></svg-icon> One-Sheeter', 3000); }
-  try { _generateOneSheet(); } catch(e) { console.error('One-sheeter error:', e); alert('One-Sheeter error: ' + e.message); }
+/* ── One-Sheeter: Data Layer (pure, DOM-free) ────────────────
+   Every function below only reads its arguments plus already-existing
+   globals (PIVOT_DATA, AN_STAGES, AN_CREATIVES, computeTotals,
+   effectiveStageRows/effectiveCreativeRows, TR_QUARTER_BOUNDS,
+   trLiveQuarterInfo, normQs, qsLabel) — no DOM access anywhere, so each
+   is independently testable outside a browser. See
+   specs/one-sheeter-redesign.md for the confirmed methodology behind the
+   comparison/pace-normalization rules below. ─────────────────────── */
+
+/* Full calendar-day span of a period. An explicit date range always wins;
+   otherwise sums each selected quarter's day count — using elapsed days
+   so far (not the full quarter length) for whichever quarter is still
+   live today, so daily pace isn't understated mid-quarter. */
+function oneSheetPeriodDayCount(qKeys, dateFrom, dateTo) {
+  if (dateFrom || dateTo) {
+    const from = dateFrom || TR_QUARTER_BOUNDS[qKeys[0]].start;
+    const to   = dateTo   || new Date().toISOString().slice(0, 10);
+    return trDaysBetween(from, to) + 1;
+  }
+  return qKeys.reduce((sum, q) => {
+    const bounds = TR_QUARTER_BOUNDS[q];
+    if (!bounds) return sum;
+    const live = trLiveQuarterInfo(q);
+    return sum + (live ? live.daysLive : trDaysBetween(bounds.start, bounds.end) + 1);
+  }, 0);
 }
-function _generateOneSheet() {
-  const today    = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'2-digit'});
-  const todayLong= new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
-  const selQs  = typeof ovQs !== 'undefined' ? ovQs : ['Q1','Q2','Q3'];
-  const selMkt = typeof ovMkt !== 'undefined' ? ovMkt : 'all';
 
-  const allQs    = ['Q1','Q2','Q3'];
-  const activeQs = allQs.filter(q => selQs.includes(q) && PIVOT_DATA.quarters[q]);
-  const qColors  = { Q1:'#2e7d32', Q2:'#1565c0', Q3:'#e65100' };
-  const qRanges  = { Q1:'Jan 1 – Mar 31, 2026', Q2:'Apr 1 – Jun 30, 2026', Q3:'Jul 1 – Present, 2026' };
+/* Raw LPV count and TDOR have no direct field anywhere on computeTotals()/
+   effective*Rows() output — both are derivable from fields already there. */
+function oneSheetDeriveLpv(t)  { return Math.round((t.imps || 0) * (t.gmLpvr || 0)); }
+function oneSheetDeriveTdor(t) { return t.imps ? (t.gmOrd || 0) / t.imps : 0; }
+/* CPO doesn't exist anywhere in this codebase. Returns null (not 0 or
+   Infinity) when there are no orders, so callers render "—". */
+function oneSheetDeriveCpo(spend, gmOrd) { return gmOrd > 0 ? (spend || 0) / gmOrd : null; }
 
-  const mktFilter = r => selMkt === 'all' || r.mkt === selMkt;
-  const qFilter   = r => selQs.includes(r.q);
-  const crRows    = AN_CREATIVES.filter(r => mktFilter(r) && qFilter(r));
+function oneSheetFmtDate(iso) {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric', timeZone:'UTC' });
+}
 
-  // ── Aggregate totals ──
-  let totImps=0, totClicks=0, totOrders=0, totSpend=0, totLpvrWt=0;
-  let gmImps=0, gmOrd=0, ushImps=0, ushOrd=0;
-  activeQs.forEach(q => {
-    const d = PIVOT_DATA.quarters[q]; if (!d) return;
-    const gm=d.GM||{}, ush=d.USH||{};
-    if (selMkt==='all'||selMkt==='GM')  { totImps+=gm.imps||0; totClicks+=gm.clicks||0; totOrders+=gm.gmOrd||0; totSpend+=gm.spend||0; totLpvrWt+=(gm.gmLpvr||0)*(gm.imps||0); gmImps+=gm.imps||0; gmOrd+=gm.gmOrd||0; }
-    if (selMkt==='all'||selMkt==='USH') { totImps+=ush.imps||0; totClicks+=ush.clicks||0; totOrders+=ush.gmOrd||0; totSpend+=ush.spend||0; totLpvrWt+=(ush.gmLpvr||0)*(ush.imps||0); ushImps+=ush.imps||0; ushOrd+=ush.gmOrd||0; }
-  });
-  const totCtr   = totImps   ? totClicks/totImps   : 0;
-  const totLpvr  = totImps   ? totLpvrWt/totImps   : 0;
-  const totCpc   = totClicks ? totSpend/totClicks   : 0;
-  const totCpm   = totImps   ? (totSpend/totImps)*1000 : 0;
-  const hasSpend = totSpend > 0;
+/* Whole calendar months strictly AFTER dateTo through the quarter's end —
+   a month only partially covered by the selected range doesn't count. */
+function oneSheetMonthsRemaining(dateTo, quarterEndIso) {
+  const d = new Date(dateTo + 'T00:00:00Z');
+  let cur = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+  const end = new Date(quarterEndIso + 'T00:00:00Z');
+  const months = [];
+  while (cur <= end) {
+    months.push(cur.toLocaleDateString('en-US', { month:'long', timeZone:'UTC' }));
+    cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1));
+  }
+  if (!months.length) return '';
+  return months.length === 1 ? months[0] : months.slice(0, -1).join(', ') + ' & ' + months.at(-1);
+}
 
-  // ── Per-quarter breakdown rows ──
-  function qBreakdownRow(q) {
-    const d = PIVOT_DATA.quarters[q]; if (!d) return '';
-    const gm=d.GM||{}, ush=d.USH||{};
-    let imps=0, clicks=0, ord=0, spend=0, lpvrWt=0;
-    if (selMkt==='all'||selMkt==='GM')  { imps+=gm.imps||0; clicks+=gm.clicks||0; ord+=gm.gmOrd||0; spend+=gm.spend||0; lpvrWt+=(gm.gmLpvr||0)*(gm.imps||0); }
-    if (selMkt==='all'||selMkt==='USH') { imps+=ush.imps||0; clicks+=ush.clicks||0; ord+=ush.gmOrd||0; spend+=ush.spend||0; lpvrWt+=(ush.gmLpvr||0)*(ush.imps||0); }
-    const ctr  = imps ? clicks/imps : 0;
-    const lpvr = imps ? lpvrWt/imps : 0;
-    const cpc  = clicks ? spend/clicks : 0;
-    return `<tr>
-      <td><span class="q-dot" style="background:${qColors[q]}"></span><strong>${q}</strong></td>
-      <td>${FMT.abbr(imps)}</td>
-      <td>${(ctr*100).toFixed(3)}%</td>
-      <td>${FMT.num(ord)}</td>
-      <td>${(lpvr*100).toFixed(2)}%</td>
-      <td>${hasSpend && spend>0 ? FMT.dollar(spend) : '—'}</td>
-      <td>${hasSpend && cpc>0 ? '$'+cpc.toFixed(2) : '—'}</td>
-    </tr>`;
+function oneSheetBuildPeriodLabel(qSel, dateFrom, dateTo) {
+  const qKeys = normQs(qSel);
+  if (qKeys.length > 1) {
+    const base = qsLabel(qKeys);
+    return (dateFrom && dateTo) ? `${base} (custom range: ${oneSheetFmtDate(dateFrom)} – ${oneSheetFmtDate(dateTo)})` : base;
+  }
+  const q = qKeys[0], bounds = TR_QUARTER_BOUNDS[q];
+  if (!bounds) return q;
+  if (!dateFrom && !dateTo) return `${q}: ${oneSheetFmtDate(bounds.start)} – ${oneSheetFmtDate(bounds.end)}`;
+  const from = dateFrom || bounds.start, to = dateTo || bounds.end;
+  const remaining = oneSheetMonthsRemaining(to, bounds.end);
+  return `${q}: ${oneSheetFmtDate(from)} – ${oneSheetFmtDate(to)}${remaining ? ` (${remaining} remaining)` : ''}`;
+}
+
+/* Resolves what "previous" means for the % Change box, per the confirmed
+   rules: a single selected quarter compares against the one immediately
+   before it (Q1 has none — returns null, hiding the box); a multi-quarter
+   selection compares the whole selection against its own earliest quarter
+   alone (an explicit, deliberate superset-vs-subset comparison, confirmed
+   with Emily — not a bug). The previous period is always a FULL quarter
+   with no date filter, in both branches.
+   Volume metrics are normalized to daily pace before the delta is taken;
+   rate metrics compare directly. Dividing both periods' volume totals by
+   their own day-count and then diffing is algebraically identical to a
+   plain percent-change whenever the two day-counts already match, so this
+   applies unconditionally with no special-casing needed. */
+function oneSheetResolveComparison(qSel, mktSel, dateFrom, dateTo) {
+  const qKeys = normQs(qSel);
+  const prevOf = { Q2:'Q1', Q3:'Q2' };
+  let prevQ;
+  if (qKeys.length === 1) {
+    prevQ = prevOf[qKeys[0]];
+    if (!prevQ) return null;
+  } else {
+    prevQ = qKeys[0]; // earliest — toggleQuarter() always keeps ovQs in Q1<Q2<Q3 order
   }
 
-  // ── Top 5 table builder ──
-  function top5(rows, sortKey, cols) {
-    const sorted = [...rows].sort((a,b)=>(b[sortKey]||0)-(a[sortKey]||0)).slice(0,5);
-    if (!sorted.length) return '<p class="no-data">No data available</p>';
-    return `<table class="os-table">
-      <thead><tr><th>#</th><th>Creative / Offer</th>${cols.map(c=>`<th>${c.label}</th>`).join('')}</tr></thead>
-      <tbody>${sorted.map((r,i)=>`<tr class="${i%2===0?'even':''}">
+  const current  = computeTotals(qKeys, mktSel, dateFrom, dateTo);
+  const previous = computeTotals([prevQ], mktSel, null, null);
+
+  const currentDays  = oneSheetPeriodDayCount(qKeys, dateFrom, dateTo);
+  const previousDays = oneSheetPeriodDayCount([prevQ], null, null);
+
+  const curLpv  = oneSheetDeriveLpv(current),  prevLpv  = oneSheetDeriveLpv(previous);
+  const curTdor = oneSheetDeriveTdor(current), prevTdor = oneSheetDeriveTdor(previous);
+  const curCpo  = oneSheetDeriveCpo(current.spend, current.gmOrd);
+  const prevCpo = oneSheetDeriveCpo(previous.spend, previous.gmOrd);
+
+  const pace = (v, days) => days ? v / days : 0;
+  const pct  = (a, b) => b ? (a - b) / b : 0;
+
+  const deltas = {
+    imps:   pct(pace(current.imps,   currentDays), pace(previous.imps,   previousDays)),
+    clicks: pct(pace(current.clicks, currentDays), pace(previous.clicks, previousDays)),
+    lpv:    pct(pace(curLpv,         currentDays), pace(prevLpv,         previousDays)),
+    gmOrd:  pct(pace(current.gmOrd,  currentDays), pace(previous.gmOrd,  previousDays)),
+    spend:  pct(pace(current.spend,  currentDays), pace(previous.spend,  previousDays)),
+    ctr:    pct(current.ctr,    previous.ctr),
+    gmLpvr: pct(current.gmLpvr, previous.gmLpvr),
+    gmCvr:  pct(current.gmCvr,  previous.gmCvr),
+    tdor:   pct(curTdor, prevTdor),
+    cpc:    pct(current.cpc, previous.cpc),
+    cpo:    (curCpo != null && prevCpo != null) ? pct(curCpo, prevCpo) : null,
+  };
+
+  return { prevQ, current, previous, currentDays, previousDays, deltas };
+}
+
+/* Groups already-filtered stage rows by stage name, summing raw counts
+   (never averaging pre-divided ratios) — gmLpvr is imps-weighted since its
+   only source here is a per-row ratio, not a raw count. */
+function oneSheetAggregateSegments(rows) {
+  const groups = new Map();
+  rows.forEach(r => {
+    if (!groups.has(r.stage)) groups.set(r.stage, { stage:r.stage, imps:0, clicks:0, gmOrd:0, spend:0, _lpvWt:0 });
+    const g = groups.get(r.stage);
+    g.imps += r.imps; g.clicks += r.clicks; g.gmOrd += (r.gmOrd||0);
+    g.spend += (r.spend||0); g._lpvWt += (r.imps||0) * (r.gmLpvr||0);
+  });
+  return [...groups.values()].map(g => ({
+    stage: g.stage, imps: g.imps, clicks: g.clicks, gmOrd: g.gmOrd, spend: g.spend,
+    ctr:    g.imps   ? g.clicks/g.imps  : 0,
+    gmLpvr: g.imps   ? g._lpvWt/g.imps  : 0,
+    gmTdor: g.imps   ? g.gmOrd/g.imps   : 0,
+    gmCvr:  g.clicks ? g.gmOrd/g.clicks : 0,
+    cpc:    g.clicks ? g.spend/g.clicks : null,
+    cpo:    oneSheetDeriveCpo(g.spend, g.gmOrd),
+  }));
+}
+
+/* Sort by the leading integer in "N - Stage Name" (this dashboard's
+   existing stage-label convention) — NOT alphabetical (which would
+   wrongly put "10 -" before "2 -") and not impressions-based. Matches the
+   funnel-flow row order in the reference one-sheeter. */
+function oneSheetStageSortKey(stage) {
+  const m = /^(\d+)/.exec(stage);
+  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+
+function oneSheetBuildFunnelRows(qSel, mktSel, dateFrom, dateTo) {
+  const qKeys = normQs(qSel);
+  const curRows = effectiveStageRows(dateFrom, dateTo)
+    .filter(r => qKeys.includes(r.q) && (mktSel === 'all' || r.mkt === mktSel));
+  const curSeg = oneSheetAggregateSegments(curRows);
+
+  const cmp = oneSheetResolveComparison(qSel, mktSel, dateFrom, dateTo);
+  let prevByStage = new Map();
+  if (cmp) {
+    const prevRows = effectiveStageRows(null, null)
+      .filter(r => r.q === cmp.prevQ && (mktSel === 'all' || r.mkt === mktSel));
+    prevByStage = new Map(oneSheetAggregateSegments(prevRows).map(s => [s.stage, s]));
+  }
+
+  return curSeg
+    .sort((a, b) => oneSheetStageSortKey(a.stage) - oneSheetStageSortKey(b.stage))
+    .map(s => {
+      const prev = prevByStage.get(s.stage);
+      return { ...s, prevCpc: prev ? prev.cpc : null, prevCpo: prev ? prev.cpo : null };
+    });
+}
+
+function oneSheetBuildCreativeRows(qSel, mktSel, dateFrom, dateTo) {
+  const qKeys = normQs(qSel);
+  return effectiveCreativeRows(dateFrom, dateTo)
+    .filter(r => qKeys.includes(r.q) && (mktSel === 'all' || r.mkt === mktSel))
+    .map(r => ({
+      ...r,
+      lpv:  oneSheetDeriveLpv(r),
+      tdor: r.imps ? (r.gmOrd||0) / r.imps : 0,
+      cpo:  oneSheetDeriveCpo(r.spend, r.gmOrd),
+    }));
+}
+
+/* Matches the reference one-sheeter's own stated "<25K imps" low-scale
+   threshold for the CPO table's asterisk footnote. */
+const ONESHEET_LOW_SAMPLE_IMPS = 25000;
+
+function oneSheetTopN(rows, sortKey, n = 5) {
+  return [...rows].sort((a, b) => (b[sortKey]||0) - (a[sortKey]||0)).slice(0, n);
+}
+
+function oneSheetTopNByCpo(rows, n = 5) {
+  return rows
+    .filter(r => r.gmOrd > 0 && (r.spend||0) > 0 && r.cpo != null)
+    .sort((a, b) => a.cpo - b.cpo)
+    .slice(0, n)
+    .map(r => ({ ...r, lowSample: r.imps < ONESHEET_LOW_SAMPLE_IMPS }));
+}
+
+function oneSheetStageLabel(stage) { return String(stage||'').replace(/^\d+ - /, ''); }
+
+/* Auto-drafts a starting set of Key Insights bullets from the computed
+   model — pure, DOM-free (only uses esc/offerLabel/FMT, all already
+   globals). This is a STARTING DRAFT, not a final product: the reference
+   one-sheeter's narrative ("Lean Into the S26 Ultra on Creative Versions")
+   reads like hand-written campaign context that isn't derivable from
+   numbers alone — the preview UI renders this as editable text so Emily
+   can adjust wording before export, not as a black-box final output. */
+function oneSheetDraftInsights(model) {
+  const { current, comparison, creatives } = model;
+  const insights = [];
+
+  if (comparison) {
+    const d = comparison.deltas;
+    const dir = v => v >= 0 ? 'up' : 'down';
+    insights.push(`<strong>Order Momentum:</strong> ${FMT.num(current.gmOrd)} orders this period, daily pace ${dir(d.gmOrd)} ${Math.abs(d.gmOrd*100).toFixed(0)}% vs. ${comparison.prevQ}, with CVR ${dir(d.gmCvr)} ${Math.abs(d.gmCvr*100).toFixed(0)}% (${FMT.pct2(comparison.previous.gmCvr)} → ${FMT.pct2(current.gmCvr)}).`);
+    if (Math.abs(d.gmLpvr) >= 0.05) {
+      insights.push(`<strong>LPVR ${dir(d.gmLpvr)==='up'?'Up':'Down'}:</strong> Landing Page View Rate moved from ${FMT.pct2(comparison.previous.gmLpvr)} (${comparison.prevQ}) to ${FMT.pct2(current.gmLpvr)} this period (${d.gmLpvr>=0?'+':''}${(d.gmLpvr*100).toFixed(0)}%).`);
+    }
+    if (d.cpo != null) {
+      const prevCpo = oneSheetDeriveCpo(comparison.previous.spend, comparison.previous.gmOrd);
+      insights.push(`<strong>Cost per Order ${d.cpo<=0?'Down':'Up'} ${Math.abs(d.cpo*100).toFixed(0)}%:</strong> campaign CPO moved from $${prevCpo.toFixed(2)} (${comparison.prevQ}) to $${model.cpo!=null?model.cpo.toFixed(2):'—'} this period.`);
+    }
+  }
+
+  const byOrd = [...creatives].sort((a,b)=>(b.gmOrd||0)-(a.gmOrd||0));
+  const byCtr = [...creatives].sort((a,b)=>(b.ctr||0)-(a.ctr||0));
+  const byLpvr = [...creatives].sort((a,b)=>(b.gmLpvr||0)-(a.gmLpvr||0));
+  const topOrd = byOrd[0], topCtr = byCtr[0], topLpvr = byLpvr[0];
+
+  if (topOrd) insights.push(`<strong>Top Order Driver:</strong> &ldquo;${esc(offerLabel(topOrd.creative))}&rdquo; (${esc(oneSheetStageLabel(topOrd.stage))}) led with <strong>${FMT.num(topOrd.gmOrd)} orders</strong> on ${FMT.abbr(topOrd.imps)} impressions.`);
+  if (insights.length < 3 && topCtr) insights.push(`<strong>Highest CTR:</strong> &ldquo;${esc(offerLabel(topCtr.creative))}&rdquo; achieved <strong>${FMT.pct(topCtr.ctr)} CTR</strong> on ${FMT.abbr(topCtr.imps)} impressions.`);
+  if (insights.length < 3 && topLpvr && topLpvr.gmLpvr > 0) insights.push(`<strong>Best Post-Click Quality:</strong> &ldquo;${esc(offerLabel(topLpvr.creative))}&rdquo; had the highest LPVR at <strong>${FMT.pct2(topLpvr.gmLpvr)}</strong>.`);
+
+  return insights.slice(0, 5);
+}
+
+function oneSheetDraftRecommendations(model) {
+  const { funnelRows, creatives } = model;
+  const recs = [];
+
+  const byOrd = [...creatives].sort((a,b)=>(b.gmOrd||0)-(a.gmOrd||0));
+  const topOrd = byOrd[0];
+  if (topOrd) recs.push(`Prioritize budget toward <strong>&ldquo;${esc(offerLabel(topOrd.creative))}&rdquo;</strong> — the top order driver this period — while monitoring frequency to avoid saturation.`);
+
+  const segsWithOrders = funnelRows.filter(s => s.gmOrd > 0 && s.cpo != null);
+  const cheapestSeg = [...segsWithOrders].sort((a,b)=>a.cpo-b.cpo)[0];
+  if (cheapestSeg && (!topOrd || cheapestSeg.stage !== topOrd.stage)) {
+    recs.push(`Expand rotation in <strong>${esc(oneSheetStageLabel(cheapestSeg.stage))}</strong> — the lowest CPO segment this period at $${cheapestSeg.cpo.toFixed(2)} — while scale remains limited.`);
+  }
+
+  const highestImpsSeg = [...funnelRows].sort((a,b)=>b.imps-a.imps)[0];
+  if (highestImpsSeg) recs.push(`Refresh creative variety in <strong>${esc(oneSheetStageLabel(highestImpsSeg.stage))}</strong> — the highest-delivery segment — to stay ahead of fatigue.`);
+
+  const byCtr = [...creatives].sort((a,b)=>(b.ctr||0)-(a.ctr||0));
+  const topCtr = byCtr[0];
+  if (topCtr && (!topOrd || topCtr.creative !== topOrd.creative)) recs.push(`Scale <strong>&ldquo;${esc(offerLabel(topCtr.creative))}&rdquo;</strong> (highest CTR) to additional placements; strong click intent suggests good offer-message fit.`);
+
+  if (!recs.length) recs.push('Continue monitoring weekly delivery pacing; flag any creative with unusually low CTR for review or refresh.');
+
+  return recs.slice(0, 5);
+}
+
+/* ── One-Sheeter: HTML templating (thin layer over the pure model) ── */
+
+function oneSheetRenderTopTable(title, icon, rows, cols, opts) {
+  opts = opts || {};
+  const showQBadge = !!opts.showQBadge;
+  if (!rows.length) return `<div class="tbl-wrap"><div class="tbl-head"><span class="tbl-head-icon">${icon}</span> ${esc(title)}</div><p class="no-data">No data available</p></div>`;
+  return `<div class="tbl-wrap">
+    <div class="tbl-head"><span class="tbl-head-icon">${icon}</span> ${esc(title)}</div>
+    <table class="os-table">
+      <thead><tr><th>#</th><th>Creative / Offer</th><th>Segment</th>${cols.map(c=>`<th>${esc(c.label)}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((r,i)=>`<tr class="${i%2===0?'even':''}">
         <td class="rank">${i+1}</td>
         <td class="cr-cell">
-          <div class="cr-badges"><span class="badge ${r.mkt.toLowerCase()}">${r.mkt}</span><span class="badge ${r.q.toLowerCase()}">${r.q}</span></div>
-          <div class="cr-name" title="${offerLabel(r.creative||r.stage)||'—'}">${offerLabel(r.creative||r.stage)||'—'}</div>
+          ${showQBadge ? `<div class="cr-badges"><span class="badge ${esc(r.q.toLowerCase())}">${esc(r.q)}</span></div>` : ''}
+          <div class="cr-name" title="${esc(offerLabel(r.creative)||'—')}">${esc(offerLabel(r.creative)||'—')}${r.lowSample ? ' *' : ''}</div>
         </td>
-        ${cols.map(c=>`<td class="val">${c.fmt(r[c.key]||0)}</td>`).join('')}
-      </tr>`).join('')}</tbody></table>`;
-  }
+        <td class="seg-cell">${esc(oneSheetStageLabel(r.stage))}</td>
+        ${cols.map(c=>`<td class="val">${c.fmt(r[c.key])}</td>`).join('')}
+      </tr>`).join('')}</tbody></table>
+    ${rows.some(r=>r.lowSample) ? `<div class="no-data">* fewer than ${FMT.abbr(ONESHEET_LOW_SAMPLE_IMPS)} impressions this period — small sample</div>` : ''}
+  </div>`;
+}
 
-  // ── Sorted creative lists for insights / recs ──
-  const byOrd  = [...crRows].sort((a,b)=>(b.gmOrd||0)-(a.gmOrd||0));
-  const byCtr  = [...crRows].sort((a,b)=>(b.ctr||0)-(a.ctr||0));
-  const byLpvr = [...crRows].sort((a,b)=>(b.gmLpvr||0)-(a.gmLpvr||0));
-  const topOrd  = byOrd[0],  topCtr = byCtr[0], topLpvr = byLpvr[0];
+function oneSheetRenderFunnelTable(funnelRows) {
+  if (!funnelRows.length) return '<p class="no-data">No data available</p>';
+  const totals = funnelRows.reduce((t,s) => {
+    t.imps += s.imps; t.clicks += s.clicks; t.gmOrd += s.gmOrd; t.spend += s.spend; return t;
+  }, {imps:0, clicks:0, gmOrd:0, spend:0});
+  const totCtr = totals.imps ? totals.clicks/totals.imps : 0;
+  const totCpc = totals.clicks ? totals.spend/totals.clicks : null;
+  const totCpo = oneSheetDeriveCpo(totals.spend, totals.gmOrd);
+  return `<table class="funnel-table">
+    <thead><tr>
+      <th>Segment</th><th>Imps</th><th>Spend</th><th>CTR</th><th>LPVR</th><th>CVR</th><th>TDOR</th><th>Orders</th>
+      <th>Prev CPC</th><th>Cur CPC</th><th>Prev CPO</th><th>Cur CPO</th>
+    </tr></thead>
+    <tbody>
+      ${funnelRows.map(s => `<tr>
+        <td>${esc(s.stage)}</td>
+        <td class="val">${FMT.abbr(s.imps)}</td>
+        <td class="val">${s.spend>0?FMT.dollar(s.spend):'—'}</td>
+        <td class="val">${FMT.pct(s.ctr)}</td>
+        <td class="val">${FMT.pct1(s.gmLpvr)}</td>
+        <td class="val">${FMT.pct2(s.gmCvr)}</td>
+        <td class="val">${(s.gmTdor*100).toFixed(4)}%</td>
+        <td class="val">${FMT.num(s.gmOrd)}</td>
+        <td class="val">${s.prevCpc!=null?'$'+s.prevCpc.toFixed(2):'—'}</td>
+        <td class="val">${s.cpc!=null?'$'+s.cpc.toFixed(2):'—'}</td>
+        <td class="val">${s.prevCpo!=null?'$'+s.prevCpo.toFixed(2):'—'}</td>
+        <td class="val">${s.cpo!=null?'$'+s.cpo.toFixed(2):'—'}</td>
+      </tr>`).join('')}
+      <tr class="funnel-total-row">
+        <td>Campaign Total</td>
+        <td class="val">${FMT.abbr(totals.imps)}</td>
+        <td class="val">${totals.spend>0?FMT.dollar(totals.spend):'—'}</td>
+        <td class="val">${FMT.pct(totCtr)}</td>
+        <td class="val">—</td>
+        <td class="val">—</td>
+        <td class="val">—</td>
+        <td class="val">${FMT.num(totals.gmOrd)}</td>
+        <td class="val">—</td>
+        <td class="val">${totCpc!=null?'$'+totCpc.toFixed(2):'—'}</td>
+        <td class="val">—</td>
+        <td class="val">${totCpo!=null?'$'+totCpo.toFixed(2):'—'}</td>
+      </tr>
+    </tbody>
+  </table>`;
+}
 
-  // ── Key Insights ──
-  const insights = [
-    topOrd  ? `<strong>Top Order Driver:</strong> &ldquo;${esc(offerLabel(topOrd.creative))}&rdquo; (${esc(topOrd.q)}, ${esc(topOrd.mkt)}) led with <strong>${FMT.num(topOrd.gmOrd)} orders</strong> on ${FMT.abbr(topOrd.imps)} impressions.` : null,
-    topCtr  ? `<strong>Highest CTR:</strong> &ldquo;${esc(offerLabel(topCtr.creative))}&rdquo; (${esc(topCtr.q)}, ${esc(topCtr.mkt)}) achieved <strong>${(topCtr.ctr*100).toFixed(3)}% CTR</strong>${topCtr.imps < 50000 ? ' — note limited delivery volume' : ' with strong delivery'}.` : null,
-    topLpvr && topLpvr.gmLpvr > 0 ? `<strong>Best Post-Click Quality:</strong> &ldquo;${esc(offerLabel(topLpvr.creative))}&rdquo; (${esc(topLpvr.q)}, ${esc(topLpvr.mkt)}) had the highest LPVR at <strong>${(topLpvr.gmLpvr*100).toFixed(2)}%</strong>, indicating strong landing page alignment.` : null,
-    selMkt==='all' && gmImps>0 && ushImps>0 ? `<strong>Market Split:</strong> GM drove ${((gmImps/(gmImps+ushImps))*100).toFixed(0)}% of impressions and ${gmOrd+ushOrd>0?((gmOrd/(gmOrd+ushOrd))*100).toFixed(0)+'%':' —'} of orders; USH drove the remainder.` : null,
-    hasSpend ? `<strong>Overall Efficiency:</strong> ${FMT.dollar(totSpend)} invested across ${activeQs.join(' + ')} at an average CPC of <strong>$${totCpc.toFixed(2)}</strong> and CPM of <strong>$${totCpm.toFixed(2)}</strong>.` : null,
-    `<strong>Data Source:</strong> Flashtalking + Innovid DCO delivery via BigQuery. Spotlight signals used for LPVR and order attribution.`,
-  ].filter(Boolean);
+function oneSheetRenderKpiBar(model) {
+  const c = model.current;
+  const tiles = [
+    { label:'Impressions', val: FMT.abbr(c.imps) },
+    { label:'Clicks',      val: FMT.abbr(c.clicks) },
+    { label:'Landing Page Visits', val: FMT.abbr(model.lpv) },
+    { label:'Orders',      val: FMT.num(c.gmOrd) },
+    { label:'Total Cost',  val: c.spend>0?FMT.dollar(c.spend):'—' },
+    { label:'CTR',  val: FMT.pct(c.ctr),     green:true },
+    { label:'LPVR', val: FMT.pct2(c.gmLpvr), green:true },
+    { label:'CVR',  val: FMT.pct2(c.gmCvr),  green:true },
+    { label:'TDOR', val: (model.tdor*100).toFixed(4)+'%', green:true },
+    { label:'CPC',  val: c.cpc>0?'$'+c.cpc.toFixed(2):'—', green:true },
+    { label:'CPO',  val: model.cpo!=null?'$'+model.cpo.toFixed(2):'—', green:true },
+  ];
+  return `<div class="stats-bar">${tiles.map(t=>`
+    <div class="stat">
+      <div class="stat-val${t.green?' green':''}">${esc(t.val)}</div>
+      <div class="stat-lbl">${esc(t.label)}</div>
+    </div>`).join('')}</div>`;
+}
 
-  // ── Recommendations ──
-  const recs = [];
-  if (topOrd) recs.push(`Prioritize budget toward <strong>&ldquo;${esc(offerLabel(topOrd.creative))}&rdquo;</strong> — the top order driver — while monitoring frequency caps to avoid saturation.`);
-  if (topCtr && topCtr.creative !== topOrd?.creative) recs.push(`Scale <strong>&ldquo;${esc(offerLabel(topCtr.creative))}&rdquo;</strong> (highest CTR) to additional placements or audiences; high click intent suggests strong offer-message fit.`);
-  if (topLpvr && topLpvr.gmLpvr > 0.02) recs.push(`Replicate the decision tree rules driving <strong>&ldquo;${esc(offerLabel(topLpvr.creative))}&rdquo;</strong>'s high LPVR — this audience segment responds well post-click.`);
-  const lowEff = byOrd.filter(r => r.gmOrd > 0 && r.imps > 100000 && r.gmOrd/r.imps < 0.0001);
-  if (lowEff.length) recs.push(`${lowEff.length} creative${lowEff.length>1?'s':''} with high delivery but low order conversion (incl. &ldquo;${esc(offerLabel(lowEff[0].creative))}&rdquo;) may benefit from offer refresh or creative rotation.`);
-  if (activeQs.length > 1) recs.push(`Review the Trends tab for QoQ CTR and LPVR shifts to inform next quarter's creative strategy and budget allocation.`);
-  if (!recs.length) recs.push('Continue monitoring weekly delivery pacing; flag any creative with <0.03% CTR to the agency team for review or refresh.');
+const ONESHEET_DELTA_LABELS = {
+  imps:'Impressions', clicks:'Clicks', lpv:'Landing Page Visits', gmOrd:'Orders', spend:'Total Cost',
+  ctr:'CTR', gmLpvr:'LPVR', gmCvr:'CVR', tdor:'TDOR', cpc:'CPC', cpo:'CPO',
+};
+/* Direction that counts as "good" per metric, for delta color — null means
+   no inherent good/bad judgment (e.g. Total Cost, matching the same
+   philosophy already used by the Trends tab's TR_METRICS direction field). */
+const ONESHEET_DELTA_GOOD_UP = { imps:true, clicks:true, lpv:true, gmOrd:true, spend:null, ctr:true, gmLpvr:true, gmCvr:true, tdor:true, cpc:false, cpo:false };
 
-  const titleQ  = activeQs.join(' + ');
-  const mktLabel = selMkt === 'all' ? 'GM + USH' : selMkt;
+function oneSheetRenderComparisonBox(model) {
+  const cmp = model.comparison;
+  if (!cmp) return '';
+  const d = cmp.deltas;
+  const keys = ['gmOrd','gmCvr','tdor','ctr','cpc','cpo','gmLpvr','imps','clicks','lpv','spend'];
+  const tiles = keys.filter(k => d[k] != null).map(k => {
+    const goodUp = ONESHEET_DELTA_GOOD_UP[k];
+    const isGood = goodUp === null ? null : (goodUp ? d[k] >= 0 : d[k] <= 0);
+    const cls = isGood === null ? '' : (isGood ? '' : 'delta-bad');
+    return `<div class="delta-tile ${cls}">
+      <div class="delta-pct">${d[k]>=0?'+':''}${(d[k]*100).toFixed(0)}%</div>
+      <div class="delta-lbl">${esc(ONESHEET_DELTA_LABELS[k])}</div>
+    </div>`;
+  }).join('');
+  return `<div class="section-label">% Change vs. ${esc(cmp.prevQ)}</div><div class="delta-bar">${tiles}</div>`;
+}
 
-  const html = `<!DOCTYPE html>
+function oneSheetRenderHeaderInner(model) {
+  return `<div>
+      <div class="os-logo">Cricket Wireless · DCO Performance</div>
+      <div class="os-title">${esc(model.periodLabel)} — Internal Campaign Review</div>
+      <div class="os-sub">${esc(model.mktLabel)} · Flashtalking + Innovid · Data as of ${esc(model.generatedAt)}</div>
+    </div>
+    <div class="os-header-right">
+      <div class="os-date">Prepared by Emily McAndrew · Argonaut</div>
+      <div class="os-qbadge">${esc(model.periodLabel)} · ${esc(model.mktLabel)}</div>
+    </div>`;
+}
+
+function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
+  opts = opts || {};
+  const multiQ = normQs(model.qSel).length > 1;
+
+  const topOrders = oneSheetTopN(model.creatives, 'gmOrd');
+  const topCpo    = oneSheetTopNByCpo(model.creatives);
+  const topLpvr   = oneSheetTopN(model.creatives.filter(r=>r.gmLpvr>0), 'gmLpvr');
+  const topCtr    = oneSheetTopN(model.creatives.filter(r=>r.ctr>0), 'ctr');
+  const editable  = opts.autoPrint ? 'false' : 'true';
+
+  return `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
-<title>Cricket Wireless DCO One-Sheeter — ${titleQ} 2026</title>
+<title>Cricket Wireless DCO One-Sheeter — ${esc(model.periodLabel)}</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Poppins',sans-serif;font-size:10.5px;color:#1a1a1a;background:#fff}
-  .page{width:1100px;margin:0 auto;padding:20px 26px}
+  body{font-family:'Montserrat',sans-serif;font-size:10.5px;color:#1a1a1a;background:#fff}
+  .page{width:1150px;margin:0 auto;padding:20px 26px}
 
-  /* ── Header ── */
   .os-header{background:#0d0d0d;color:#fff;padding:13px 20px 12px;border-radius:8px 8px 0 0;display:flex;align-items:center;justify-content:space-between}
-  .os-header-left{}
   .os-logo{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#5BC500;margin-bottom:3px}
   .os-title{font-size:17px;font-weight:800;color:#fff;letter-spacing:-.3px}
   .os-sub{font-size:10px;color:#888;margin-top:2px}
@@ -5821,33 +6123,31 @@ function _generateOneSheet() {
   .os-date{font-size:9px;color:#666;margin-bottom:4px}
   .os-qbadge{display:inline-block;background:#5BC500;color:#000;font-size:9px;font-weight:800;padding:3px 10px;border-radius:20px;letter-spacing:.5px}
 
-  /* ── Stats bar ── */
-  .stats-bar{display:grid;grid-template-columns:repeat(6,1fr);background:#f7f7f7;border:1px solid #e4e4e4;border-top:none;border-radius:0 0 8px 8px;margin-bottom:14px}
-  .stat{padding:10px 14px;border-right:1px solid #e4e4e4;text-align:center}
-  .stat:last-child{border-right:none}
-  .stat-val{font-size:19px;font-weight:800;color:#111;letter-spacing:-.6px;line-height:1}
-  .stat-val.green{color:#5BC500}
-  .stat-lbl{font-size:8px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;color:#999;margin-top:3px}
+  .stats-bar{display:grid;grid-template-columns:repeat(6,1fr);background:#f7f7f7;border:1px solid #e4e4e4;border-top:none}
+  .stat{padding:10px 12px;border-right:1px solid #e4e4e4;border-bottom:1px solid #e4e4e4;text-align:center}
+  .stat:nth-child(6n){border-right:none}
+  .stat-val{font-size:17px;font-weight:800;color:#111;letter-spacing:-.5px;line-height:1}
+  .stat-val.green{color:#3F8D00}
+  .stat-lbl{font-size:7.5px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:#999;margin-top:3px}
 
-  /* ── Section label ── */
-  .section-label{font-size:9px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:#aaa;margin:12px 0 7px;display:flex;align-items:center;gap:8px}
+  .delta-bar{display:grid;grid-template-columns:repeat(6,1fr);background:#EAF7DC;border:1px solid #cde8ae;border-radius:0 0 8px 8px;margin-bottom:14px}
+  .delta-tile{padding:8px 10px;border-right:1px solid #d7ecb9;text-align:center}
+  .delta-tile:nth-child(6n){border-right:none}
+  .delta-pct{font-size:15px;font-weight:800;letter-spacing:-.4px;color:#3F8D00}
+  .delta-tile.delta-bad .delta-pct{color:#C2185B}
+  .delta-lbl{font-size:7.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#5c7a3f;margin-top:2px}
+
+  .section-label{font-size:9px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:#aaa;margin:14px 0 7px;display:flex;align-items:center;gap:8px}
   .section-label::after{content:'';flex:1;height:1px;background:#ececec}
-  .section-icon{width:13px;height:13px;opacity:.5}
 
-  /* ── Quarter breakdown ── */
-  .q-breakdown{margin-bottom:14px}
-  .q-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
-  .qb-table{width:100%;border-collapse:collapse;font-size:10px}
-  .qb-table th{background:#fafafa;padding:5px 10px;text-align:left;font-size:8.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:#888;border-bottom:1px solid #e8e8e8}
-  .qb-table td{padding:6px 10px;border-bottom:1px solid #f3f3f3;vertical-align:middle}
-  .qb-table tr:last-child td{border-bottom:none}
-  .qb-table tr:hover td{background:#fafff5}
+  .funnel-table{width:100%;border-collapse:collapse;font-size:8.8px;margin-bottom:14px}
+  .funnel-table th{background:#1a1a1a;color:#fff;padding:6px 7px;text-align:left;font-size:7.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;white-space:nowrap}
+  .funnel-table td{padding:5px 7px;border-bottom:1px solid #f0f0f0;white-space:nowrap}
+  .funnel-table tr:nth-child(even) td{background:#fafafa}
+  .funnel-total-row td{background:#f0fbea!important;font-weight:800;border-top:2px solid #cde8ae}
 
-  /* ── Three-col creative tables ── */
-  .three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px}
-  .tbl-wrap{border:1px solid #ebebeb;border-radius:6px;overflow:hidden}
+  .tbl-wrap{border:1px solid #ebebeb;border-radius:6px;overflow:hidden;margin-bottom:14px}
   .tbl-head{background:#1a1a1a;color:#fff;padding:7px 11px;font-size:10px;font-weight:700;display:flex;align-items:center;gap:7px}
-  .tbl-head-icon{font-size:11px}
   .os-table{width:100%;border-collapse:collapse;font-size:9.5px}
   .os-table th{background:#f5f5f5;padding:5px 8px;text-align:left;font-weight:600;font-size:8.5px;text-transform:uppercase;letter-spacing:.4px;color:#777;border-bottom:1px solid #e4e4e4}
   .os-table td{padding:5px 8px;border-bottom:1px solid #f5f5f5;vertical-align:top}
@@ -5857,16 +6157,14 @@ function _generateOneSheet() {
   .val{font-weight:700;color:#111;white-space:nowrap}
   .cr-cell{max-width:0}
   .cr-badges{margin-bottom:2px}
-  .cr-name{font-size:9px;color:#444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+  .cr-name{font-size:9px;color:#444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+  .seg-cell{font-size:9px;color:#666;white-space:nowrap}
   .badge{display:inline-block;font-size:7.5px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:3px;text-transform:uppercase;letter-spacing:.3px}
   .badge.q1{background:#e8f5e9;color:#2e7d32}
   .badge.q2{background:#e3f2fd;color:#1565c0}
   .badge.q3{background:#fff3e0;color:#e65100}
-  .badge.gm {background:#f3e5f5;color:#6a1b9a}
-  .badge.ush{background:#fff8e1;color:#f57f17}
   .no-data{color:#bbb;font-size:9px;padding:10px 8px}
 
-  /* ── Bottom two-col: insights + recs ── */
   .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:12px}
   .insights-box,.recs-box{border-radius:6px;padding:11px 14px}
   .insights-box{background:#f8f8f8;border:1px solid #ebebeb}
@@ -5876,10 +6174,13 @@ function _generateOneSheet() {
   .insights-box ul,.recs-box ul{padding-left:14px}
   .insights-box li,.recs-box li{margin-bottom:5px;line-height:1.5;font-size:9.5px}
   .recs-box li{color:#2a5c07}
+  [contenteditable]{outline:none}
 
-  /* ── Footer ── */
   .os-footer{margin-top:10px;padding-top:8px;border-top:1px solid #e8e8e8;display:flex;justify-content:space-between;font-size:8.5px;color:#bbb}
 
+  @media screen{
+    [contenteditable="true"]:hover,[contenteditable="true"]:focus{background:#fffef2;box-shadow:0 0 0 2px #fff3b0}
+  }
   @media print{
     body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     @page{size:letter landscape;margin:8mm}
@@ -5890,110 +6191,94 @@ function _generateOneSheet() {
 <body>
 <div class="page">
 
-  <!-- Header -->
-  <div class="os-header">
-    <div class="os-header-left">
-      <div class="os-logo">Cricket Wireless · DCO Performance</div>
-      <div class="os-title">${titleQ} 2026 — Internal Campaign Review</div>
-      <div class="os-sub">${mktLabel} · Flashtalking + Innovid · Data as of ${todayLong}</div>
-    </div>
-    <div class="os-header-right">
-      <div class="os-date">Prepared by Emily McAndrew · Argonaut</div>
-      <div class="os-qbadge">${titleQ} · ${mktLabel}</div>
-    </div>
-  </div>
+  <div class="os-header" id="oneSheetHeaderBlock" contenteditable="${editable}">${headerHtml}</div>
 
-  <!-- Stats Bar -->
-  <div class="stats-bar">
-    <div class="stat">
-      <div class="stat-val">${FMT.abbr(totImps)}</div>
-      <div class="stat-lbl">Impressions</div>
-    </div>
-    <div class="stat">
-      <div class="stat-val">${FMT.abbr(totClicks)}</div>
-      <div class="stat-lbl">Clicks</div>
-    </div>
-    <div class="stat">
-      <div class="stat-val green">${(totCtr*100).toFixed(3)}%</div>
-      <div class="stat-lbl">CTR</div>
-    </div>
-    <div class="stat">
-      <div class="stat-val green">${FMT.num(totOrders)}</div>
-      <div class="stat-lbl">GM Orders</div>
-    </div>
-    <div class="stat">
-      <div class="stat-val">${(totLpvr*100).toFixed(2)}%</div>
-      <div class="stat-lbl">Avg LPVR</div>
-    </div>
-    <div class="stat">
-      <div class="stat-val">${hasSpend ? FMT.dollar(totSpend) : '—'}</div>
-      <div class="stat-lbl">${hasSpend ? 'Total Spend' : 'Spend N/A'}</div>
-    </div>
-  </div>
+  ${oneSheetRenderKpiBar(model)}
+  ${oneSheetRenderComparisonBox(model)}
 
-  <!-- Quarter Breakdown -->
-  <div class="section-label">Quarter Breakdown</div>
-  <div class="q-breakdown">
-    <table class="qb-table">
-      <thead><tr><th>Quarter</th><th>Impressions</th><th>CTR</th><th>GM Orders</th><th>LPVR</th><th>Spend</th><th>CPC</th></tr></thead>
-      <tbody>
-        ${activeQs.map(q => qBreakdownRow(q)).join('')}
-      </tbody>
-    </table>
-  </div>
+  <div class="section-label">Funnel Efficiency: All Stage Buckets</div>
+  ${oneSheetRenderFunnelTable(model.funnelRows)}
 
-  <!-- Top 5 Creative Tables -->
-  <div class="section-label">Top Creative Performance</div>
-  <div class="three-col">
-    <div class="tbl-wrap">
-      <div class="tbl-head"><span class="tbl-head-icon">🏆</span> Top 5 — GM Orders</div>
-      ${top5(crRows,'gmOrd',[
-        {key:'gmOrd',  label:'Orders', fmt: v => FMT.num(v)},
-        {key:'imps',   label:'Imps',   fmt: v => FMT.abbr(v)},
-      ])}
-    </div>
-    <div class="tbl-wrap">
-      <div class="tbl-head"><span class="tbl-head-icon">🖱</span> Top 5 — CTR</div>
-      ${top5(crRows,'ctr',[
-        {key:'ctr',    label:'CTR',    fmt: v => (v*100).toFixed(3)+'%'},
-        {key:'imps',   label:'Imps',   fmt: v => FMT.abbr(v)},
-      ])}
-    </div>
-    <div class="tbl-wrap">
-      <div class="tbl-head"><span class="tbl-head-icon">📍</span> Top 5 — LPVR</div>
-      ${top5(crRows,'gmLpvr',[
-        {key:'gmLpvr', label:'LPVR',   fmt: v => (v*100).toFixed(2)+'%'},
-        {key:'cpc',    label:'CPC',    fmt: v => v>0?'$'+v.toFixed(2):'—'},
-      ])}
-    </div>
-  </div>
+  ${oneSheetRenderTopTable('Top 5 Creatives: Orders', '🏆', topOrders, [
+    {key:'gmOrd', label:'Orders', fmt:v=>FMT.num(v)},
+    {key:'cpo',   label:'CPO',    fmt:v=>v!=null?'$'+v.toFixed(2):'—'},
+    {key:'imps',  label:'Imps',   fmt:v=>FMT.abbr(v)},
+    {key:'tdor',  label:'TDOR',   fmt:v=>(v*100).toFixed(4)+'%'},
+  ], {showQBadge: multiQ})}
 
-  <!-- Insights + Recommendations -->
+  ${oneSheetRenderTopTable('Top 5 Creatives: CPO (Spend ÷ Orders)', '💵', topCpo, [
+    {key:'gmOrd', label:'Orders', fmt:v=>FMT.num(v)},
+    {key:'cpo',   label:'CPO',    fmt:v=>'$'+v.toFixed(2)},
+  ], {showQBadge: multiQ})}
+
+  ${oneSheetRenderTopTable('Top 5 Creatives: LPVR (Global Spotlight Hits ÷ Impressions)', '📍', topLpvr, [
+    {key:'imps',   label:'Imps', fmt:v=>FMT.abbr(v)},
+    {key:'gmLpvr', label:'LPVR', fmt:v=>FMT.pct2(v)},
+  ], {showQBadge: multiQ})}
+
+  ${oneSheetRenderTopTable('Top 5 Creatives: CTR', '🖱', topCtr, [
+    {key:'imps', label:'Imps', fmt:v=>FMT.abbr(v)},
+    {key:'ctr',  label:'CTR',  fmt:v=>FMT.pct(v)},
+  ], {showQBadge: multiQ})}
+
   <div class="two-col">
     <div class="insights-box">
       <div class="box-title">Key Insights</div>
-      <ul>${insights.map(i=>`<li>${i}</li>`).join('')}</ul>
+      <ul id="oneSheetInsightsList" contenteditable="${editable}">${insightsHtml}</ul>
     </div>
     <div class="recs-box">
       <div class="box-title">Recommendations</div>
-      <ul>${recs.map(r=>`<li>${r}</li>`).join('')}</ul>
+      <ul id="oneSheetRecsList" contenteditable="${editable}">${recsHtml}</ul>
     </div>
   </div>
 
-  <!-- Footer -->
   <div class="os-footer">
-    <span>Cricket Wireless DCO · ${mktLabel} · Ad Server: Flashtalking / Innovid · Data through ${todayLong}</span>
+    <span>Cricket Wireless DCO · ${esc(model.mktLabel)} · Ad Server: Flashtalking / Innovid · Data through ${esc(model.generatedAt)}</span>
     <span>Emily McAndrew · Argonaut · crk-dco-dash.reporting_data.deliveries_view</span>
   </div>
 
 </div>
-<script>window.onload = function(){ window.print(); }<\/script>
+${opts.autoPrint ? '<script>window.onload = function(){ window.print(); }<\/script>' : ''}
 </body></html>`;
-
-  _showOneSheeter(html);
 }
 
-function _showOneSheeter(html) {
+/* ── One-Sheeter Generator ───────────────────────────────── */
+function generateOneSheet() {
+  const btn = document.getElementById('downloadOneSheeterBtn');
+  if (btn) { btn.textContent = 'Generating…'; setTimeout(() => btn.innerHTML = '<svg-icon name="print" size="14"></svg-icon> One-Sheeter', 3000); }
+  try { _generateOneSheet(); } catch(e) { console.error('One-sheeter error:', e); alert('One-Sheeter error: ' + e.message); }
+}
+
+function _generateOneSheet() {
+  const qSel     = typeof ovQs       !== 'undefined' ? ovQs       : ['Q1','Q2','Q3'];
+  const mktSel   = typeof ovMkt      !== 'undefined' ? ovMkt      : 'all';
+  const dateFrom = typeof ovDateFrom !== 'undefined' ? ovDateFrom : null;
+  const dateTo   = typeof ovDateTo   !== 'undefined' ? ovDateTo   : null;
+
+  const current = computeTotals(qSel, mktSel, dateFrom, dateTo);
+  const model = {
+    qSel, mktSel, dateFrom, dateTo,
+    periodLabel: oneSheetBuildPeriodLabel(qSel, dateFrom, dateTo),
+    mktLabel: mktSel === 'all' ? 'GM + USH' : mktSel,
+    current,
+    lpv:  oneSheetDeriveLpv(current),
+    tdor: oneSheetDeriveTdor(current),
+    cpo:  oneSheetDeriveCpo(current.spend, current.gmOrd),
+    comparison: oneSheetResolveComparison(qSel, mktSel, dateFrom, dateTo),
+    funnelRows: oneSheetBuildFunnelRows(qSel, mktSel, dateFrom, dateTo),
+    creatives: oneSheetBuildCreativeRows(qSel, mktSel, dateFrom, dateTo),
+    generatedAt: new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}),
+  };
+
+  const headerHtml   = oneSheetRenderHeaderInner(model);
+  const insightsHtml = oneSheetDraftInsights(model).map(i => `<li>${i}</li>`).join('');
+  const recsHtml     = oneSheetDraftRecommendations(model).map(r => `<li>${r}</li>`).join('');
+
+  const previewHtml = buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, { autoPrint: false });
+  _showOneSheeter(model, previewHtml);
+}
+
+function _showOneSheeter(model, previewHtml) {
   const existing = document.getElementById('osModalOverlay');
   if (existing) existing.remove();
 
@@ -6002,7 +6287,11 @@ function _showOneSheeter(html) {
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px;box-sizing:border-box;overflow:auto;';
 
   const toolbar = document.createElement('div');
-  toolbar.style.cssText = 'display:flex;gap:10px;margin-bottom:14px;flex-shrink:0;';
+  toolbar.style.cssText = 'display:flex;gap:10px;margin-bottom:14px;flex-shrink:0;align-items:center;';
+
+  const hint = document.createElement('span');
+  hint.textContent = 'Tip: click into Key Insights / Recommendations below to edit before exporting.';
+  hint.style.cssText = 'color:#fff;font-size:12px;opacity:.75;';
 
   const printBtn = document.createElement('button');
   printBtn.textContent = 'Print / Save PDF';
@@ -6016,13 +6305,14 @@ function _showOneSheeter(html) {
   closeBtn.textContent = '✕ Close';
   closeBtn.style.cssText = 'background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:8px;padding:9px 20px;font-size:14px;font-weight:600;cursor:pointer;margin-left:auto;';
 
+  toolbar.appendChild(hint);
   toolbar.appendChild(printBtn);
   toolbar.appendChild(downloadBtn);
   toolbar.appendChild(closeBtn);
 
   const frame = document.createElement('iframe');
-  frame.style.cssText = 'width:900px;max-width:100%;height:80vh;border:none;border-radius:10px;background:#fff;flex-shrink:0;';
-  frame.srcdoc = html;
+  frame.style.cssText = 'width:1000px;max-width:100%;height:80vh;border:none;border-radius:10px;background:#fff;flex-shrink:0;';
+  frame.srcdoc = previewHtml;
 
   overlay.appendChild(toolbar);
   overlay.appendChild(frame);
@@ -6031,16 +6321,37 @@ function _showOneSheeter(html) {
   closeBtn.addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
+  /* Reads the CURRENT (possibly hand-edited) header/insights/recs straight
+     out of the live preview iframe's DOM, rather than closing over the
+     original auto-drafted strings — this is what makes edits actually
+     stick when printing/downloading. */
+  function currentFinalHtml() {
+    let headerHtml, insightsHtml, recsHtml;
+    try {
+      headerHtml   = frame.contentDocument.getElementById('oneSheetHeaderBlock').innerHTML;
+      insightsHtml = frame.contentDocument.getElementById('oneSheetInsightsList').innerHTML;
+      recsHtml     = frame.contentDocument.getElementById('oneSheetRecsList').innerHTML;
+    } catch (e) { headerHtml = insightsHtml = recsHtml = null; }
+    if (headerHtml == null || insightsHtml == null || recsHtml == null) {
+      headerHtml   = oneSheetRenderHeaderInner(model);
+      insightsHtml = oneSheetDraftInsights(model).map(i => `<li>${i}</li>`).join('');
+      recsHtml     = oneSheetDraftRecommendations(model).map(r => `<li>${r}</li>`).join('');
+    }
+    return buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, { autoPrint: true });
+  }
+
   printBtn.addEventListener('click', () => {
-    const blob = new Blob([html], { type: 'text/html' });
+    const finalHtml = currentFinalHtml();
+    const blob = new Blob([finalHtml], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const win = window.open(url, '_blank');
-    if (win) { win.onload = () => win.print(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
+    if (win) { setTimeout(() => URL.revokeObjectURL(url), 30000); }
     else { alert('Allow popups for this page to print, or use Download HTML and open/print from there.'); }
   });
 
   downloadBtn.addEventListener('click', () => {
-    const blob = new Blob([html], { type: 'text/html' });
+    const finalHtml = currentFinalHtml();
+    const blob = new Blob([finalHtml], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = 'cricket-one-sheeter.html';
