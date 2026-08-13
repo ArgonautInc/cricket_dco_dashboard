@@ -3268,6 +3268,18 @@ function applyManualPerformanceData() {
   if (typeof renderAnalytics === 'function') renderAnalytics();
 }
 
+/* Derives avatar initials from a display name, falling back to the first
+   letter of the email when a first+last initial can't be determined (e.g.
+   Google's userinfo endpoint returns no `name` at all unless the OAuth
+   scope includes 'profile' — this app only requests BigQuery/Storage
+   scopes, so `name` is often empty and the email fallback is the common
+   case, not just an edge case). */
+function computeInitials(name, email) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return (email || '').trim().charAt(0).toUpperCase() || '?';
+}
+
 /* ── Google OAuth token handler ─────────────────────────── */
 async function handleGoogleToken(resp) {
   if (resp.error) {
@@ -3288,7 +3300,7 @@ async function handleGoogleToken(resp) {
   const user = {
     email:    info.email,
     name:     info.name || info.email,
-    initials: (info.name||'??').split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase(),
+    initials: computeInitials(info.name, info.email),
     role:     (info.email||'').toLowerCase().endsWith('@argonautinc.com') ? 'admin' : 'viewer',
   };
 
@@ -3424,7 +3436,11 @@ function switchTab(name) {
 window.__onAuth = function(user) {
 
   /* Populate user chip */
-  document.getElementById('userAvatarEl').textContent = user.initials || '??';
+  /* A previously-cached session may still carry the old broken '?' value
+     (a truthy string, so a plain || wouldn't catch it) — recompute
+     whenever the stored initials look like that broken placeholder. */
+  document.getElementById('userAvatarEl').textContent =
+    (user.initials && user.initials !== '?') ? user.initials : computeInitials(user.name, user.email);
   document.getElementById('userNameEl').textContent   = user.name;
   document.getElementById('userRoleEl').textContent   =
     '';
