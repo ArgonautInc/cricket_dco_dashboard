@@ -5967,7 +5967,7 @@ function oneSheetDraftInsights(model) {
     }
     if (d.cpo != null) {
       const prevCpo = oneSheetDeriveCpo(comparison.previous.spend, comparison.previous.gmOrd);
-      insights.push(`<strong>Cost per Order ${d.cpo<=0?'Down':'Up'} ${Math.abs(d.cpo*100).toFixed(0)}%:</strong> campaign CPO moved from $${prevCpo.toFixed(2)} (${comparison.prevQ}) to $${model.cpo!=null?model.cpo.toFixed(2):'—'} this period.`);
+      insights.push(`<strong>Cost per Order ${d.cpo<=0?'Down':'Up'} ${Math.abs(d.cpo*100).toFixed(0)}%:</strong> campaign CPO moved from $${prevCpo.toFixed(2)} (${comparison.prevQ}) to $${model.cpo!=null?model.cpo.toFixed(2):'N/A'} this period.`);
     }
   }
 
@@ -5996,11 +5996,11 @@ function oneSheetDraftRecommendations(model) {
   const segsWithOrders = funnelRows.filter(s => s.gmOrd > 0 && s.cpo != null);
   const cheapestSeg = [...segsWithOrders].sort((a,b)=>a.cpo-b.cpo)[0];
   if (cheapestSeg && (!topOrd || cheapestSeg.stage !== topOrd.stage)) {
-    recs.push(`Expand rotation in <strong>${esc(oneSheetStageLabel(cheapestSeg.stage))}</strong> — the lowest CPO segment this period at $${cheapestSeg.cpo.toFixed(2)} — while scale remains limited.`);
+    recs.push(`Expand rotation in <strong>${esc(oneSheetStageLabel(cheapestSeg.stage))}</strong> (the lowest CPO segment this period at $${cheapestSeg.cpo.toFixed(2)}) while scale remains limited.`);
   }
 
   const highestImpsSeg = [...funnelRows].sort((a,b)=>b.imps-a.imps)[0];
-  if (highestImpsSeg) recs.push(`Refresh creative variety in <strong>${esc(oneSheetStageLabel(highestImpsSeg.stage))}</strong> — the highest-delivery segment — to stay ahead of fatigue.`);
+  if (highestImpsSeg) recs.push(`Refresh creative variety in <strong>${esc(oneSheetStageLabel(highestImpsSeg.stage))}</strong> (the highest-delivery segment) to stay ahead of fatigue.`);
 
   const byCtr = [...creatives].sort((a,b)=>(b.ctr||0)-(a.ctr||0));
   const topCtr = byCtr[0];
@@ -6135,12 +6135,16 @@ const ONESHEET_DELTA_LABELS = {
    philosophy already used by the Trends tab's TR_METRICS direction field). */
 const ONESHEET_DELTA_GOOD_UP = { imps:true, clicks:true, lpv:true, gmOrd:true, spend:null, ctr:true, gmLpvr:true, gmCvr:true, tdor:true, cpc:false, cpo:false };
 
+/* Only these 7 metrics show in the % Change box, in this order — Emily's
+   explicit list (drops the volume metrics — Impressions, Clicks, Landing
+   Page Visits, Total Cost — that used to also appear here). */
+const ONESHEET_COMPARISON_BOX_KEYS = ['gmOrd','gmCvr','tdor','ctr','cpc','cpo','gmLpvr'];
+
 function oneSheetRenderComparisonBox(model) {
   const cmp = model.comparison;
   if (!cmp) return '';
   const d = cmp.deltas;
-  const keys = ['gmOrd','gmCvr','tdor','ctr','cpc','cpo','gmLpvr','imps','clicks','lpv','spend'];
-  const tiles = keys.filter(k => d[k] != null).map(k => {
+  const tiles = ONESHEET_COMPARISON_BOX_KEYS.filter(k => d[k] != null).map(k => {
     const goodUp = ONESHEET_DELTA_GOOD_UP[k];
     const isGood = goodUp === null ? null : (goodUp ? d[k] >= 0 : d[k] <= 0);
     const cls = isGood === null ? '' : (isGood ? '' : 'delta-bad');
@@ -6149,7 +6153,33 @@ function oneSheetRenderComparisonBox(model) {
       <div class="delta-lbl">${esc(ONESHEET_DELTA_LABELS[k])}</div>
     </div>`;
   }).join('');
-  return `<div class="section-label">% Change vs. ${esc(cmp.prevQ)}</div><div class="delta-bar">${tiles}</div>`;
+  return `<div class="section-label">% Change vs. ${esc(cmp.prevQ)}</div><div class="delta-bar">${tiles}</div>${oneSheetRenderComparisonFootnote(model)}`;
+}
+
+/* Expresses a day count as a natural, roughly-scaled unit — weeks for
+   short spans, months for anything long enough that "weeks" would read
+   oddly (a full quarter is always ~90 days, so this reliably renders as
+   "3 months" for the previous-period side). */
+function oneSheetHumanizeDuration(days) {
+  if (days >= 60) {
+    const months = Math.round(days / 30.44);
+    return `${months} month${months === 1 ? '' : 's'}`;
+  }
+  if (days >= 10) {
+    const weeks = Math.round(days / 7);
+    return `${weeks} week${weeks === 1 ? '' : 's'}`;
+  }
+  return `${days} day${days === 1 ? '' : 's'}`;
+}
+
+function oneSheetRenderComparisonFootnote(model) {
+  const cmp = model.comparison;
+  if (!cmp) return '';
+  const qKeys = normQs(model.qSel);
+  const currentLabel = qKeys.length > 1 ? qsLabel(qKeys) : qKeys[0];
+  const currentDuration = oneSheetHumanizeDuration(cmp.currentDays);
+  const previousDuration = oneSheetHumanizeDuration(cmp.previousDays);
+  return `<div class="delta-footnote">*Each percentage compares ${esc(currentLabel)}'s numbers against ${esc(cmp.prevQ)} figures. The general principle: rate metrics compare directly, but volume metrics get normalized to daily pace, since it's ${currentDuration} against ${esc(cmp.prevQ)}'s ${previousDuration} of data.</div>`;
 }
 
 function oneSheetRenderHeaderInner(model) {
@@ -6198,12 +6228,13 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
   .stat-val.green{color:#3F8D00}
   .stat-lbl{font-size:7.5px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:#999;margin-top:3px}
 
-  .delta-bar{display:grid;grid-template-columns:repeat(6,1fr);background:#EAF7DC;border:1px solid #cde8ae;border-radius:0 0 8px 8px;margin-bottom:14px}
+  .delta-bar{display:grid;grid-template-columns:repeat(7,1fr);background:#EAF7DC;border:1px solid #cde8ae;border-radius:0 0 8px 8px;margin-bottom:4px}
   .delta-tile{padding:8px 10px;border-right:1px solid #d7ecb9;text-align:center}
-  .delta-tile:nth-child(6n){border-right:none}
+  .delta-tile:last-child{border-right:none}
   .delta-pct{font-size:15px;font-weight:800;letter-spacing:-.4px;color:#3F8D00}
   .delta-tile.delta-bad .delta-pct{color:#C2185B}
   .delta-lbl{font-size:7.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#5c7a3f;margin-top:2px}
+  .delta-footnote{font-size:8px;color:#999;line-height:1.4;margin-bottom:14px}
 
   .section-label{font-size:9px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:#aaa;margin:14px 0 7px;display:flex;align-items:center;gap:8px}
   .section-label::after{content:'';flex:1;height:1px;background:#ececec}
