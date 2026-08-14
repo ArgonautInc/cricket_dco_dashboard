@@ -1847,6 +1847,19 @@ body.compact .chart-card      { padding: 14px 16px; }
             <svg-icon name="search" size="13" color="var(--muted)"></svg-icon>
             <input id="crSearch" type="text" placeholder="Search creative…"/>
           </div>
+          <select class="an-select" id="crSortFilter">
+            <option value="none">Sort: Default</option>
+            <option value="imps">Impressions</option>
+            <option value="clicks">Clicks</option>
+            <option value="gmOrd">Orders</option>
+            <option value="ctr">CTR</option>
+            <option value="gmLpvr">LPVR</option>
+            <option value="gmCvr">CVR</option>
+            <option value="tdor">TDOR</option>
+            <option value="cpc">CPC</option>
+            <option value="cpo">CPO</option>
+          </select>
+          <button class="btn-ghost btn-sm" id="crSortDirToggle" title="Toggle sort direction" style="display:none">&#9660; High&rarr;Low</button>
           <span id="crCount" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
         </div>
 
@@ -4739,7 +4752,7 @@ function crGetAll() {
 }
 
 /* ── Filter state ────────────────────────────────────────── */
-const crState = { qs:[...ALL_QS], mkt:'all', stage:'all', search:'', dateFrom:null, dateTo:null };
+const crState = { qs:[...ALL_QS], mkt:'all', stage:'all', search:'', dateFrom:null, dateTo:null, sort:'none', sortDir:'desc' };
 
 function crFilter(rows) {
   return rows.filter(r =>
@@ -4748,6 +4761,34 @@ function crFilter(rows) {
     (crState.stage === 'all' || r.stage === crState.stage) &&
     (!crState.search || (r.creative||'').toLowerCase().includes(crState.search.toLowerCase()))
   );
+}
+
+/* ── Sort ────────────────────────────────────────────────── */
+function crSortValue(c, metric) {
+  switch (metric) {
+    case 'imps':   return c.imps   || 0;
+    case 'clicks': return c.clicks || 0;
+    case 'gmOrd':  return c.gmOrd  || 0;
+    case 'ctr':    return c.ctr    || 0;
+    case 'gmLpvr': return c.gmLpvr || 0;
+    case 'gmCvr':  return c.gmCvr  || 0;
+    case 'tdor':   return oneSheetDeriveTdor(c) || 0;
+    case 'cpc':    return c.clicks ? (c.spend || 0) / c.clicks : null;
+    case 'cpo':    return oneSheetDeriveCpo(c.spend, c.gmOrd);
+    default:       return null;
+  }
+}
+
+function crSortRows(rows, metric, dir) {
+  if (!metric || metric === 'none') return rows;
+  return rows.map(r => ({ r, v: crSortValue(r, metric) }))
+    .sort((a, b) => {
+      if (a.v == null && b.v == null) return 0;
+      if (a.v == null) return 1;
+      if (b.v == null) return -1;
+      return dir === 'asc' ? a.v - b.v : b.v - a.v;
+    })
+    .map(x => x.r);
 }
 
 /* ── Thumbnail gradient (by stage) ──────────────────────── */
@@ -4824,6 +4865,10 @@ function crCardHTML(c) {
   const gmOrd  = c.gmOrd  ? fmtN(c.gmOrd)       : '—';
   const gmLpvr = c.gmLpvr ? fmtPct(c.gmLpvr)    : '—';
   const gmCvr  = c.gmCvr  ? fmtPct(c.gmCvr)     : '—';
+  const tdorV  = oneSheetDeriveTdor(c);
+  const tdor   = tdorV ? (tdorV*100).toFixed(4)+'%' : '—';
+  const cpoV   = oneSheetDeriveCpo(c.spend, c.gmOrd);
+  const cpo    = cpoV != null ? '$'+cpoV.toFixed(2) : '—';
 
   return `
   <div class="creative-card" data-id="${esc(c.id)}">
@@ -4845,6 +4890,8 @@ function crCardHTML(c) {
         <div class="cs-item"><div class="cs-label">GM Orders</div><div class="cs-val">${gmOrd}</div></div>
         <div class="cs-item"><div class="cs-label">GM LPVR</div><div class="cs-val">${gmLpvr}</div></div>
         <div class="cs-item"><div class="cs-label">GM CVR</div><div class="cs-val">${gmCvr}</div></div>
+        <div class="cs-item"><div class="cs-label">TDOR</div><div class="cs-val">${tdor}</div></div>
+        <div class="cs-item"><div class="cs-label">CPO</div><div class="cs-val">${cpo}</div></div>
       </div>
       <div class="creative-innovid-row">
         <svg-icon name="link" size="13" color="var(--muted)" style="flex-shrink:0"></svg-icon>
@@ -4896,10 +4943,11 @@ function crScaleIframes() {
 function renderCreatives() {
   const all      = crGetAll();
   const filtered = crFilter(all);
+  const sorted   = crSortRows(filtered, crState.sort, crState.sortDir);
   const grid     = document.getElementById('creativesGrid');
   if (!grid) return;
-  grid.innerHTML = filtered.map(c => crCardHTML(c)).join('') + crAddCardHTML();
-  document.getElementById('crCount').textContent = `${filtered.length} creative${filtered.length!==1?'s':''}`;
+  grid.innerHTML = sorted.map(c => crCardHTML(c)).join('') + crAddCardHTML();
+  document.getElementById('crCount').textContent = `${sorted.length} creative${sorted.length!==1?'s':''}`;
   crWireCards();
   crScaleIframes();
 }
@@ -5100,6 +5148,16 @@ document.getElementById('crStageFilter').addEventListener('change', e => {
 });
 document.getElementById('crSearch').addEventListener('input', e => {
   crState.search = e.target.value; renderCreatives();
+});
+document.getElementById('crSortFilter').addEventListener('change', e => {
+  crState.sort = e.target.value;
+  document.getElementById('crSortDirToggle').style.display = crState.sort === 'none' ? 'none' : '';
+  renderCreatives();
+});
+document.getElementById('crSortDirToggle').addEventListener('click', () => {
+  crState.sortDir = crState.sortDir === 'desc' ? 'asc' : 'desc';
+  document.getElementById('crSortDirToggle').innerHTML = crState.sortDir === 'desc' ? '&#9660; High&rarr;Low' : '&#9650; Low&rarr;High';
+  renderCreatives();
 });
 crWireThumbPreview();
 
