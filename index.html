@@ -6313,15 +6313,8 @@ function oneSheetRenderComparisonFootnote(model) {
 }
 
 function oneSheetRenderHeaderInner(model) {
-  return `<div>
-      <div class="os-logo">Cricket Wireless · DCO Performance</div>
-      <div class="os-title">${esc(model.periodLabel)} — Internal Campaign Review</div>
-      <div class="os-sub">${esc(model.mktLabel)} · Flashtalking + Innovid · Data as of ${esc(model.generatedAt)}</div>
-    </div>
-    <div class="os-header-right">
-      <div class="os-date">Prepared by Emily McAndrew · Argonaut</div>
-      <div class="os-qbadge">${esc(model.periodLabel)} · ${esc(model.mktLabel)}</div>
-    </div>`;
+  return `<div class="os-logo">Cricket Wireless · DCO Performance Insights</div>
+    <div class="os-qbadge">${esc(model.periodLabel)} · ${esc(model.mktLabel)}</div>`;
 }
 
 function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
@@ -6344,11 +6337,7 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
   .page{width:1150px;margin:0 auto;padding:20px 26px}
 
   .os-header{background:#0d0d0d;color:#fff;padding:13px 20px 12px;border-radius:8px 8px 0 0;display:flex;align-items:center;justify-content:space-between}
-  .os-logo{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#5BC500;margin-bottom:3px}
-  .os-title{font-size:17px;font-weight:800;color:#fff;letter-spacing:-.3px}
-  .os-sub{font-size:10px;color:#888;margin-top:2px}
-  .os-header-right{text-align:right}
-  .os-date{font-size:9px;color:#666;margin-bottom:4px}
+  .os-logo{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#5BC500}
   .os-qbadge{display:inline-block;background:#5BC500;color:#000;font-size:9px;font-weight:800;padding:3px 10px;border-radius:20px;letter-spacing:.5px}
 
   .stats-bar{display:grid;grid-template-columns:repeat(6,1fr);background:#f7f7f7;border:1px solid #e4e4e4;border-top:none}
@@ -6469,8 +6458,8 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
   </div>
 
   <div class="os-footer">
-    <span>Cricket Wireless DCO · ${esc(model.mktLabel)} · Ad Server: Flashtalking / Innovid · Data through ${esc(model.generatedAt)}</span>
-    <span>Emily McAndrew · Argonaut · crk-dco-dash.reporting_data.deliveries_view</span>
+    <span>Cricket Wireless DCO · Data through ${esc(model.generatedAt)}</span>
+    <span>Argonaut</span>
   </div>
 
 </div>
