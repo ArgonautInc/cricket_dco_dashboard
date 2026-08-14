@@ -5768,6 +5768,71 @@ function oneSheetBuildPeriodLabel(qSel, dateFrom, dateTo) {
   return `${q}: ${oneSheetFmtDate(from)} – ${oneSheetFmtDate(to)}${remaining ? ` (${remaining} remaining)` : ''}`;
 }
 
+/* The 3 calendar-month [start, end] ranges within a quarter (always 3,
+   since every quarter in TR_QUARTER_BOUNDS starts on the 1st of a month
+   and ends on the last day of a month — no partial-month clipping
+   needed). */
+function oneSheetQuarterMonthRanges(q) {
+  const bounds = TR_QUARTER_BOUNDS[q];
+  if (!bounds) return [];
+  const start = new Date(bounds.start + 'T00:00:00Z');
+  const months = [];
+  for (let i = 0; i < 3; i++) {
+    const monthStart = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
+    const monthEnd   = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i + 1, 0));
+    months.push({ start: monthStart.toISOString().slice(0, 10), end: monthEnd.toISOString().slice(0, 10) });
+  }
+  return months;
+}
+
+/* Campaign-level CPC/CPO for quarter `q`, as a MONTH-WEIGHTED average —
+   each of the quarter's 3 calendar months counted equally, not pooled
+   into one volume-weighted total — so a single high-volume month doesn't
+   dominate the comparison. A month with no clicks/orders is simply
+   excluded from that metric's average rather than counted as a 0.
+   Returns null (both fields) when day-level data isn't loaded, since a
+   monthly split isn't computable without daily granularity — callers
+   should fall back to a straight full-quarter total in that case. */
+function oneSheetMonthlyPacedTotals(q, mktSel) {
+  if (!anDailyLoaded) return null;
+  const cpcs = [], cpos = [];
+  oneSheetQuarterMonthRanges(q).forEach(month => {
+    const t = computeTotals([q], mktSel, month.start, month.end);
+    if (t.clicks > 0) cpcs.push(t.spend / t.clicks);
+    const cpo = oneSheetDeriveCpo(t.spend, t.gmOrd);
+    if (cpo != null) cpos.push(cpo);
+  });
+  const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+  return { cpc: avg(cpcs), cpo: avg(cpos) };
+}
+
+/* Same month-weighted-average idea, but per segment (for the Funnel
+   Efficiency table's Prev CPC/Prev CPO columns) rather than one
+   campaign-level total. Keyed by canonical segment name so it composes
+   with the cross-quarter segment-name aliasing already in place. */
+function oneSheetPrevSegmentsMonthlyPaced(prevQ, mktSel) {
+  const map = new Map();
+  if (!anDailyLoaded) {
+    const rows = effectiveStageRows(null, null).filter(r => r.q === prevQ && (mktSel === 'all' || r.mkt === mktSel));
+    oneSheetAggregateSegments(rows).forEach(s => map.set(oneSheetCanonicalSegmentKey(s.stage), { cpc: s.cpc, cpo: s.cpo }));
+    return map;
+  }
+  const perSegment = new Map(); // canonicalKey -> { cpcs:[], cpos:[] }
+  oneSheetQuarterMonthRanges(prevQ).forEach(month => {
+    const rows = effectiveStageRows(month.start, month.end).filter(r => r.q === prevQ && (mktSel === 'all' || r.mkt === mktSel));
+    oneSheetAggregateSegments(rows).forEach(s => {
+      const key = oneSheetCanonicalSegmentKey(s.stage);
+      if (!perSegment.has(key)) perSegment.set(key, { cpcs: [], cpos: [] });
+      const entry = perSegment.get(key);
+      if (s.cpc != null) entry.cpcs.push(s.cpc);
+      if (s.cpo != null) entry.cpos.push(s.cpo);
+    });
+  });
+  const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+  perSegment.forEach((v, key) => map.set(key, { cpc: avg(v.cpcs), cpo: avg(v.cpos) }));
+  return map;
+}
+
 /* Resolves what "previous" means for the % Change box, per the confirmed
    rules: a single selected quarter compares against the one immediately
    before it (Q1 has none — returns null, hiding the box); a multi-quarter
@@ -5779,7 +5844,11 @@ function oneSheetBuildPeriodLabel(qSel, dateFrom, dateTo) {
    rate metrics compare directly. Dividing both periods' volume totals by
    their own day-count and then diffing is algebraically identical to a
    plain percent-change whenever the two day-counts already match, so this
-   applies unconditionally with no special-casing needed. */
+   applies unconditionally with no special-casing needed.
+   CPC/CPO specifically use a month-weighted average of the previous
+   quarter (each calendar month counted equally) rather than one pooled
+   full-quarter total, per Emily's request — falls back to the pooled
+   total when day-level data isn't loaded. */
 function oneSheetResolveComparison(qSel, mktSel, dateFrom, dateTo) {
   const qKeys = normQs(qSel);
   const prevOf = { Q2:'Q1', Q3:'Q2' };
@@ -5800,7 +5869,10 @@ function oneSheetResolveComparison(qSel, mktSel, dateFrom, dateTo) {
   const curLpv  = oneSheetDeriveLpv(current),  prevLpv  = oneSheetDeriveLpv(previous);
   const curTdor = oneSheetDeriveTdor(current), prevTdor = oneSheetDeriveTdor(previous);
   const curCpo  = oneSheetDeriveCpo(current.spend, current.gmOrd);
-  const prevCpo = oneSheetDeriveCpo(previous.spend, previous.gmOrd);
+
+  const monthlyPaced = oneSheetMonthlyPacedTotals(prevQ, mktSel);
+  const prevCpc = (monthlyPaced && monthlyPaced.cpc != null) ? monthlyPaced.cpc : previous.cpc;
+  const prevCpo = (monthlyPaced && monthlyPaced.cpo != null) ? monthlyPaced.cpo : oneSheetDeriveCpo(previous.spend, previous.gmOrd);
 
   const pace = (v, days) => days ? v / days : 0;
   const pct  = (a, b) => b ? (a - b) / b : 0;
@@ -5815,11 +5887,11 @@ function oneSheetResolveComparison(qSel, mktSel, dateFrom, dateTo) {
     gmLpvr: pct(current.gmLpvr, previous.gmLpvr),
     gmCvr:  pct(current.gmCvr,  previous.gmCvr),
     tdor:   pct(curTdor, prevTdor),
-    cpc:    pct(current.cpc, previous.cpc),
+    cpc:    pct(current.cpc, prevCpc),
     cpo:    (curCpo != null && prevCpo != null) ? pct(curCpo, prevCpo) : null,
   };
 
-  return { prevQ, current, previous, currentDays, previousDays, deltas };
+  return { prevQ, current, previous, currentDays, previousDays, deltas, prevCpcMonthlyPaced: prevCpc, prevCpoMonthlyPaced: prevCpo, isMonthlyPaced: !!monthlyPaced };
 }
 
 /* Groups already-filtered stage rows by stage name, summing raw counts
@@ -5844,26 +5916,19 @@ function oneSheetAggregateSegments(rows) {
   }));
 }
 
-/* Sort by the leading integer in "N - Stage Name" (this dashboard's
-   existing stage-label convention) — NOT alphabetical (which would
-   wrongly put "10 -" before "2 -") and not impressions-based. Matches the
-   funnel-flow row order in the reference one-sheeter. */
-function oneSheetStageSortKey(stage) {
-  const m = /^(\d+)/.exec(stage);
-  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
-}
-
 /* Known cases where a segment's descriptive name (after stripping the
    leading "N - " stage number) differs between quarters despite being the
    same underlying funnel segment — confirmed by Emily from the Q2 vs Q3
    Funnel Efficiency table (e.g. Q2's "Homepage Visitor" is Q3's
    "Homepage"). Without this, Prev CPC/CPO silently show "—" for these
    segments since the exact-string lookup misses. Add further pairs here
-   as new naming mismatches turn up in future quarters. */
+   as new naming mismatches turn up in future quarters. Each group's FIRST
+   entry is the canonical/current name — keep that in sync with
+   ONESHEET_SEGMENT_ORDER below, which sorts on this same canonical form. */
 const ONESHEET_SEGMENT_ALIAS_GROUPS = [
   ['Homepage', 'Homepage Visitor'],
-  ['Plans Research', 'Plans Selection'],
-  ['Multi-Month Visitor', 'MultiMonth Plans'],
+  ['Plans Selection', 'Plans Research'],
+  ['MultiMonth Plans', 'Multi-Month Visitor'],
 ];
 const ONESHEET_SEGMENT_ALIAS_MAP = (() => {
   const map = new Map();
@@ -5880,6 +5945,34 @@ function oneSheetCanonicalSegmentKey(stage) {
   return ONESHEET_SEGMENT_ALIAS_MAP.get(label) || label;
 }
 
+/* Explicit funnel-flow row order, matching the reference one-sheeter
+   exactly — not derivable from the stage numbers/labels alone (e.g. "Mid
+   Funnel"/"Prospecting" sort first despite not having the lowest numeric
+   prefix), so it's a hardcoded canonical sequence. Matched on the same
+   canonical (stripped + alias-resolved) name used for cross-quarter
+   matching, so this stays correct even if a quarter's raw stage string or
+   numbering differs. A segment not in this list falls back to its
+   numeric prefix, placed after every named segment — so a brand-new or
+   unrecognized segment doesn't silently vanish, just add it here once
+   its place in the funnel is known. */
+const ONESHEET_SEGMENT_ORDER = [
+  'Mid Funnel', 'Prospecting', 'Homepage', 'Mid Funnel Entry', 'Deals',
+  'Cricket Research', 'Device Browser', 'Plans Browser', 'Tablet Plan',
+  'Smartwatch Plan', 'Deals Browser', 'Smartphones', 'Product Page Visitor',
+  'BYOD Visitor', 'BYOD Engager', 'MultiMonth Plans', 'CompatibilityCheck',
+  'Plans Selection', 'Device Cart Plan Select', 'Cart Abandoner', 'Checkout',
+  'Order', 'D-TREE Default',
+];
+
+function oneSheetStageSortKey(stage) {
+  const key = oneSheetCanonicalSegmentKey(stage);
+  const idx = ONESHEET_SEGMENT_ORDER.indexOf(key);
+  if (idx !== -1) return idx;
+  const m = /^(\d+)/.exec(stage);
+  const numeric = m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+  return ONESHEET_SEGMENT_ORDER.length + numeric;
+}
+
 function oneSheetBuildFunnelRows(qSel, mktSel, dateFrom, dateTo) {
   const qKeys = normQs(qSel);
   const curRows = effectiveStageRows(dateFrom, dateTo)
@@ -5889,16 +5982,19 @@ function oneSheetBuildFunnelRows(qSel, mktSel, dateFrom, dateTo) {
   const cmp = oneSheetResolveComparison(qSel, mktSel, dateFrom, dateTo);
   let prevByStage = new Map();
   if (cmp) {
-    const prevRows = effectiveStageRows(null, null)
-      .filter(r => r.q === cmp.prevQ && (mktSel === 'all' || r.mkt === mktSel));
-    prevByStage = new Map(oneSheetAggregateSegments(prevRows).map(s => [oneSheetCanonicalSegmentKey(s.stage), s]));
+    prevByStage = oneSheetPrevSegmentsMonthlyPaced(cmp.prevQ, mktSel);
   }
 
   return curSeg
     .sort((a, b) => oneSheetStageSortKey(a.stage) - oneSheetStageSortKey(b.stage))
     .map(s => {
       const prev = prevByStage.get(oneSheetCanonicalSegmentKey(s.stage));
-      return { ...s, prevCpc: prev ? prev.cpc : null, prevCpo: prev ? prev.cpo : null };
+      return {
+        ...s,
+        prevCpc: prev ? prev.cpc : null,
+        prevCpo: prev ? prev.cpo : null,
+        lowSample: s.imps < ONESHEET_LOW_SAMPLE_IMPS,
+      };
     });
 }
 
@@ -5966,8 +6062,10 @@ function oneSheetDraftInsights(model) {
       insights.push(`<strong>LPVR ${dir(d.gmLpvr)==='up'?'Up':'Down'}:</strong> Landing Page View Rate moved from ${FMT.pct2(comparison.previous.gmLpvr)} (${comparison.prevQ}) to ${FMT.pct2(current.gmLpvr)} this period (${d.gmLpvr>=0?'+':''}${(d.gmLpvr*100).toFixed(0)}%).`);
     }
     if (d.cpo != null) {
-      const prevCpo = oneSheetDeriveCpo(comparison.previous.spend, comparison.previous.gmOrd);
-      insights.push(`<strong>Cost per Order ${d.cpo<=0?'Down':'Up'} ${Math.abs(d.cpo*100).toFixed(0)}%:</strong> campaign CPO moved from $${prevCpo.toFixed(2)} (${comparison.prevQ}) to $${model.cpo!=null?model.cpo.toFixed(2):'N/A'} this period.`);
+      // Reuses the same (month-weighted-average, when available) previous
+      // CPO already computed for the comparison box, so this bullet's
+      // dollar figure always matches what the %Δ CPO tile is based on.
+      insights.push(`<strong>Cost per Order ${d.cpo<=0?'Down':'Up'} ${Math.abs(d.cpo*100).toFixed(0)}%:</strong> campaign CPO moved from $${comparison.prevCpoMonthlyPaced.toFixed(2)} (${comparison.prevQ}) to $${model.cpo!=null?model.cpo.toFixed(2):'N/A'} this period.`);
     }
   }
 
@@ -6073,12 +6171,12 @@ function oneSheetRenderFunnelTable(funnelRows) {
     </tr></thead>
     <tbody>
       ${funnelRows.map(s => `<tr>
-        <td>${esc(s.stage)}</td>
+        <td>${esc(s.stage)}${s.lowSample ? ' *' : ''}</td>
         <td class="val">${FMT.abbr(s.imps)}</td>
         <td class="val">${s.spend>0?FMT.dollar(s.spend):'—'}</td>
         <td class="val">${FMT.pct(s.ctr)}</td>
         <td class="val">${FMT.pct1(s.gmLpvr)}</td>
-        <td class="val">${FMT.pct2(s.gmCvr)}</td>
+        <td class="val">${FMT.pct2(s.gmCvr)}${s.gmCvr>1 ? '&dagger;' : ''}</td>
         <td class="val">${(s.gmTdor*100).toFixed(4)}%</td>
         <td class="val">${FMT.num(s.gmOrd)}</td>
         <td class="val">${s.prevCpc!=null?'$'+s.prevCpc.toFixed(2):'—'}</td>
@@ -6102,6 +6200,38 @@ function oneSheetRenderFunnelTable(funnelRows) {
       </tr>
     </tbody>
   </table>`;
+}
+
+/* Footnote under the Funnel Efficiency table. Each line only appears when
+   it's actually relevant to the current data (e.g. the CVR>100% note only
+   shows if some segment's CVR really does exceed 100%), rather than
+   always printing every caveat regardless of whether it applies this
+   period. The "Prev CPC/CPO" line describes what this tool actually
+   computes for the previous period — a straight full-quarter total, not
+   a month-weighted average — so it doesn't overclaim a methodology the
+   numbers don't reflect. */
+function oneSheetRenderFunnelFootnote(model) {
+  const rows = model.funnelRows;
+  const cmp = model.comparison;
+  const lines = [];
+
+  if (rows.some(s => s.gmCvr > 1)) {
+    lines.push('&dagger;CVR exceeding 100% means spotlight orders include view-through conversions, so orders outnumber clicks for that segment; TDOR normalizes for this.');
+  }
+  if (rows.some(s => s.lowSample)) {
+    lines.push(`*Low-scale segment (fewer than ${FMT.abbr(ONESHEET_LOW_SAMPLE_IMPS)} impressions this period) — read directionally.`);
+  }
+  if (cmp) {
+    const methodology = cmp.isMonthlyPaced
+      ? `${esc(cmp.prevQ)} CPC/CPO are monthly-paced averages (each month weighted equally) for a fairer comparison against ${oneSheetHumanizeDuration(cmp.currentDays)} of data.`
+      : `${esc(cmp.prevQ)} CPC/CPO reflect full-quarter totals per segment (day-level data wasn't available to compute a monthly-paced average).`;
+    lines.push(`${methodology} Dashes mean no clicks or orders were recorded, or the segment wasn't trafficked in ${esc(cmp.prevQ)}.`);
+  } else {
+    lines.push('Dashes mean no clicks or orders were recorded for that segment this period.');
+  }
+
+  if (!lines.length) return '';
+  return `<div class="funnel-footnote">${lines.map(l => `<div>${l}</div>`).join('')}</div>`;
 }
 
 function oneSheetRenderKpiBar(model) {
@@ -6244,6 +6374,8 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
   .funnel-table td{padding:5px 7px;border-bottom:1px solid #f0f0f0;white-space:nowrap}
   .funnel-table tr:nth-child(even) td{background:#fafafa}
   .funnel-total-row td{background:#f0fbea!important;font-weight:800;border-top:2px solid #cde8ae}
+  .funnel-footnote{font-size:8px;color:#999;line-height:1.5;margin-bottom:14px}
+  .funnel-footnote div{margin-bottom:2px}
 
   .tbl-wrap{border:1px solid #ebebeb;border-radius:6px;overflow:hidden;margin-bottom:14px}
   .tbl-head{background:#1a1a1a;color:#fff;padding:7px 11px;font-size:10px;font-weight:700;display:flex;align-items:center;gap:7px}
@@ -6301,6 +6433,7 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
 
   <div class="section-label">Funnel Efficiency: All Stage Buckets</div>
   ${oneSheetRenderFunnelTable(model.funnelRows)}
+  ${oneSheetRenderFunnelFootnote(model)}
 
   ${oneSheetRenderTopTable('Top 5 Creatives: Orders', topOrders, [
     {key:'gmOrd', label:'Orders', fmt:v=>FMT.num(v)},
