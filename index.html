@@ -5853,6 +5853,33 @@ function oneSheetStageSortKey(stage) {
   return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
 }
 
+/* Known cases where a segment's descriptive name (after stripping the
+   leading "N - " stage number) differs between quarters despite being the
+   same underlying funnel segment — confirmed by Emily from the Q2 vs Q3
+   Funnel Efficiency table (e.g. Q2's "Homepage Visitor" is Q3's
+   "Homepage"). Without this, Prev CPC/CPO silently show "—" for these
+   segments since the exact-string lookup misses. Add further pairs here
+   as new naming mismatches turn up in future quarters. */
+const ONESHEET_SEGMENT_ALIAS_GROUPS = [
+  ['Homepage', 'Homepage Visitor'],
+  ['Plans Research', 'Plans Selection'],
+  ['Multi-Month Visitor', 'MultiMonth Plans'],
+];
+const ONESHEET_SEGMENT_ALIAS_MAP = (() => {
+  const map = new Map();
+  ONESHEET_SEGMENT_ALIAS_GROUPS.forEach(group => group.forEach(name => map.set(name, group[0])));
+  return map;
+})();
+
+/* Canonical lookup key for matching a segment across quarters: strips the
+   leading stage number (so a segment renumbered between quarters still
+   matches on its name alone) and then resolves any known alias so e.g.
+   "Homepage" and "Homepage Visitor" are treated as the same segment. */
+function oneSheetCanonicalSegmentKey(stage) {
+  const label = oneSheetStageLabel(stage);
+  return ONESHEET_SEGMENT_ALIAS_MAP.get(label) || label;
+}
+
 function oneSheetBuildFunnelRows(qSel, mktSel, dateFrom, dateTo) {
   const qKeys = normQs(qSel);
   const curRows = effectiveStageRows(dateFrom, dateTo)
@@ -5864,13 +5891,13 @@ function oneSheetBuildFunnelRows(qSel, mktSel, dateFrom, dateTo) {
   if (cmp) {
     const prevRows = effectiveStageRows(null, null)
       .filter(r => r.q === cmp.prevQ && (mktSel === 'all' || r.mkt === mktSel));
-    prevByStage = new Map(oneSheetAggregateSegments(prevRows).map(s => [s.stage, s]));
+    prevByStage = new Map(oneSheetAggregateSegments(prevRows).map(s => [oneSheetCanonicalSegmentKey(s.stage), s]));
   }
 
   return curSeg
     .sort((a, b) => oneSheetStageSortKey(a.stage) - oneSheetStageSortKey(b.stage))
     .map(s => {
-      const prev = prevByStage.get(s.stage);
+      const prev = prevByStage.get(oneSheetCanonicalSegmentKey(s.stage));
       return { ...s, prevCpc: prev ? prev.cpc : null, prevCpo: prev ? prev.cpo : null };
     });
 }
@@ -5960,9 +5987,11 @@ function oneSheetDraftRecommendations(model) {
   const { funnelRows, creatives } = model;
   const recs = [];
 
+  /* topOrd is kept purely to avoid recommending the same creative twice
+     below — no recommendation about budget/spend allocation is drafted
+     here, per Emily's request to leave those out entirely. */
   const byOrd = [...creatives].sort((a,b)=>(b.gmOrd||0)-(a.gmOrd||0));
   const topOrd = byOrd[0];
-  if (topOrd) recs.push(`Prioritize budget toward <strong>&ldquo;${esc(offerLabel(topOrd.creative))}&rdquo;</strong> — the top order driver this period — while monitoring frequency to avoid saturation.`);
 
   const segsWithOrders = funnelRows.filter(s => s.gmOrd > 0 && s.cpo != null);
   const cheapestSeg = [...segsWithOrders].sort((a,b)=>a.cpo-b.cpo)[0];
