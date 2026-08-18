@@ -1132,9 +1132,11 @@ svg { display: block; }
 
 /* ─── Module 5: Creatives ────────────────────────────────── */
 .creatives-grid {
+  /* Cards sit under the 300px-wide captured preview so the thumbnail is
+     downscaled on display rather than stretched past its native size. */
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
 }
 .creative-card {
   background: var(--card);
@@ -1152,7 +1154,7 @@ svg { display: block; }
 .creative-card--add {
   border: 2px dashed var(--border);
   background: transparent;
-  min-height: 220px;
+  min-height: 170px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1175,29 +1177,10 @@ svg { display: block; }
 }
 .creative-thumb img { width:100%; height:100%; object-fit:contain; background:#000; }
 
-/* Iframe scaling wrapper — keeps 300×250 iframe scaled to card width */
-.cr-iframe-wrap {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  background: #000;
-}
-.cr-iframe-wrap iframe {
-  position: absolute;
-  top: 0; left: 0;
-  width: 300px;
-  height: 250px;
-  transform-origin: top left;
-  border: none;
-  display: block;
-  pointer-events: none; /* prevent accidental clicks inside preview */
-}
-.cr-iframe-error {
-  position: absolute; inset: 0;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 6px; color: rgba(255,255,255,.45); font-size: 11px; text-align: center;
-  padding: 12px;
-}
+/* Static preview from previews/. Sits on top of the gradient placeholder and is
+   removed on load error, so a missing file falls back instead of showing broken. */
+.cr-preview-img { position:absolute; inset:0; }
+
 .creative-thumb-placeholder {
   width:100%; height:100%;
   display:flex; align-items:center; justify-content:center;
@@ -1207,7 +1190,7 @@ svg { display: block; }
   font-size:10px; font-weight:600; letter-spacing:.08em;
   text-transform:uppercase; opacity:.55; color:#fff;
 }
-.creative-card-body { padding: 14px 16px 16px; flex: 1; display:flex; flex-direction:column; gap:10px; }
+.creative-card-body { padding: 11px 12px 12px; flex: 1; display:flex; flex-direction:column; gap:8px; }
 .creative-meta-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
 .creative-stage-label { font-size:11px; color:var(--muted); font-weight:500; }
 .creative-name {
@@ -1223,16 +1206,6 @@ svg { display: block; }
 .cs-label { font-size:10px; color:var(--muted); font-weight:500; text-transform:uppercase; letter-spacing:.04em; }
 .cs-val   { font-size:13px; font-weight:700; color:var(--fg); font-family:var(--font-d); }
 
-.creative-innovid-row {
-  display:flex; align-items:center; gap:6px;
-  background:var(--recess); border-radius:8px; padding:6px 10px;
-}
-.cr-url-input {
-  flex:1; border:none; background:transparent; outline:none;
-  font-size:12px; color:var(--fg); font-family:var(--font-b);
-  min-width:0;
-}
-.cr-url-input::placeholder { color:var(--muted); }
 .cr-icon-btn {
   width:28px; height:28px; border-radius:7px; border:none;
   background:transparent; cursor:pointer; display:grid; place-items:center;
@@ -1241,13 +1214,6 @@ svg { display: block; }
 }
 .cr-icon-btn:hover { background:var(--border); color:var(--fg); }
 .cr-icon-btn--dim { opacity:.35; cursor:not-allowed; }
-.cr-upload-btn {
-  display:inline-flex; align-items:center; gap:6px;
-  font-size:11.5px; font-weight:600; color:var(--muted);
-  cursor:pointer; padding:5px 0;
-  transition:color .15s;
-}
-.cr-upload-btn:hover { color:var(--accent); }
 
 /* Add / Edit modal */
 .cr-modal-overlay {
@@ -1998,11 +1964,6 @@ body.compact .chart-card      { padding: 14px 16px; }
           </select>
         </div>
 
-        <div class="cr-form-group">
-          <div class="cr-form-label">Innovid URL</div>
-          <input class="cr-form-input" id="crFUrl" type="url" placeholder="https://…"/>
-        </div>
-
         <div class="cr-form-row">
           <div class="cr-form-group">
             <div class="cr-form-label">Impressions</div>
@@ -2025,13 +1986,6 @@ body.compact .chart-card      { padding: 14px 16px; }
           </div>
         </div>
 
-        <div class="cr-form-group">
-          <div class="cr-form-label">Preview Image</div>
-          <label class="cr-thumb-preview" id="crThumbPreview" for="crFThumb">
-            <span class="cr-thumb-preview-hint">Click to upload image</span>
-            <input type="file" id="crFThumb" accept="image/*" style="display:none"/>
-          </label>
-        </div>
 
         <div class="cr-modal-actions">
           <button class="btn-ghost btn-sm" id="crModalCancel">Cancel</button>
@@ -4746,7 +4700,7 @@ function crGetAll() {
   const base = source.map((c, i) => {
     const id = 'base_' + i;
     const ov = crSaved[id] || {};
-    return { ...c, id, innovidUrl: ov.innovidUrl ?? '', thumbDataUrl: ov.thumbDataUrl ?? null };
+    return { ...c, id, thumbDataUrl: ov.thumbDataUrl ?? null };
   });
   return [...base, ...crUserList];
 }
@@ -4810,32 +4764,32 @@ function thumbGradient(stage) {
 }
 function stageShort(s) { return s.replace(/^\d+ - /,''); }
 
+/* ── Static preview path ─────────────────────────────────── */
+/* Previews are committed to previews/ as full-res PNGs from the Flashtalking
+   capture extension. The file name is the version name run through the same
+   sanitiser the extension uses, and the version name is what BigQuery returns
+   as Creative Offer Name — so the card resolves its own image with no manifest. */
+function crPreviewSrc(name) {
+  const base = (name || '')
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return base ? `previews/${encodeURIComponent(base)}.png` : null;
+}
+
 /* ── Thumbnail content resolver ──────────────────────────── */
 function crThumbContent(c) {
-  // Uploaded image takes top priority
+  // Legacy uploads saved in localStorage still win if present
   if (c.thumbDataUrl) {
     return `<img src="${c.thumbDataUrl}" style="width:100%;height:100%;object-fit:contain;background:#000">`;
   }
-  // Creative link provided — detect type
-  if (c.innovidUrl) {
-    const url = safeUrl(c.innovidUrl);
-    if (url === '#') return crThumbFallback(c.mkt, c.q, c.stage, 'URL must start with https://');
-    const isImage = /\.(jpe?g|png|gif|webp)(\?|#|$)/i.test(url);
-    if (isImage) {
-      return `<img src="${esc(url)}" style="width:100%;height:100%;object-fit:contain;background:#000"
-               onerror="this.parentElement.innerHTML=crThumbFallback('${esc(c.mkt)}','${esc(c.q)}','${encodeURIComponent(c.stage)}','Link error — image not accessible')">`;
-    }
-    // HTML / iframe creative (Innovid, VAST redirect, hosted HTML ad, etc.)
-    return `<div class="cr-iframe-wrap" data-crid="${esc(c.id)}">
-      <iframe src="${esc(url)}" width="300" height="250" scrolling="no" frameborder="0"
-              allow="autoplay" sandbox="allow-scripts allow-forms allow-popups"
-              title="${esc(c.creative)}"
-              onerror="this.parentElement.innerHTML=crThumbFallback('${esc(c.mkt)}','${esc(c.q)}','${encodeURIComponent(c.stage)}','Could not load — check URL or CORS policy')">
-      </iframe>
-    </div>`;
-  }
-  // No link — gradient placeholder
-  return crThumbFallback(c.mkt, c.q, c.stage, null);
+  const fallback = crThumbFallback(c.mkt, c.q, c.stage, null);
+  const src      = crPreviewSrc(c.creative);
+  if (!src) return fallback;
+
+  // Placeholder renders underneath; crWireCards drops the img if the file 404s
+  return fallback + `<img class="cr-preview-img" src="${esc(src)}" alt="">`;
 }
 
 function crThumbFallback(mkt, q, stage, msg) {
@@ -4852,12 +4806,6 @@ function crThumbFallback(mkt, q, stage, msg) {
 /* ── Card HTML ───────────────────────────────────────────── */
 function crCardHTML(c) {
   const thumb = crThumbContent(c);
-
-  const linkBtn = c.innovidUrl && safeUrl(c.innovidUrl) !== '#'
-    ? `<a class="cr-icon-btn" href="${esc(safeUrl(c.innovidUrl))}" target="_blank" rel="noopener noreferrer" title="Open in Innovid">
-         <svg-icon name="external-link" size="14"></svg-icon></a>`
-    : `<span class="cr-icon-btn cr-icon-btn--dim" title="Enter Innovid URL first">
-         <svg-icon name="external-link" size="14"></svg-icon></span>`;
 
   const imps   = c.imps   ? fmtM(c.imps)       : '—';
   const clicks = c.clicks ? fmtN(c.clicks)      : '—';
@@ -4893,17 +4841,6 @@ function crCardHTML(c) {
         <div class="cs-item"><div class="cs-label">TDOR</div><div class="cs-val">${tdor}</div></div>
         <div class="cs-item"><div class="cs-label">CPO</div><div class="cs-val">${cpo}</div></div>
       </div>
-      <div class="creative-innovid-row">
-        <svg-icon name="link" size="13" color="var(--muted)" style="flex-shrink:0"></svg-icon>
-        <input class="cr-url-input" data-id="${esc(c.id)}" type="url"
-               placeholder="Innovid URL…" value="${esc(c.innovidUrl || '')}"/>
-        ${linkBtn}
-      </div>
-      <label class="cr-upload-btn" for="crThumb_${esc(c.id)}">
-        <svg-icon name="image" size="13"></svg-icon> Upload Preview
-        <input type="file" id="crThumb_${esc(c.id)}" data-id="${esc(c.id)}"
-               accept="image/png,image/jpeg,image/gif,image/webp" class="cr-thumb-input" style="display:none"/>
-      </label>
     </div>
   </div>`;
 }
@@ -4915,31 +4852,12 @@ function crAddCardHTML() {
         <svg-icon name="plus" size="24" color="var(--muted)"></svg-icon>
       </div>
       <div style="font-size:13px;font-weight:600;color:var(--fg2)">Add Creative</div>
-      <div style="font-size:11.5px;text-align:center;max-width:180px">Link an Innovid creative or upload a preview image</div>
+      <div style="font-size:11.5px;text-align:center;max-width:180px">Add a creative manually, or import previews from Flashtalking</div>
     </div>
   </div>`;
 }
 
 /* ── Render ──────────────────────────────────────────────── */
-/* ── Scale iframes to fit card width (300×250 → card width) ─ */
-const _crIframeObserver = new ResizeObserver(entries => {
-  entries.forEach(entry => {
-    const iframe = entry.target.querySelector('iframe');
-    if (!iframe) return;
-    const scale = entry.contentRect.width / 300;
-    iframe.style.transform = `scale(${scale})`;
-  });
-});
-
-function crScaleIframes() {
-  document.querySelectorAll('.cr-iframe-wrap').forEach(wrap => {
-    _crIframeObserver.observe(wrap);
-    // Also scale immediately
-    const iframe = wrap.querySelector('iframe');
-    if (iframe) iframe.style.transform = `scale(${wrap.offsetWidth / 300})`;
-  });
-}
-
 function renderCreatives() {
   const all      = crGetAll();
   const filtered = crFilter(all);
@@ -4949,42 +4867,15 @@ function renderCreatives() {
   grid.innerHTML = sorted.map(c => crCardHTML(c)).join('') + crAddCardHTML();
   document.getElementById('crCount').textContent = `${sorted.length} creative${sorted.length!==1?'s':''}`;
   crWireCards();
-  crScaleIframes();
 }
 
 /* ── Wire card controls ──────────────────────────────────── */
 function crWireCards() {
-  // Innovid URL save on blur
-  document.querySelectorAll('.cr-url-input').forEach(input => {
-    input.addEventListener('change', () => {
-      const id  = input.dataset.id;
-      crSaved[id] = { ...(crSaved[id]||{}), innovidUrl: input.value.trim() };
-      // also update userList if applicable
-      const u = crUserList.find(c=>c.id===id);
-      if (u) { u.innovidUrl = input.value.trim(); crSaveUserList(); }
-      crPersist(crSaved);
-      renderCreatives();
-    });
-  });
-
-  // Thumbnail upload
-  document.querySelectorAll('.cr-thumb-input').forEach(inp => {
-    inp.addEventListener('change', () => {
-      const id   = inp.dataset.id;
-      const file = inp.files[0];
-      if (!file) return;
-      const allowed = ['image/png','image/jpeg','image/gif','image/webp'];
-      if (!allowed.includes(file.type)) { alert('Only PNG, JPEG, GIF, or WebP images are allowed.'); inp.value=''; return; }
-      const reader = new FileReader();
-      reader.onload = ev => {
-        crSaved[id] = { ...(crSaved[id]||{}), thumbDataUrl: ev.target.result };
-        const u = crUserList.find(c=>c.id===id);
-        if (u) { u.thumbDataUrl = ev.target.result; crSaveUserList(); }
-        crPersist(crSaved);
-        renderCreatives();
-      };
-      reader.readAsDataURL(file);
-    });
+  // Drop previews with no file on disk so the gradient placeholder shows through.
+  // Checks complete/naturalWidth too, since a cached 404 can fire error before this runs.
+  document.querySelectorAll('.cr-preview-img').forEach(img => {
+    if (img.complete && img.naturalWidth === 0) { img.remove(); return; }
+    img.addEventListener('error', () => img.remove());
   });
 
   // Edit buttons
@@ -5001,17 +4892,10 @@ function crWireCards() {
 }
 
 /* ── Modal ───────────────────────────────────────────────── */
-let crModalThumbDataUrl = null;
-
 function crOpenModal(id) {
   const overlay = document.getElementById('crModalOverlay');
   const title   = document.getElementById('crModalTitle');
   const editId  = document.getElementById('crEditId');
-  crModalThumbDataUrl = null;
-  document.getElementById('crThumbPreview').innerHTML =
-    '<span class="cr-thumb-preview-hint">Click to upload image</span>' +
-    '<input type="file" id="crFThumb" accept="image/*" style="display:none"/>';
-  crWireThumbPreview();
 
   if (id) {
     // Edit existing
@@ -5024,23 +4908,15 @@ function crOpenModal(id) {
     document.getElementById('crFQ').value       = c.q || 'Q1';
     document.getElementById('crFMkt').value     = c.mkt || 'GM';
     document.getElementById('crFStage').value   = c.stage || '1 - Mid Funnel';
-    document.getElementById('crFUrl').value     = c.innovidUrl || '';
     document.getElementById('crFImps').value    = c.imps || '';
     document.getElementById('crFClicks').value  = c.clicks || '';
     document.getElementById('crFOrd').value     = c.gmOrd || '';
     document.getElementById('crFCtr').value     = c.ctr || '';
-    if (c.thumbDataUrl) {
-      crModalThumbDataUrl = c.thumbDataUrl;
-      document.getElementById('crThumbPreview').innerHTML =
-        `<img src="${c.thumbDataUrl}" style="width:100%;height:100%;object-fit:cover"/>` +
-        '<input type="file" id="crFThumb" accept="image/*" style="display:none"/>';
-      crWireThumbPreview();
-    }
   } else {
     // New
     title.textContent = 'Add Creative';
     editId.value = '';
-    ['crFName','crFUrl','crFImps','crFClicks','crFOrd','crFCtr'].forEach(id2=>document.getElementById(id2).value='');
+    ['crFName','crFImps','crFClicks','crFOrd','crFCtr'].forEach(id2=>document.getElementById(id2).value='');
     document.getElementById('crFQ').value     = 'Q2';
     document.getElementById('crFMkt').value   = 'GM';
     document.getElementById('crFStage').value = '1 - Mid Funnel';
@@ -5052,27 +4928,6 @@ function crCloseModal() {
   document.getElementById('crModalOverlay').classList.remove('open');
 }
 
-function crWireThumbPreview() {
-  const preview = document.getElementById('crThumbPreview');
-  const input   = document.getElementById('crFThumb');
-  if (!preview || !input) return;
-  preview.addEventListener('click', () => input.click());
-  input.addEventListener('change', () => {
-    const file = input.files[0];
-    if (!file) return;
-    const allowed = ['image/png','image/jpeg','image/gif','image/webp'];
-    if (!allowed.includes(file.type)) { alert('Only PNG, JPEG, GIF, or WebP images are allowed.'); input.value=''; return; }
-    const reader = new FileReader();
-    reader.onload = ev => {
-      crModalThumbDataUrl = ev.target.result;
-      preview.innerHTML = `<img src="${esc(ev.target.result)}" style="width:100%;height:100%;object-fit:cover"/>` +
-        '<input type="file" id="crFThumb" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none"/>';
-      crWireThumbPreview();
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
 function crSaveModal() {
   const name = document.getElementById('crFName').value.trim();
   if (!name) { document.getElementById('crFName').focus(); return; }
@@ -5082,13 +4937,11 @@ function crSaveModal() {
     q:           document.getElementById('crFQ').value,
     mkt:         document.getElementById('crFMkt').value,
     stage:       document.getElementById('crFStage').value,
-    innovidUrl:  document.getElementById('crFUrl').value.trim(),
     imps:        Number(document.getElementById('crFImps').value)  || 0,
     clicks:      Number(document.getElementById('crFClicks').value) || 0,
     gmOrd:       Number(document.getElementById('crFOrd').value)   || 0,
     ctr:         Number(document.getElementById('crFCtr').value)   || 0,
     gmLpvr:      0, gmCvr: 0,
-    thumbDataUrl: crModalThumbDataUrl,
   };
 
   if (id) {
@@ -5159,7 +5012,6 @@ document.getElementById('crSortDirToggle').addEventListener('click', () => {
   document.getElementById('crSortDirToggle').innerHTML = crState.sortDir === 'desc' ? '&#9660; High&rarr;Low' : '&#9650; Low&rarr;High';
   renderCreatives();
 });
-crWireThumbPreview();
 
 const _prevTabSwitch = window.__onTabSwitch;
 window.__onTabSwitch = tab => {

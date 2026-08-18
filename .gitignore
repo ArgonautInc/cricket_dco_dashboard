@@ -1,0 +1,7 @@
+# Flashtalking creative previews.
+# Both remotes are public and Cloudflare Pages serves static files without auth,
+# so committing these would publish Cricket creative externally. Ignored until
+# that's cleared. The dashboard falls back to gradient placeholders without them.
+previews/
+
+.DS_Store
