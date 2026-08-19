@@ -3436,6 +3436,15 @@ window.__onAuth = function(user) {
   if (__shellWired) return;
   __shellWired = true;
 
+  /* Cloudflare previews need the Google token (the proxy routes verify it), so
+     they can only start once we're authed. Re-render when they land — cards
+     show placeholders until then rather than blocking the tab. */
+  if (typeof cfLoadPreviews === 'function') {
+    cfLoadPreviews().then(() => {
+      if (typeof renderCreatives === 'function') renderCreatives();
+    });
+  }
+
   /* Wire sidebar nav */
   document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
@@ -4764,18 +4773,174 @@ function thumbGradient(stage) {
 }
 function stageShort(s) { return s.replace(/^\d+ - /,''); }
 
-/* ── Static preview path ─────────────────────────────────── */
-/* Previews are committed to previews/ as full-res PNGs from the Flashtalking
-   capture extension. The file name is the version name run through the same
-   sanitiser the extension uses, and the version name is what BigQuery returns
-   as Creative Offer Name — so the card resolves its own image with no manifest. */
-function crPreviewSrc(name) {
-  const base = (name || '')
-    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
-    .replace(/\s+/g, '_')
-    .replace(/_{2,}/g, '_')
-    .replace(/^_+|_+$/g, '');
-  return base ? `previews/${encodeURIComponent(base)}.png` : null;
+/* ── Cloudflare Images previews ──────────────────────────── */
+/* Assets live in Cloudflare Images with requireSignedURLs on, so previews are
+   resolved in three hops:
+
+     CF filename  ──prefix──>  Version  ──BigQuery──>  Creative Offer Name
+
+   The cards aggregate by Creative Offer Name (see the by-creative query, which
+   GROUPs BY it), while Cloudflare is keyed on Version — one offer name covers
+   many versions across sizes, placements and publishers. So each card holds an
+   array of candidates, sorted by CF_SIZE_PREFERENCE, and displays the first.
+
+   Signing happens in /api/cf-sign-images; the API token and signing key stay in
+   Vercel env vars and never reach the browser. */
+
+const CF_VARIANT      = 'public';
+const CF_SIGN_TTL_SEC = 7200;                 // 2h — outlives the 1h asset cache
+const CF_CACHE_KEY    = '_cfCricketAssets_v2';
+const CF_CACHE_TTL_MS = 60 * 60 * 1000;
+
+/* One offer name spans many versions, so a card has to pick one image. Prefer
+   by ad size, read out of the CF filename. Anything with a size we don't list
+   sorts after these; anything with no size at all sorts last. Reorder freely —
+   it only affects which candidate is shown first. */
+const CF_SIZE_PREFERENCE = ['300x250', '728x90', '300x600', '160x600', '320x50'];
+
+let cfPreviewsByOffer = {};                   // normalized offer name -> [signedUrl]
+let _cfLoadP          = null;
+
+function cfNormOffer(s) {
+  return String(s || '').trim().toLowerCase();
+}
+
+/* A CF filename matches a Version when it starts with it AND the next character
+   is a separator. Plain startsWith would let version …_2936 claim …_29361's
+   files; plain includes() — as the paid-media dashboard does — would be far
+   worse here, since these IDs share long prefixes and a wrong-but-present image
+   looks correct on the card. */
+function cfFilenameMatchesVersion(filename, version) {
+  if (!filename.startsWith(version)) return false;
+  const next = filename.charAt(version.length);
+  return next === '' || next === '_' || next === '-' || next === '.';
+}
+
+/* Lower rank wins. The size token may sit anywhere in the filename — inside the
+   version itself or in whatever suffix follows it — so just scan the whole name. */
+function cfSizeRank(filename) {
+  const m = String(filename || '').match(/(\d{2,4})x(\d{2,4})/i);
+  if (!m) return CF_SIZE_PREFERENCE.length + 1;
+  const i = CF_SIZE_PREFERENCE.indexOf(m[0].toLowerCase());
+  return i === -1 ? CF_SIZE_PREFERENCE.length : i;
+}
+
+async function cfApi(path, opts) {
+  const o = opts || {};
+  const headers = Object.assign({}, o.headers || {});
+  if (typeof ACCESS_TOKEN !== 'undefined' && ACCESS_TOKEN) {
+    headers.Authorization = 'Bearer ' + ACCESS_TOKEN;
+  }
+  const res = await fetch(path, Object.assign({}, o, { headers }));
+  if (!res.ok) throw new Error(path + ' -> HTTP ' + res.status);
+  return res.json();
+}
+
+/* Version -> Creative Offer Name, straight from the same view the cards use. */
+async function cfFetchVersionOfferMap() {
+  const rows = await bqQuery(`
+    SELECT DISTINCT \`Version\` as version, \`Creative Offer Name\` as offer
+    FROM \`crk-dco-dash.reporting_data.deliveries_view\`
+    WHERE \`Version\` IS NOT NULL AND \`Creative Offer Name\` IS NOT NULL
+  `);
+  const map = {};
+  (rows || []).forEach(r => {
+    const v = String(r.version || '').trim();
+    if (v) map[v] = String(r.offer || '').trim();
+  });
+  return map;
+}
+
+async function cfFetchImages() {
+  const out = [];
+  let token = null;
+  do {
+    const qs = 'per_page=200' + (token ? '&continuation_token=' + encodeURIComponent(token) : '');
+    const d  = await cfApi('/api/cf-images?' + qs);
+    if (!d.success) { console.warn('[CF] Images API error', d.errors); break; }
+    (d.result && d.result.images ? d.result.images : []).forEach(img => {
+      out.push({ id: img.id, filename: img.filename || img.id });
+    });
+    token = d.result && d.result.continuation_token;
+  } while (token);
+  return out;
+}
+
+async function cfSignIds(ids) {
+  if (!ids.length) return {};
+  const d = await cfApi('/api/cf-sign-images', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ ids, variant: CF_VARIANT, ttl: CF_SIGN_TTL_SEC }),
+  });
+  return d.signed || {};
+}
+
+function cfLoadPreviews() {
+  if (_cfLoadP) return _cfLoadP;
+
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(CF_CACHE_KEY) || 'null');
+    if (cached && Date.now() - cached._ts < CF_CACHE_TTL_MS && cached.byOffer) {
+      cfPreviewsByOffer = cached.byOffer;
+      return Promise.resolve(cfPreviewsByOffer);
+    }
+  } catch (_) {}
+
+  _cfLoadP = Promise.all([cfFetchVersionOfferMap(), cfFetchImages()])
+    .then(([versionToOffer, images]) => {
+      const versions = Object.keys(versionToOffer);
+      // Longest first so the most specific Version wins when one prefixes another
+      versions.sort((a, b) => b.length - a.length);
+
+      const byOffer = {};
+      const matchedIds = [];
+      const idToMeta   = {};
+
+      images.forEach(img => {
+        const fname = img.filename;
+        let offer = versionToOffer[fname];               // exact hit, cheap path
+        if (!offer) {
+          const v = versions.find(ver => cfFilenameMatchesVersion(fname, ver));
+          if (v) offer = versionToOffer[v];
+        }
+        if (!offer) return;
+        matchedIds.push(img.id);
+        idToMeta[img.id] = { offer: cfNormOffer(offer), rank: cfSizeRank(fname) };
+      });
+
+      return cfSignIds(matchedIds).then(signed => {
+        const ranked = {};
+        Object.keys(signed).forEach(id => {
+          const meta = idToMeta[id];
+          if (!meta) return;
+          (ranked[meta.offer] = ranked[meta.offer] || []).push({ url: signed[id], rank: meta.rank });
+        });
+        Object.keys(ranked).forEach(key => {
+          byOffer[key] = ranked[key].sort((a, b) => a.rank - b.rank).map(x => x.url);
+        });
+        cfPreviewsByOffer = byOffer;
+        try {
+          sessionStorage.setItem(CF_CACHE_KEY, JSON.stringify({ byOffer, _ts: Date.now() }));
+        } catch (_) {}
+        console.log('[CF] Previews ready —', images.length, 'assets,',
+                    matchedIds.length, 'matched,', Object.keys(byOffer).length, 'offers covered');
+        _cfLoadP = null;
+        return byOffer;
+      });
+    })
+    .catch(e => {
+      console.warn('[CF] Preview load failed:', e.message);
+      _cfLoadP = null;
+      return {};
+    });
+
+  return _cfLoadP;
+}
+
+function crPreviewSrc(offerName) {
+  const arr = cfPreviewsByOffer[cfNormOffer(offerName)];
+  return arr && arr.length ? arr[0] : null;
 }
 
 /* ── Thumbnail content resolver ──────────────────────────── */
