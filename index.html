@@ -1740,9 +1740,30 @@ body.compact .chart-card      { padding: 14px 16px; }
           <h1>Creatives</h1>
         </div>
         <div class="page-header-actions">
+          <button class="btn-ghost btn-sm" id="crUploadBtn" title="Fallback for when Cloudflare previews are unavailable. Upload the ad-screenshot-capturer ZIP, or loose PNG/JPGs. Cloudflare still takes precedence wherever it has an image.">
+            <svg-icon name="plus" size="13"></svg-icon> Upload Previews
+          </button>
           <button class="btn-primary btn-sm" id="crAddBtnTop">
             <svg-icon name="plus" size="13"></svg-icon> Add Creative
           </button>
+        </div>
+      </div>
+      <input type="file" id="crUploadInput" accept=".zip,.png,.jpg,.jpeg,.webp" multiple style="display:none">
+
+      <!-- Manual preview import: match report + assignment for unmatched files -->
+      <div class="cr-modal-overlay" id="crUploadOverlay">
+        <div class="cr-modal" style="width:min(680px,94vw)">
+          <div class="cr-modal-title">Manual Previews</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:12px" id="crUploadSummary"></div>
+          <div id="crUploadUnmatchedWrap" style="display:none">
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px">Unmatched files — pick the creative each one belongs to:</div>
+            <div id="crUploadUnmatched" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto"></div>
+          </div>
+          <div id="crUploadError" style="display:none;font-size:12px;color:#d33;padding:8px 0"></div>
+          <div class="cr-modal-actions">
+            <button class="btn-ghost btn-sm" id="crUploadClearAll" title="Delete every manually uploaded preview">Remove All</button>
+            <button class="btn-primary btn-sm" id="crUploadDone">Done</button>
+          </div>
         </div>
       </div>
 
@@ -3445,6 +3466,14 @@ window.__onAuth = function(user) {
     });
   }
 
+  /* Manually uploaded previews are local (IndexedDB) so they need no auth, but
+     load them here too so a Cloudflare outage still leaves the cards populated. */
+  if (typeof mpLoad === 'function') {
+    mpLoad().then(() => {
+      if (typeof renderCreatives === 'function') renderCreatives();
+    });
+  }
+
   /* Wire sidebar nav */
   document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
@@ -4943,6 +4972,177 @@ function crPreviewSrc(offerName) {
   return arr && arr.length ? arr[0] : null;
 }
 
+/* ── Manual preview fallback ─────────────────────────────── */
+/* Used when Cloudflare is unavailable or hasn't got an asset for a card.
+   Cloudflare always wins where it has one — see crThumbContent.
+
+   Images live in IndexedDB, not localStorage: a capture run is 30+ PNGs at 2x
+   (600x500), which blows the ~5MB localStorage quota outright. IndexedDB also
+   stores the Blobs as-is, so nothing is re-encoded and quality is preserved.
+
+   Keyed by normalized Creative Offer Name, matching cfPreviewsByOffer. */
+
+const MP_DB = 'crkt-previews', MP_STORE = 'manual';
+
+let mpByOffer = {};   // normalized offer name -> object URL
+
+function mpOpen() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(MP_DB, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(MP_STORE);
+    r.onsuccess = () => res(r.result);
+    r.onerror   = () => rej(r.error);
+  });
+}
+
+async function mpPut(entries) {
+  const db = await mpOpen();
+  try {
+    await new Promise((res, rej) => {
+      const tx = db.transaction(MP_STORE, 'readwrite');
+      const st = tx.objectStore(MP_STORE);
+      entries.forEach(e => st.put({ blob: e.blob, filename: e.filename, ts: Date.now() }, e.key));
+      tx.oncomplete = res;
+      tx.onerror    = () => rej(tx.error);
+    });
+  } finally { db.close(); }
+}
+
+async function mpClear() {
+  const db = await mpOpen();
+  try {
+    await new Promise((res, rej) => {
+      const tx = db.transaction(MP_STORE, 'readwrite');
+      tx.objectStore(MP_STORE).clear();
+      tx.oncomplete = res;
+      tx.onerror    = () => rej(tx.error);
+    });
+  } finally { db.close(); }
+  Object.values(mpByOffer).forEach(URL.revokeObjectURL);
+  mpByOffer = {};
+}
+
+/* Rebuilds the offer -> object URL index from IndexedDB. */
+async function mpLoad() {
+  let db;
+  try { db = await mpOpen(); } catch (e) {
+    console.warn('[MP] IndexedDB unavailable:', e && e.message);
+    return mpByOffer;
+  }
+  try {
+    const { keys, vals } = await new Promise((res, rej) => {
+      const tx = db.transaction(MP_STORE, 'readonly');
+      const st = tx.objectStore(MP_STORE);
+      const k = st.getAllKeys(), v = st.getAll();
+      tx.oncomplete = () => res({ keys: k.result, vals: v.result });
+      tx.onerror    = () => rej(tx.error);
+    });
+    Object.values(mpByOffer).forEach(URL.revokeObjectURL);
+    mpByOffer = {};
+    keys.forEach((k, i) => {
+      const rec = vals[i];
+      if (rec && rec.blob) mpByOffer[k] = URL.createObjectURL(rec.blob);
+    });
+  } catch (e) {
+    console.warn('[MP] Load failed:', e && e.message);
+  } finally { db.close(); }
+  return mpByOffer;
+}
+
+/* ── ZIP reading ─────────────────────────────────────────── */
+/* The capturer writes stored (uncompressed) entries, but deflate is handled too
+   so a re-zipped folder from Finder still imports. Reads the central directory
+   rather than scanning for local headers, so entry names are authoritative. */
+async function mpReadZip(file) {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const dv  = new DataView(buf.buffer);
+
+  let eocd = -1;
+  const floor = Math.max(0, buf.length - 22 - 65535);
+  for (let i = buf.length - 22; i >= floor; i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('Not a valid ZIP file');
+
+  const count = dv.getUint16(eocd + 10, true);
+  let off     = dv.getUint32(eocd + 16, true);
+  const dec   = new TextDecoder();
+  const out   = [];
+
+  for (let n = 0; n < count; n++) {
+    if (off + 46 > buf.length || dv.getUint32(off, true) !== 0x02014b50) break;
+    const method   = dv.getUint16(off + 10, true);
+    const csize    = dv.getUint32(off + 20, true);
+    const nameLen  = dv.getUint16(off + 28, true);
+    const extraLen = dv.getUint16(off + 30, true);
+    const cmtLen   = dv.getUint16(off + 32, true);
+    const lho      = dv.getUint32(off + 42, true);
+    const name     = dec.decode(buf.subarray(off + 46, off + 46 + nameLen));
+    off += 46 + nameLen + extraLen + cmtLen;
+
+    // Skip directories, macOS resource forks, and anything not an image
+    if (name.endsWith('/') || name.startsWith('__MACOSX/') || name.split('/').pop().startsWith('.')) continue;
+    if (!/\.(png|jpe?g|webp)$/i.test(name)) continue;
+
+    const lnLen = dv.getUint16(lho + 26, true);
+    const leLen = dv.getUint16(lho + 28, true);
+    const start = lho + 30 + lnLen + leLen;
+    let data    = buf.subarray(start, start + csize);
+
+    if (method === 8) {
+      data = new Uint8Array(await new Response(
+        new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
+      ).arrayBuffer());
+    } else if (method !== 0) continue;
+
+    out.push({ name: name.split('/').pop(), blob: new Blob([data], { type: 'image/png' }) });
+  }
+  return out;
+}
+
+/* ── Filename -> Creative Offer Name ─────────────────────── */
+/* The capturer names files after the Flashtalking LCRP "Version Name", which is
+   a different taxonomy from the card's Creative Offer Name. OFFER_MAP is the
+   documented bridge between the two, so try it before giving up. Anything still
+   unmatched is surfaced in the modal for manual assignment rather than dropped
+   silently — we've already been bitten twice by assuming taxonomies line up. */
+
+function mpNorm(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function mpCandidates(filename) {
+  const base = filename.replace(/^.*\//, '').replace(/\.(png|jpe?g|webp)$/i, '');
+  // The capturer appends _2, _3… to disambiguate repeated version names.
+  // Only strip 1-2 digits: real IDs end in things like _2936.
+  const stripped = base.replace(/_\d{1,2}$/, '');
+  return stripped !== base ? [base, stripped] : [base];
+}
+
+function mpResolveOffer(filename, offerNames) {
+  const cands = mpCandidates(filename).map(mpNorm);
+
+  // 1 · the filename is already the Creative Offer Name
+  for (const n of cands) {
+    const hit = offerNames.find(o => mpNorm(o) === n);
+    if (hit) return hit;
+  }
+  // 2 · the filename is an FT Version Name that OFFER_MAP resolves to an offer
+  for (const n of cands) {
+    for (const k of Object.keys(OFFER_MAP)) {
+      if (mpNorm(k) !== n) continue;
+      const label = OFFER_MAP[k];
+      const hit = offerNames.find(o => mpNorm(o) === mpNorm(label) || mpNorm(offerLabel(o)) === mpNorm(label));
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
 /* ── Thumbnail content resolver ──────────────────────────── */
 function crThumbContent(c) {
   // Legacy uploads saved in localStorage still win if present
@@ -4950,7 +5150,8 @@ function crThumbContent(c) {
     return `<img src="${c.thumbDataUrl}" style="width:100%;height:100%;object-fit:contain;background:#000">`;
   }
   const fallback = crThumbFallback(c.mkt, c.q, c.stage, null);
-  const src      = crPreviewSrc(c.creative);
+  // Cloudflare takes precedence; the manual upload is the fallback beneath it
+  const src      = crPreviewSrc(c.creative) || mpByOffer[cfNormOffer(c.creative)] || null;
   if (!src) return fallback;
 
   // Placeholder renders underneath; crWireCards drops the img if the file 404s
@@ -5124,6 +5325,123 @@ function crSaveModal() {
   crCloseModal();
   renderCreatives();
 }
+
+/* ── Manual preview import ───────────────────────────────── */
+let mpPending = [];   // unmatched files awaiting manual assignment
+
+function mpOfferNames() {
+  return [...new Set(crGetAll().map(c => c.creative).filter(Boolean))].sort();
+}
+
+async function mpImportFiles(fileList) {
+  const files   = Array.from(fileList || []);
+  const summary = document.getElementById('crUploadSummary');
+  const errEl   = document.getElementById('crUploadError');
+  errEl.style.display = 'none';
+  summary.textContent = 'Reading files…';
+  document.getElementById('crUploadOverlay').classList.add('open');
+
+  let images = [];
+  try {
+    for (const f of files) {
+      if (/\.zip$/i.test(f.name)) images = images.concat(await mpReadZip(f));
+      else if (/\.(png|jpe?g|webp)$/i.test(f.name)) images.push({ name: f.name, blob: f });
+    }
+  } catch (e) {
+    errEl.textContent   = 'Could not read that file: ' + (e && e.message);
+    errEl.style.display = '';
+    summary.textContent = '';
+    return;
+  }
+
+  if (!images.length) {
+    summary.textContent = 'No images found in that selection.';
+    mpRenderUnmatched([]);
+    return;
+  }
+
+  const offerNames = mpOfferNames();
+  const matched    = [];
+  mpPending = [];
+
+  images.forEach(img => {
+    const offer = mpResolveOffer(img.name, offerNames);
+    if (offer) matched.push({ key: cfNormOffer(offer), blob: img.blob, filename: img.name });
+    else       mpPending.push(img);
+  });
+
+  if (matched.length) {
+    try { await mpPut(matched); }
+    catch (e) {
+      errEl.textContent   = 'Could not save previews: ' + (e && e.message);
+      errEl.style.display = '';
+    }
+  }
+
+  await mpLoad();
+  renderCreatives();
+
+  const cfCount = Object.keys(cfPreviewsByOffer).length;
+  summary.innerHTML =
+    `<strong>${images.length}</strong> image${images.length !== 1 ? 's' : ''} read · ` +
+    `<strong>${matched.length}</strong> matched to a creative · ` +
+    `<strong>${mpPending.length}</strong> unmatched.` +
+    (cfCount ? ` Cloudflare currently covers ${cfCount} creative${cfCount !== 1 ? 's' : ''} and takes precedence over these.` : '');
+
+  mpRenderUnmatched(mpPending);
+}
+
+function mpRenderUnmatched(list) {
+  const wrap = document.getElementById('crUploadUnmatchedWrap');
+  const box  = document.getElementById('crUploadUnmatched');
+  if (!list.length) { wrap.style.display = 'none'; box.innerHTML = ''; return; }
+
+  const opts = mpOfferNames()
+    .map(o => `<option value="${esc(o)}">${esc(offerLabel(o))}</option>`).join('');
+
+  box.innerHTML = list.map((img, i) => `
+    <div style="display:flex;align-items:center;gap:8px" data-idx="${i}">
+      <span style="flex:0 0 46%;font-size:11px;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(img.name)}">${esc(img.name)}</span>
+      <select class="cr-form-input mp-assign" style="flex:1;font-size:12px;padding:5px 8px">
+        <option value="">— skip —</option>${opts}
+      </select>
+    </div>`).join('');
+  wrap.style.display = '';
+
+  box.querySelectorAll('.mp-assign').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const idx   = Number(sel.closest('[data-idx]').dataset.idx);
+      const img   = mpPending[idx];
+      const offer = sel.value;
+      if (!img || !offer) return;
+      await mpPut([{ key: cfNormOffer(offer), blob: img.blob, filename: img.name }]);
+      await mpLoad();
+      renderCreatives();
+      sel.disabled = true;
+    });
+  });
+}
+
+document.getElementById('crUploadBtn').addEventListener('click', () => {
+  document.getElementById('crUploadInput').click();
+});
+document.getElementById('crUploadInput').addEventListener('change', e => {
+  if (e.target.files && e.target.files.length) mpImportFiles(e.target.files);
+  e.target.value = '';
+});
+document.getElementById('crUploadDone').addEventListener('click', () => {
+  document.getElementById('crUploadOverlay').classList.remove('open');
+});
+document.getElementById('crUploadOverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+});
+document.getElementById('crUploadClearAll').addEventListener('click', async () => {
+  if (!confirm('Delete every manually uploaded preview? Cloudflare previews are unaffected.')) return;
+  await mpClear();
+  renderCreatives();
+  document.getElementById('crUploadSummary').textContent = 'All manual previews removed.';
+  mpRenderUnmatched([]);
+});
 
 /* ── Wire modal & top-level controls ────────────────────── */
 document.getElementById('crAddBtnTop').addEventListener('click', () => crOpenModal(null));
