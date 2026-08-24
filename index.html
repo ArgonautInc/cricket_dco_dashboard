@@ -451,6 +451,68 @@ svg { display: block; }
 }
 .tab-panel.active { display: block; }
 
+/* ── Filter refresh indicator ────────────────────────────── */
+.refresh-bar {
+  position: relative;
+  height: 3px;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: transparent;
+}
+.refresh-bar.active { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.refresh-bar > span {
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 35%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  box-shadow: 0 0 10px var(--accent);
+  opacity: 0;
+  transform: translateX(-100%);
+}
+.refresh-bar.active > span {
+  opacity: 1;
+  animation: refresh-sweep .65s ease-in-out infinite;
+}
+@keyframes refresh-sweep {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(320%); }
+}
+.refresh-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: var(--recess);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg2);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity .18s ease, transform .18s ease;
+  pointer-events: none;
+}
+.refresh-chip.active { opacity: 1; transform: translateY(0); }
+.refresh-chip.done { color: var(--accent); border-color: var(--accent); }
+.refresh-chip::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: refresh-pulse .65s ease-in-out infinite;
+}
+.refresh-chip.done::before { animation: none; }
+@keyframes refresh-pulse { 50% { opacity: .25; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .refresh-bar.active > span,
+  .refresh-chip::before { animation: none; }
+  .refresh-bar.active > span { transform: translateX(0); width: 100%; }
+}
+
 /* ── Page title row ──────────────────────────────────────── */
 .page-header {
   display: flex;
@@ -1482,6 +1544,7 @@ body.compact .chart-card      { padding: 14px 16px; }
         </div>
       </div>
       <div class="topbar-actions">
+        <div class="refresh-chip" id="refreshChip" role="status" aria-live="polite"></div>
         <button class="icon-btn" id="themeBtn" title="Toggle theme">
           <svg-icon name="sun" size="15"></svg-icon>
         </button>
@@ -1494,6 +1557,9 @@ body.compact .chart-card      { padding: 14px 16px; }
         </div>
       </div>
     </div>
+
+    <!-- Fires whenever a filter changes the data underneath -->
+    <div class="refresh-bar" id="refreshBar" aria-hidden="true"><span></span></div>
 
     <!-- ── Tab panels (modules 3–7 will populate these) ── -->
     <div class="tab-panel active" id="tab-overview">
@@ -8521,6 +8587,61 @@ document.getElementById('perfDataFileInput').addEventListener('change', e => {
 });
 
 updatePerfDataChip();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODULE · FILTER REFRESH INDICATOR
+     ═══════════════════════════════════════════════════════════ -->
+<script>
+/* Re-rendering is synchronous and instant, so changing a filter used to swap
+   the numbers with no visible cue that anything happened. These listeners run
+   in the capture phase — ahead of each tab's own handler — so the bar is
+   already sweeping by the time the new data paints, then settles on a brief
+   "Updated" confirmation. */
+const REFRESH_SWEEP_MS = 550;   // bar sweeps while the view rebuilds
+const REFRESH_DONE_MS  = 1100;  // "Updated" lingers, then fades
+
+let __refreshDoneTimer = null;
+let __refreshHideTimer = null;
+
+function signalRefresh(label = 'Updating…') {
+  const bar  = document.getElementById('refreshBar');
+  const chip = document.getElementById('refreshChip');
+  if (!bar || !chip) return;
+
+  clearTimeout(__refreshDoneTimer);
+  clearTimeout(__refreshHideTimer);
+
+  bar.classList.add('active');
+  chip.classList.remove('done');
+  chip.classList.add('active');
+  chip.textContent = label;
+
+  __refreshDoneTimer = setTimeout(() => {
+    bar.classList.remove('active');
+    chip.classList.add('done');
+    chip.textContent = 'Updated';
+    __refreshHideTimer = setTimeout(() => chip.classList.remove('active'), REFRESH_DONE_MS);
+  }, REFRESH_SWEEP_MS);
+}
+
+/* Only controls that actually re-slice the data — the settings theme toggle
+   and table sort headers are deliberately left out. */
+const REFRESH_CLICK_SEL  = '.seg-tabs button, .tr-metric-pill, [id$="DateRangeClear"]';
+const REFRESH_CHANGE_SEL = 'input[type="date"], select.an-select';
+
+document.addEventListener('click', e => {
+  const hit = e.target.closest(REFRESH_CLICK_SEL);
+  if (!hit || hit.closest('#stThemeTabs')) return;
+  if (hit.matches('button') && hit.disabled) return;
+  signalRefresh();
+}, true);
+
+document.addEventListener('change', e => {
+  if (!e.target.matches(REFRESH_CHANGE_SEL)) return;
+  const isDate = e.target.type === 'date';
+  signalRefresh(isDate ? 'Applying date range…' : 'Updating…');
+}, true);
 </script>
 </body>
 </html>
