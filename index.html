@@ -4962,7 +4962,7 @@ function stageShort(s) { return s.replace(/^\d+ - /,''); }
 
 const CF_VARIANT      = 'public';
 const CF_SIGN_TTL_SEC = 7200;                 // 2h — outlives the 1h asset cache
-const CF_CACHE_KEY    = '_cfCricketAssets_v3';
+const CF_CACHE_KEY    = '_cfCricketAssets_v4';
 const CF_CACHE_TTL_MS = 60 * 60 * 1000;
 
 /* The delivery report's version column has been exported under several names.
@@ -5131,9 +5131,15 @@ function cfLoadPreviews() {
     const cached = JSON.parse(sessionStorage.getItem(CF_CACHE_KEY) || 'null');
     if (cached && Date.now() - cached._ts < CF_CACHE_TTL_MS && cached.byOffer) {
       cfPreviewsByOffer = cached.byOffer;
+      const n = Object.keys(cached.byOffer).length;
+      console.log(`[CF] Previews from cache — ${n} offer${n === 1 ? '' : 's'} covered ` +
+                  `(sessionStorage, ${Math.round((Date.now() - cached._ts) / 60000)}m old). ` +
+                  `Run sessionStorage.removeItem('${CF_CACHE_KEY}') and reload to force a fresh fetch.`);
       return Promise.resolve(cfPreviewsByOffer);
     }
   } catch (_) {}
+
+  console.log('[CF] Loading previews —', CF_VERSION_FIELDS.length, 'version-column candidates to probe…');
 
   _cfLoadP = Promise.all([cfFetchVersionOfferMap(), cfFetchImages()])
     .then(async ([{ map, field }, images]) => {
