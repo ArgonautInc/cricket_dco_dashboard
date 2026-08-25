@@ -1235,6 +1235,7 @@ svg { display: block; }
   gap: 14px;
 }
 .creative-card {
+  cursor: pointer;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1297,6 +1298,26 @@ svg { display: block; }
 .creative-stats-grid {
   display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px 10px;
   padding: 10px 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+}
+
+/* ── Creative detail dialog ──────────────────────────────── */
+.cr-detail-preview {
+  width:100%; height:340px; max-height:44vh;
+  border-radius:14px; overflow:hidden; background:#000;
+  display:grid; place-items:center; margin-bottom:18px;
+  position:relative;
+}
+.cr-detail-preview img { max-width:100%; max-height:100%; object-fit:contain; }
+.cr-detail-file-row {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  font-size:11.5px; font-family:monospace; color:var(--fg2);
+  background:var(--recess); border:1px solid var(--border); border-radius:9px;
+  padding:8px 11px; margin-bottom:16px; word-break:break-all;
+}
+.cr-detail-file-row .cr-detail-file-tag {
+  font-family:var(--font-b); font-weight:600; font-size:10px;
+  text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+  flex-shrink:0;
 }
 .cs-item { display:flex; flex-direction:column; gap:1px; }
 .cs-label { font-size:10px; color:var(--muted); font-weight:500; text-transform:uppercase; letter-spacing:.04em; }
@@ -2113,6 +2134,21 @@ body.compact .chart-card      { padding: 14px 16px; }
         <div class="cr-modal-actions">
           <button class="btn-ghost btn-sm" id="crModalCancel">Cancel</button>
           <button class="btn-primary btn-sm" id="crModalSave">Save Creative</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Creative Detail modal -->
+    <div class="cr-modal-overlay" id="crDetailOverlay">
+      <div class="cr-modal" id="crDetailModal" style="width:min(720px,94vw)">
+        <div class="cr-detail-preview" id="crDetailPreview"></div>
+        <div class="cr-modal-title" id="crDetailTitle" style="margin-bottom:6px"></div>
+        <div class="creative-meta-row" id="crDetailBadges" style="margin-bottom:14px"></div>
+        <div class="cr-detail-file-row" id="crDetailFileRow"></div>
+        <div class="creative-stats-grid" id="crDetailStats" style="grid-template-columns:1fr 1fr 1fr 1fr"></div>
+        <div class="cr-modal-actions">
+          <button class="btn-ghost btn-sm" id="crDetailEditBtn">Edit Creative</button>
+          <button class="btn-primary btn-sm" id="crDetailClose">Close</button>
         </div>
       </div>
     </div>
@@ -5036,7 +5072,7 @@ function stageShort(s) { return s.replace(/^\d+ - /,''); }
 
 const CF_VARIANT      = 'public';
 const CF_SIGN_TTL_SEC = 7200;                 // 2h — outlives the 1h asset cache
-const CF_CACHE_KEY    = '_cfCricketAssets_v4';
+const CF_CACHE_KEY    = '_cfCricketAssets_v5';
 const CF_CACHE_TTL_MS = 60 * 60 * 1000;
 
 /* The delivery report's version column has been exported under several names.
@@ -5655,7 +5691,8 @@ function cfForceRefreshPreviews() {
 
 const MP_DB = 'crkt-previews', MP_STORE = 'manual';
 
-let mpByOffer = {};   // normalized offer name -> object URL
+let mpByOffer = {};           // normalized offer name -> object URL
+let mpFilenameByOffer = {};   // normalized offer name -> original uploaded file name
 
 function mpOpen() {
   return new Promise((res, rej) => {
@@ -5710,9 +5747,12 @@ async function mpLoad() {
     });
     Object.values(mpByOffer).forEach(URL.revokeObjectURL);
     mpByOffer = {};
+    mpFilenameByOffer = {};
     keys.forEach((k, i) => {
       const rec = vals[i];
-      if (rec && rec.blob) mpByOffer[k] = URL.createObjectURL(rec.blob);
+      if (!rec || !rec.blob) return;
+      mpByOffer[k] = URL.createObjectURL(rec.blob);
+      if (rec.filename) mpFilenameByOffer[k] = rec.filename;
     });
   } catch (e) {
     console.warn('[MP] Load failed:', e && e.message);
@@ -5915,12 +5955,18 @@ function crWireCards() {
     img.addEventListener('error', () => img.remove());
   });
 
-  // Edit buttons
+  // Edit buttons — stopPropagation so they don't also open the detail dialog
   document.querySelectorAll('.cr-edit-btn').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       crOpenModal(btn.dataset.id);
     });
+  });
+
+  // Card body -> detail dialog (excludes the dashed "Add Creative" tile, which
+  // has its own click handler below and no data to show)
+  document.querySelectorAll('.creative-card:not(.creative-card--add)').forEach(card => {
+    card.addEventListener('click', () => crOpenDetail(card.dataset.id));
   });
 
   // Add card
@@ -5963,6 +6009,63 @@ function crOpenModal(id) {
 
 function crCloseModal() {
   document.getElementById('crModalOverlay').classList.remove('open');
+}
+
+/* ── Detail dialog ───────────────────────────────────────── */
+/* Reuses crThumbContent() for the big preview so it's guaranteed to show
+   whatever the card itself is showing — same Cloudflare-then-manual-then-
+   placeholder precedence, no second source of truth to drift out of sync. */
+function crOpenDetail(id) {
+  const c = crGetAll().find(x => x.id === id);
+  if (!c) return;
+
+  document.getElementById('crDetailPreview').innerHTML = crThumbContent(c);
+  // crWireCards() does this same drop-on-404 for grid cards; the dialog's img
+  // is a separate DOM node crWireCards() never sees, so it needs its own copy.
+  const previewImg = document.querySelector('#crDetailPreview .cr-preview-img');
+  if (previewImg) {
+    if (previewImg.complete && previewImg.naturalWidth === 0) previewImg.remove();
+    else previewImg.addEventListener('error', () => previewImg.remove());
+  }
+  document.getElementById('crDetailTitle').textContent = c.creative || '(untitled creative)';
+  document.getElementById('crDetailBadges').innerHTML = `
+    <span class="data-badge ${esc(c.mkt.toLowerCase())}">${esc(c.mkt)}</span>
+    <span class="data-badge ${esc(c.q.toLowerCase())}">${esc(c.q)}</span>
+    <span class="creative-stage-label">${esc(c.stage)}</span>
+  `;
+
+  const fileMeta = crPreviewFilename(c.creative);
+  document.getElementById('crDetailFileRow').innerHTML = fileMeta
+    ? `<span class="cr-detail-file-tag">${esc(fileMeta.source)} file</span> ${esc(fileMeta.filename)}`
+    : `<span class="cr-detail-file-tag">Preview</span> No matched file — showing placeholder`;
+
+  const imps   = c.imps   ? fmtM(c.imps)     : '—';
+  const clicks = c.clicks ? fmtN(c.clicks)   : '—';
+  const ctr    = c.ctr    ? fmtPct(c.ctr)    : '—';
+  const gmOrd  = c.gmOrd  ? fmtN(c.gmOrd)    : '—';
+  const gmLpvr = c.gmLpvr ? fmtPct(c.gmLpvr) : '—';
+  const gmCvr  = c.gmCvr  ? fmtPct(c.gmCvr)  : '—';
+  const tdorV  = oneSheetDeriveTdor(c);
+  const tdor   = tdorV ? (tdorV * 100).toFixed(4) + '%' : '—';
+  const cpoV   = oneSheetDeriveCpo(c.spend, c.gmOrd);
+  const cpo    = cpoV != null ? '$' + cpoV.toFixed(2) : '—';
+  const spend  = c.spend ? '$' + fmtN(Math.round(c.spend)) : '—';
+  const cpc    = c.cpc   ? '$' + c.cpc.toFixed(2) : '—';
+
+  document.getElementById('crDetailStats').innerHTML = [
+    ['Impressions', imps], ['Clicks', clicks], ['CTR', ctr], ['GM Orders', gmOrd],
+    ['GM LPVR', gmLpvr], ['GM CVR', gmCvr], ['TDOR', tdor], ['CPO', cpo],
+    ['Spend', spend], ['CPC', cpc],
+  ].map(([label, val]) =>
+    `<div class="cs-item"><div class="cs-label">${esc(label)}</div><div class="cs-val">${esc(val)}</div></div>`
+  ).join('');
+
+  document.getElementById('crDetailEditBtn').dataset.id = id;
+  document.getElementById('crDetailOverlay').classList.add('open');
+}
+
+function crCloseDetail() {
+  document.getElementById('crDetailOverlay').classList.remove('open');
 }
 
 function crSaveModal() {
@@ -6122,6 +6225,20 @@ document.getElementById('crModalCancel').addEventListener('click', crCloseModal)
 document.getElementById('crModalSave').addEventListener('click', crSaveModal);
 document.getElementById('crModalOverlay').addEventListener('click', e => {
   if (e.target === document.getElementById('crModalOverlay')) crCloseModal();
+});
+
+document.getElementById('crDetailClose').addEventListener('click', crCloseDetail);
+document.getElementById('crDetailOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('crDetailOverlay')) crCloseDetail();
+});
+document.getElementById('crDetailEditBtn').addEventListener('click', () => {
+  const id = document.getElementById('crDetailEditBtn').dataset.id;
+  crCloseDetail();
+  crOpenModal(id);
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (document.getElementById('crDetailOverlay').classList.contains('open')) crCloseDetail();
 });
 
 document.getElementById('crMarketFilter').addEventListener('click', e => {
