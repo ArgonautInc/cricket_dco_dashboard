@@ -2625,6 +2625,7 @@ async function loadBigQueryData() {
     const [qRows, sRows, anStageRows, anCreativeRows] = await Promise.all([
       bqQuery(`
         SELECT \`Flight\` as quarter,
+          CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
           SUM(\`Total Ads Requested\`) as imps,
           SUM(\`Clicks\`) as clicks,
           SAFE_DIVIDE(SUM(\`Clicks\`), SUM(\`Total Ads Requested\`)) as ctr,
@@ -2637,10 +2638,11 @@ async function loadBigQueryData() {
           SAFE_DIVIDE(SUM(\`Total Cost\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
         WHERE \`Flight\` IN ('Q1','Q2','Q3')
-        GROUP BY \`Flight\`
+        GROUP BY \`Flight\`, mkt
       `),
       bqQuery(`
         SELECT \`Flight\` as quarter, \`Segment\` as stage,
+          CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
           SUM(\`Total Ads Requested\`) as imps,
           SUM(\`Clicks\`) as clicks,
           SAFE_DIVIDE(SUM(\`Clicks\`), SUM(\`Total Ads Requested\`)) as ctr,
@@ -2651,7 +2653,7 @@ async function loadBigQueryData() {
           ) as lpvr
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
         WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
-        GROUP BY \`Flight\`, \`Segment\`
+        GROUP BY \`Flight\`, \`Segment\`, mkt
         ORDER BY \`Flight\`, imps DESC
       `),
       bqQuery(`
@@ -2700,26 +2702,39 @@ async function loadBigQueryData() {
       `)
     ]);
 
-    // Rebuild quarter totals
+    // Rebuild quarter totals — one entry per market. Both queries above group
+    // by the Strategy-derived market, so every quarter gets real GM *and* USH
+    // numbers; the Overview market filter reads PIVOT_DATA.quarters[q][mkt]
+    // straight out of here, so anything left hardcoded makes that filter a
+    // no-op (GM) or blank (USH). Orders stay combined into gmOrd — the
+    // non-hispanic/hispanic order pixels are a separate dimension from the
+    // GM/USH strategy split, and the KPI tiles sum gmOrd+hmOrd either way.
+    const ZERO_MKT = { imps:0, clicks:0, gmOrd:0, hmOrd:0, ctr:0, gmLpvr:0, gmCvr:0, spend:0, cpc:0 };
     const newQ = {};
     qRows.forEach(r => {
       const orders = Number(r.orders)||0;
       const clicks = Number(r.clicks)||0;
       const lpvr   = Number(r.lpvr)||0;
       const spend  = Number(r.spend)||0;
-      newQ[r.quarter] = {
-        GM:  { imps: Number(r.imps)||0, clicks, gmOrd: orders, hmOrd:0, ctr: Number(r.ctr)||0, gmLpvr: lpvr, gmCvr: clicks ? orders/clicks : 0, spend, cpc: Number(r.cpc)||0 },
-        USH: { imps: 0, clicks: 0, gmOrd:0, hmOrd:0, ctr:0, gmLpvr:0, gmCvr:0, spend:0, cpc:0 }
+      const mkt    = r.mkt === 'USH' ? 'USH' : 'GM';
+      newQ[r.quarter] = newQ[r.quarter] || { GM: { ...ZERO_MKT }, USH: { ...ZERO_MKT } };
+      newQ[r.quarter][mkt] = {
+        imps: Number(r.imps)||0, clicks, gmOrd: orders, hmOrd:0,
+        ctr: Number(r.ctr)||0, gmLpvr: lpvr, gmCvr: clicks ? orders/clicks : 0,
+        spend, cpc: Number(r.cpc)||0,
       };
     });
     if (Object.keys(newQ).length) PIVOT_DATA.quarters = newQ;
 
-    // Rebuild overview stages
+    // Rebuild overview stages — one row per quarter × market × stage, matching
+    // the static PIVOT_DATA.stages shape. computeStages() drops rows whose mkt
+    // doesn't match the selection, so a hardcoded mkt empties the funnel table
+    // for the other market.
     const newS = sRows.map(r => {
       const orders = Number(r.orders)||0;
       const clicks = Number(r.clicks)||0;
       return {
-        q: r.quarter, mkt: 'GM', stage: r.stage,
+        q: r.quarter, mkt: r.mkt === 'USH' ? 'USH' : 'GM', stage: r.stage,
         imps: Number(r.imps)||0, clicks,
         gmOrd: orders, ctr: Number(r.ctr)||0,
         gmLpvr: Number(r.lpvr)||0, gmCvr: clicks ? orders/clicks : 0
@@ -3179,17 +3194,23 @@ function aggregateManualPerformanceRows(rows) {
   Object.keys(groups).forEach(flight => {
     const flightRows = groups[flight];
 
-    // -- quarter totals (mirrors the BigQuery quarters query: orders combined, USH left at 0)
-    let imps = 0, clicks = 0, gmOrdSum = 0, hmOrdSum = 0, gmRtSum = 0, hmRtSum = 0, spend = 0;
+    // -- quarter totals (mirrors the BigQuery quarters query: orders combined
+    //    into gmOrd, split GM/USH off the Strategy column so the Overview
+    //    market filter has real numbers for both markets)
+    const mktTotals = {
+      GM:  { imps:0, clicks:0, gmOrdSum:0, hmOrdSum:0, gmRtSum:0, hmRtSum:0, spend:0 },
+      USH: { imps:0, clicks:0, gmOrdSum:0, hmOrdSum:0, gmRtSum:0, hmRtSum:0, spend:0 },
+    };
     const dailyImpsByDate = {};
     flightRows.forEach(r => {
-      imps     += numCol(r, 'Total Ads Requested');
-      clicks   += numCol(r, 'Clicks');
-      gmOrdSum += numCol(r, 'CKT_bNON_HISPANIC_ORDER Count');
-      hmOrdSum += numCol(r, 'CKT_bHISPANIC_ORDER Count');
-      gmRtSum  += numCol(r, 'CKT_bNON_HISPANIC_GLOBAL_RT Count');
-      hmRtSum  += numCol(r, 'CKT_bHISPANIC_GLOBAL_RT Count');
-      spend    += numCol(r, 'Total Cost');
+      const t = mktTotals[marketFromStrategyCol(r)];
+      t.imps     += numCol(r, 'Total Ads Requested');
+      t.clicks   += numCol(r, 'Clicks');
+      t.gmOrdSum += numCol(r, 'CKT_bNON_HISPANIC_ORDER Count');
+      t.hmOrdSum += numCol(r, 'CKT_bHISPANIC_ORDER Count');
+      t.gmRtSum  += numCol(r, 'CKT_bNON_HISPANIC_GLOBAL_RT Count');
+      t.hmRtSum  += numCol(r, 'CKT_bHISPANIC_GLOBAL_RT Count');
+      t.spend    += numCol(r, 'Total Cost');
 
       if (dateKey) {
         const dateObj = parseFlexibleDate(r[dateKey]);
@@ -3204,18 +3225,29 @@ function aggregateManualPerformanceRows(rows) {
         .sort()
         .map(dStr => ({ dateStr: dStr, imps: dailyImpsByDate[dStr] }));
     }
-    const orders = gmOrdSum + hmOrdSum;
+    const buildQuarterMkt = t => {
+      const ord = t.gmOrdSum + t.hmOrdSum;
+      return {
+        imps: t.imps, clicks: t.clicks, gmOrd: ord, hmOrd: 0,
+        ctr: t.imps ? t.clicks/t.imps : 0,
+        gmLpvr: t.imps ? (t.gmRtSum+t.hmRtSum)/t.imps : 0,
+        gmCvr: t.clicks ? ord/t.clicks : 0,
+        spend: t.spend, cpc: t.clicks ? t.spend/t.clicks : 0,
+      };
+    };
     quartersByFlight[flight] = {
-      GM:  { imps, clicks, gmOrd: orders, hmOrd: 0, ctr: imps ? clicks/imps : 0, gmLpvr: imps ? (gmRtSum+hmRtSum)/imps : 0, gmCvr: clicks ? orders/clicks : 0, spend, cpc: clicks ? spend/clicks : 0 },
-      USH: { imps: 0, clicks: 0, gmOrd: 0, hmOrd: 0, ctr: 0, gmLpvr: 0, gmCvr: 0, spend: 0, cpc: 0 },
+      GM:  buildQuarterMkt(mktTotals.GM),
+      USH: buildQuarterMkt(mktTotals.USH),
     };
 
-    // -- PIVOT_DATA.stages shape (mirrors the overview-stages query: grouped by Segment only, mkt hardcoded GM)
+    // -- PIVOT_DATA.stages shape (mirrors the overview-stages query: grouped by mkt + Segment)
     const stageGroups = {};
     flightRows.forEach(r => {
       const seg = (r['Segment'] || '').trim();
       if (!seg) return;
-      const g = stageGroups[seg] = stageGroups[seg] || { imps:0, clicks:0, gmOrdSum:0, hmOrdSum:0, gmRtSum:0, hmRtSum:0 };
+      const mkt = marketFromStrategyCol(r);
+      const key = mkt + '|' + seg;
+      const g = stageGroups[key] = stageGroups[key] || { mkt, seg, imps:0, clicks:0, gmOrdSum:0, hmOrdSum:0, gmRtSum:0, hmRtSum:0 };
       g.imps     += numCol(r, 'Total Ads Requested');
       g.clicks   += numCol(r, 'Clicks');
       g.gmOrdSum += numCol(r, 'CKT_bNON_HISPANIC_ORDER Count');
@@ -3223,10 +3255,10 @@ function aggregateManualPerformanceRows(rows) {
       g.gmRtSum  += numCol(r, 'CKT_bNON_HISPANIC_GLOBAL_RT Count');
       g.hmRtSum  += numCol(r, 'CKT_bHISPANIC_GLOBAL_RT Count');
     });
-    stagesByFlight[flight] = Object.keys(stageGroups).map(seg => {
-      const g = stageGroups[seg], ord = g.gmOrdSum + g.hmOrdSum;
+    stagesByFlight[flight] = Object.values(stageGroups).map(g => {
+      const ord = g.gmOrdSum + g.hmOrdSum;
       return {
-        q: flight, mkt: 'GM', stage: seg, imps: g.imps, clicks: g.clicks,
+        q: flight, mkt: g.mkt, stage: g.seg, imps: g.imps, clicks: g.clicks,
         gmOrd: ord, ctr: g.imps ? g.clicks/g.imps : 0,
         gmLpvr: g.imps ? (g.gmRtSum+g.hmRtSum)/g.imps : 0,
         gmCvr: g.clicks ? ord/g.clicks : 0,
@@ -3956,9 +3988,31 @@ function renderOvKpis(t, qSel, prevQ) {
 }
 
 /* ── Trend chart render ─────────────────────────────────── */
-function renderOvTrend(qSel, dateFrom, dateTo) {
+/* Day-level series for the selected quarters/market. AN_DAILY_STAGE_RAW is
+   the only daily source carrying a market dimension, so quarters it covers
+   are summed from it — that's what makes the market filter actually move
+   this chart. Quarters it doesn't cover (cloud-report gap fills, manual
+   uploads, the synthetic seed series) still come from DAILY_DATA, which has
+   no market to filter on and so is market-agnostic by construction. */
+function ovTrendDays(qKeys, mktSel) {
+  const realQs = new Set(AN_DAILY_STAGE_RAW.map(r => r.q));
+  const byDay  = {};
+  AN_DAILY_STAGE_RAW.forEach(r => {
+    if (!qKeys.includes(r.q)) return;
+    if (mktSel !== 'all' && r.mkt !== mktSel) return;
+    byDay[r.day] = (byDay[r.day] || 0) + r.imps;
+  });
+  const rows = Object.keys(byDay).sort().map(day => {
+    const d = new Date(day + 'T00:00:00');
+    return { d, label: d.toLocaleDateString('en-US',{month:'short',day:'numeric'}), imps: byDay[day] };
+  });
+  DAILY_DATA.forEach(d => { if (qKeys.includes(d.q) && !realQs.has(d.q)) rows.push(d); });
+  return rows.sort((a,b) => a.d - b.d);
+}
+
+function renderOvTrend(qSel, mktSel, dateFrom, dateTo) {
   const qKeys = normQs(qSel);
-  let days = DAILY_DATA.filter(d => qKeys.includes(d.q));
+  let days = ovTrendDays(qKeys, mktSel);
   if (dateFrom) days = days.filter(d => isoLocal(d.d) >= dateFrom);
   if (dateTo)   days = days.filter(d => isoLocal(d.d) <= dateTo);
   const vals = days.map(d => d.imps);
@@ -3974,7 +4028,8 @@ function renderOvTrend(qSel, dateFrom, dateTo) {
   const label = qKeys.length === 3 ? 'Jan – Present 2026 (Q1 + Q2 + Q3)'
               : qKeys.length === 1 ? singleRange[qKeys[0]]
               : qsLabel(qKeys) + ' 2026';
-  document.getElementById('ovTrendSub').textContent = label;
+  document.getElementById('ovTrendSub').textContent =
+    mktSel === 'all' ? label : `${label} · ${mktSel}`;
 }
 
 /* ── Market split donut ─────────────────────────────────── */
@@ -4038,7 +4093,7 @@ function renderOverview() {
   const mktLabel = ovMkt === 'all' ? 'GM + USH' : ovMkt;
   const qLabel   = qsLabel(ovQs);
   renderOvKpis(totals, ovQs);
-  renderOvTrend(ovQs, ovDateFrom, ovDateTo);
+  renderOvTrend(ovQs, ovMkt, ovDateFrom, ovDateTo);
   if (ovMkt !== 'all') {
     // When a single market is selected, show stage donut instead
     const stagePalette = stages.slice(0,4).map((s,i)=>({
@@ -4944,17 +4999,28 @@ function cfNormFilename(filename) {
     .toLowerCase();
 }
 
-/* A CF file name matches a Version Name when it starts with it AND the next
-   character is a separator. Plain startsWith would let version …_2936 claim
-   …_29361's files; plain includes() — as the paid-media dashboard does — would
-   be far worse here, since these IDs share long prefixes and a
-   wrong-but-present image looks correct on the card.
+/* A CF file name matches a Version Name when the version appears anywhere in
+   it — not just as a prefix. The capturer/uploader routinely adds a batch or
+   campaign prefix before the version (e.g. "2026Q3_DTP_<version>_300x250"),
+   so requiring the version at position 0 missed those outright. Both edges
+   of the match still have to land on a separator (or string boundary): plain
+   indexOf() would let version …_2936 claim …_29361's files or match inside
+   an unrelated longer token, and plain includes() — as the paid-media
+   dashboard does — would be far worse here, since these IDs share long
+   prefixes and a wrong-but-present image looks correct on the card.
 
    Both arguments must already be through cfNormFilename / toLowerCase. */
 function cfFilenameMatchesVersion(filename, version) {
-  if (!filename.startsWith(version)) return false;
-  const next = filename.charAt(version.length);
-  return next === '' || next === '_' || next === '-' || next === '.';
+  const isSep = ch => ch === '' || ch === undefined || ch === '_' || ch === '-' || ch === '.';
+  let from = 0;
+  for (;;) {
+    const idx = filename.indexOf(version, from);
+    if (idx === -1) return false;
+    const before = idx === 0 ? '' : filename.charAt(idx - 1);
+    const after  = filename.charAt(idx + version.length);
+    if (isSep(before) && isSep(after)) return true;
+    from = idx + 1;
+  }
 }
 
 /* Lower rank wins. The size token may sit anywhere in the file name — inside the
