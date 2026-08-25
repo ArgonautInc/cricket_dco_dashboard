@@ -615,6 +615,23 @@ svg { display: block; }
   .refresh-bar.active > span { transform: translateX(0); width: 100%; }
 }
 
+/* ── Creative previews refresh button ────────────────────── */
+#crRefreshPreviewsBtn.cr-refresh-spinning svg-icon {
+  display: inline-flex;
+  animation: cr-refresh-spin .8s linear infinite;
+}
+@keyframes cr-refresh-spin { to { transform: rotate(360deg); } }
+.cr-refresh-status {
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: 2px;
+  white-space: nowrap;
+}
+.cr-refresh-status-warn { color: #d33; }
+@media (prefers-reduced-motion: reduce) {
+  #crRefreshPreviewsBtn.cr-refresh-spinning svg-icon { animation: none; }
+}
+
 /* ── Page title row ──────────────────────────────────────── */
 .page-header {
   display: flex;
@@ -1304,6 +1321,7 @@ svg { display: block; }
   gap: 14px;
 }
 .creative-card {
+  cursor: pointer;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1366,6 +1384,26 @@ svg { display: block; }
 .creative-stats-grid {
   display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px 10px;
   padding: 10px 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+}
+
+/* ── Creative detail dialog ──────────────────────────────── */
+.cr-detail-preview {
+  width:100%; height:340px; max-height:44vh;
+  border-radius:14px; overflow:hidden; background:#000;
+  display:grid; place-items:center; margin-bottom:18px;
+  position:relative;
+}
+.cr-detail-preview img { max-width:100%; max-height:100%; object-fit:contain; }
+.cr-detail-file-row {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  font-size:11.5px; font-family:monospace; color:var(--fg2);
+  background:var(--recess); border:1px solid var(--border); border-radius:9px;
+  padding:8px 11px; margin-bottom:16px; word-break:break-all;
+}
+.cr-detail-file-row .cr-detail-file-tag {
+  font-family:var(--font-b); font-weight:600; font-size:10px;
+  text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+  flex-shrink:0;
 }
 .cs-item { display:flex; flex-direction:column; gap:1px; }
 .cs-label { font-size:10px; color:var(--muted); font-weight:500; text-transform:uppercase; letter-spacing:.04em; }
@@ -1804,6 +1842,12 @@ body.compact .chart-card      { padding: 14px 16px; }
             <option>21 - Order (ajdx)</option>
           </optgroup>
         </select>
+        <!-- Version Name (hidden until version-level data loads) -->
+        <div id="anVersionGroup" style="display:none;align-items:center;gap:6px">
+          <select class="an-select" id="anVersionFilter" title="Filter to a single Flashtalking Version Name. Grouped by Creative Offer Name — one offer covers many versions.">
+            <option value="all">All Versions</option>
+          </select>
+        </div>
         <div class="an-search">
           <svg-icon name="search" size="13" color="var(--muted)"></svg-icon>
           <input id="anSearch" type="text" placeholder="Search creative…"/>
@@ -1903,6 +1947,10 @@ body.compact .chart-card      { padding: 14px 16px; }
           <h1>Creatives</h1>
         </div>
         <div class="page-header-actions">
+          <button class="btn-ghost btn-sm" id="crRefreshPreviewsBtn" title="Clear the cached Cloudflare preview matches and re-fetch from BigQuery + Cloudflare. Use this after uploading new creative or fixing a version-name mismatch.">
+            <svg-icon name="refresh" size="13"></svg-icon> Refresh Previews
+          </button>
+          <span class="cr-refresh-status" id="crRefreshPreviewsStatus"></span>
           <button class="btn-ghost btn-sm" id="crUploadBtn" title="Fallback for when Cloudflare previews are unavailable. Upload the ad-screenshot-capturer ZIP, or loose PNG/JPGs. Cloudflare still takes precedence wherever it has an image.">
             <svg-icon name="plus" size="13"></svg-icon> Upload Previews
           </button>
@@ -2178,6 +2226,21 @@ body.compact .chart-card      { padding: 14px 16px; }
       </div>
     </div>
 
+    <!-- Creative Detail modal -->
+    <div class="cr-modal-overlay" id="crDetailOverlay">
+      <div class="cr-modal" id="crDetailModal" style="width:min(720px,94vw)">
+        <div class="cr-detail-preview" id="crDetailPreview"></div>
+        <div class="cr-modal-title" id="crDetailTitle" style="margin-bottom:6px"></div>
+        <div class="creative-meta-row" id="crDetailBadges" style="margin-bottom:14px"></div>
+        <div class="cr-detail-file-row" id="crDetailFileRow"></div>
+        <div class="creative-stats-grid" id="crDetailStats" style="grid-template-columns:1fr 1fr 1fr 1fr"></div>
+        <div class="cr-modal-actions">
+          <button class="btn-ghost btn-sm" id="crDetailEditBtn">Edit Creative</button>
+          <button class="btn-primary btn-sm" id="crDetailClose">Close</button>
+        </div>
+      </div>
+    </div>
+
     <div class="tab-panel" id="tab-settings">
       <div class="page-header">
         <div>
@@ -2360,6 +2423,12 @@ body.compact .chart-card      { padding: 14px 16px; }
             <button data-mkt="USH">USH</button>
           </div>
         </div>
+        <div class="pv-control-group" id="trVersionGroup" style="display:none">
+          <span class="pv-label">Version</span>
+          <select class="an-select" id="trVersionFilter" title="Filter every series to a single Flashtalking Version Name. Grouped by Creative Offer Name — one offer covers many versions.">
+            <option value="all">All Versions</option>
+          </select>
+        </div>
         <div class="pv-control-group" id="trDateRangeGroup" style="display:none;align-items:center;gap:6px">
           <span class="pv-label">Date Range</span>
           <input type="date" id="trDateFrom" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px">
@@ -2524,6 +2593,10 @@ body.compact .chart-card      { padding: 14px 16px; }
   </symbol>
   <symbol id="ico-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
     <path d="M12 20V8M6 14l6-6 6 6M4 4h16" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="ico-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <path d="M4 4v6h6M20 20v-6h-6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M4.5 15a8 8 0 0 0 14.1 3M19.5 9A8 8 0 0 0 5.4 6" stroke-linecap="round" stroke-linejoin="round"/>
   </symbol>
   <symbol id="ico-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
     <circle cx="9" cy="8" r="3.5"/>
@@ -2713,6 +2786,7 @@ async function loadBigQueryData() {
     const [qRows, sRows, anStageRows, anCreativeRows] = await Promise.all([
       bqQuery(`
         SELECT \`Flight\` as quarter,
+          CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
           SUM(\`Total Ads Requested\`) as imps,
           SUM(\`Clicks\`) as clicks,
           SAFE_DIVIDE(SUM(\`Clicks\`), SUM(\`Total Ads Requested\`)) as ctr,
@@ -2725,10 +2799,11 @@ async function loadBigQueryData() {
           SAFE_DIVIDE(SUM(\`Total Cost\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
         WHERE \`Flight\` IN ('Q1','Q2','Q3')
-        GROUP BY \`Flight\`
+        GROUP BY \`Flight\`, mkt
       `),
       bqQuery(`
         SELECT \`Flight\` as quarter, \`Segment\` as stage,
+          CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
           SUM(\`Total Ads Requested\`) as imps,
           SUM(\`Clicks\`) as clicks,
           SAFE_DIVIDE(SUM(\`Clicks\`), SUM(\`Total Ads Requested\`)) as ctr,
@@ -2739,7 +2814,7 @@ async function loadBigQueryData() {
           ) as lpvr
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
         WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
-        GROUP BY \`Flight\`, \`Segment\`
+        GROUP BY \`Flight\`, \`Segment\`, mkt
         ORDER BY \`Flight\`, imps DESC
       `),
       bqQuery(`
@@ -2791,26 +2866,39 @@ async function loadBigQueryData() {
       `)
     ]);
 
-    // Rebuild quarter totals
+    // Rebuild quarter totals — one entry per market. Both queries above group
+    // by the Strategy-derived market, so every quarter gets real GM *and* USH
+    // numbers; the Overview market filter reads PIVOT_DATA.quarters[q][mkt]
+    // straight out of here, so anything left hardcoded makes that filter a
+    // no-op (GM) or blank (USH). Orders stay combined into gmOrd — the
+    // non-hispanic/hispanic order pixels are a separate dimension from the
+    // GM/USH strategy split, and the KPI tiles sum gmOrd+hmOrd either way.
+    const ZERO_MKT = { imps:0, clicks:0, gmOrd:0, hmOrd:0, ctr:0, gmLpvr:0, gmCvr:0, spend:0, cpc:0 };
     const newQ = {};
     qRows.forEach(r => {
       const orders = Number(r.orders)||0;
       const clicks = Number(r.clicks)||0;
       const lpvr   = Number(r.lpvr)||0;
       const spend  = Number(r.spend)||0;
-      newQ[r.quarter] = {
-        GM:  { imps: Number(r.imps)||0, clicks, gmOrd: orders, hmOrd:0, ctr: Number(r.ctr)||0, gmLpvr: lpvr, gmCvr: clicks ? orders/clicks : 0, spend, cpc: Number(r.cpc)||0 },
-        USH: { imps: 0, clicks: 0, gmOrd:0, hmOrd:0, ctr:0, gmLpvr:0, gmCvr:0, spend:0, cpc:0 }
+      const mkt    = r.mkt === 'USH' ? 'USH' : 'GM';
+      newQ[r.quarter] = newQ[r.quarter] || { GM: { ...ZERO_MKT }, USH: { ...ZERO_MKT } };
+      newQ[r.quarter][mkt] = {
+        imps: Number(r.imps)||0, clicks, gmOrd: orders, hmOrd:0,
+        ctr: Number(r.ctr)||0, gmLpvr: lpvr, gmCvr: clicks ? orders/clicks : 0,
+        spend, cpc: Number(r.cpc)||0,
       };
     });
     if (Object.keys(newQ).length) PIVOT_DATA.quarters = newQ;
 
-    // Rebuild overview stages
+    // Rebuild overview stages — one row per quarter × market × stage, matching
+    // the static PIVOT_DATA.stages shape. computeStages() drops rows whose mkt
+    // doesn't match the selection, so a hardcoded mkt empties the funnel table
+    // for the other market.
     const newS = sRows.map(r => {
       const orders = Number(r.orders)||0;
       const clicks = Number(r.clicks)||0;
       return {
-        q: r.quarter, mkt: 'GM', stage: r.stage,
+        q: r.quarter, mkt: r.mkt === 'USH' ? 'USH' : 'GM', stage: r.stage,
         imps: Number(r.imps)||0, clicks,
         gmOrd: orders, ctr: Number(r.ctr)||0,
         gmLpvr: Number(r.lpvr)||0, gmCvr: clicks ? orders/clicks : 0
@@ -3283,17 +3371,23 @@ function aggregateManualPerformanceRows(rows) {
   Object.keys(groups).forEach(flight => {
     const flightRows = groups[flight];
 
-    // -- quarter totals (mirrors the BigQuery quarters query: orders combined, USH left at 0)
-    let imps = 0, clicks = 0, gmOrdSum = 0, hmOrdSum = 0, gmRtSum = 0, hmRtSum = 0, spend = 0;
+    // -- quarter totals (mirrors the BigQuery quarters query: orders combined
+    //    into gmOrd, split GM/USH off the Strategy column so the Overview
+    //    market filter has real numbers for both markets)
+    const mktTotals = {
+      GM:  { imps:0, clicks:0, gmOrdSum:0, hmOrdSum:0, gmRtSum:0, hmRtSum:0, spend:0 },
+      USH: { imps:0, clicks:0, gmOrdSum:0, hmOrdSum:0, gmRtSum:0, hmRtSum:0, spend:0 },
+    };
     const dailyImpsByDate = {};
     flightRows.forEach(r => {
-      imps     += numCol(r, 'Total Ads Requested');
-      clicks   += numCol(r, 'Clicks');
-      gmOrdSum += numCol(r, 'CKT_bNON_HISPANIC_ORDER Count');
-      hmOrdSum += numCol(r, 'CKT_bHISPANIC_ORDER Count');
-      gmRtSum  += numCol(r, 'CKT_bNON_HISPANIC_GLOBAL_RT Count');
-      hmRtSum  += numCol(r, 'CKT_bHISPANIC_GLOBAL_RT Count');
-      spend    += numCol(r, 'Total Cost');
+      const t = mktTotals[marketFromStrategyCol(r)];
+      t.imps     += numCol(r, 'Total Ads Requested');
+      t.clicks   += numCol(r, 'Clicks');
+      t.gmOrdSum += numCol(r, 'CKT_bNON_HISPANIC_ORDER Count');
+      t.hmOrdSum += numCol(r, 'CKT_bHISPANIC_ORDER Count');
+      t.gmRtSum  += numCol(r, 'CKT_bNON_HISPANIC_GLOBAL_RT Count');
+      t.hmRtSum  += numCol(r, 'CKT_bHISPANIC_GLOBAL_RT Count');
+      t.spend    += numCol(r, 'Total Cost');
 
       if (dateKey) {
         const dateObj = parseFlexibleDate(r[dateKey]);
@@ -3308,18 +3402,29 @@ function aggregateManualPerformanceRows(rows) {
         .sort()
         .map(dStr => ({ dateStr: dStr, imps: dailyImpsByDate[dStr] }));
     }
-    const orders = gmOrdSum + hmOrdSum;
+    const buildQuarterMkt = t => {
+      const ord = t.gmOrdSum + t.hmOrdSum;
+      return {
+        imps: t.imps, clicks: t.clicks, gmOrd: ord, hmOrd: 0,
+        ctr: t.imps ? t.clicks/t.imps : 0,
+        gmLpvr: t.imps ? (t.gmRtSum+t.hmRtSum)/t.imps : 0,
+        gmCvr: t.clicks ? ord/t.clicks : 0,
+        spend: t.spend, cpc: t.clicks ? t.spend/t.clicks : 0,
+      };
+    };
     quartersByFlight[flight] = {
-      GM:  { imps, clicks, gmOrd: orders, hmOrd: 0, ctr: imps ? clicks/imps : 0, gmLpvr: imps ? (gmRtSum+hmRtSum)/imps : 0, gmCvr: clicks ? orders/clicks : 0, spend, cpc: clicks ? spend/clicks : 0 },
-      USH: { imps: 0, clicks: 0, gmOrd: 0, hmOrd: 0, ctr: 0, gmLpvr: 0, gmCvr: 0, spend: 0, cpc: 0 },
+      GM:  buildQuarterMkt(mktTotals.GM),
+      USH: buildQuarterMkt(mktTotals.USH),
     };
 
-    // -- PIVOT_DATA.stages shape (mirrors the overview-stages query: grouped by Segment only, mkt hardcoded GM)
+    // -- PIVOT_DATA.stages shape (mirrors the overview-stages query: grouped by mkt + Segment)
     const stageGroups = {};
     flightRows.forEach(r => {
       const seg = (r['Segment'] || '').trim();
       if (!seg) return;
-      const g = stageGroups[seg] = stageGroups[seg] || { imps:0, clicks:0, gmOrdSum:0, hmOrdSum:0, gmRtSum:0, hmRtSum:0 };
+      const mkt = marketFromStrategyCol(r);
+      const key = mkt + '|' + seg;
+      const g = stageGroups[key] = stageGroups[key] || { mkt, seg, imps:0, clicks:0, gmOrdSum:0, hmOrdSum:0, gmRtSum:0, hmRtSum:0 };
       g.imps     += numCol(r, 'Total Ads Requested');
       g.clicks   += numCol(r, 'Clicks');
       g.gmOrdSum += numCol(r, 'CKT_bNON_HISPANIC_ORDER Count');
@@ -3327,10 +3432,10 @@ function aggregateManualPerformanceRows(rows) {
       g.gmRtSum  += numCol(r, 'CKT_bNON_HISPANIC_GLOBAL_RT Count');
       g.hmRtSum  += numCol(r, 'CKT_bHISPANIC_GLOBAL_RT Count');
     });
-    stagesByFlight[flight] = Object.keys(stageGroups).map(seg => {
-      const g = stageGroups[seg], ord = g.gmOrdSum + g.hmOrdSum;
+    stagesByFlight[flight] = Object.values(stageGroups).map(g => {
+      const ord = g.gmOrdSum + g.hmOrdSum;
       return {
-        q: flight, mkt: 'GM', stage: seg, imps: g.imps, clicks: g.clicks,
+        q: flight, mkt: g.mkt, stage: g.seg, imps: g.imps, clicks: g.clicks,
         gmOrd: ord, ctr: g.imps ? g.clicks/g.imps : 0,
         gmLpvr: g.imps ? (g.gmRtSum+g.hmRtSum)/g.imps : 0,
         gmCvr: g.clicks ? ord/g.clicks : 0,
@@ -3704,6 +3809,12 @@ window.__onAuth = function(user) {
       if (typeof renderCreatives === 'function') renderCreatives();
     });
   }
+
+  /* Version-level rows for the Analytics/Trends Version Name filter. Needs the
+     Google token like every other BigQuery load, and shares the version-column
+     probe with the preview loader above. The dropdowns stay hidden until this
+     resolves, so a slow or unavailable load just means no version filter. */
+  if (typeof vfLoadVersionData === 'function') vfLoadVersionData();
 
   /* Manually uploaded previews are local (IndexedDB) so they need no auth, but
      load them here too so a Cloudflare outage still leaves the cards populated. */
@@ -4196,9 +4307,31 @@ function ovBuildTrendSvg(pts) {
   return svg + '</svg>';
 }
 
-function renderOvTrend(qSel, dateFrom, dateTo) {
+/* Day-level series for the selected quarters/market. AN_DAILY_STAGE_RAW is
+   the only daily source carrying a market dimension, so quarters it covers
+   are summed from it — that's what makes the market filter actually move
+   this chart. Quarters it doesn't cover (cloud-report gap fills, manual
+   uploads, the synthetic seed series) still come from DAILY_DATA, which has
+   no market to filter on and so is market-agnostic by construction. */
+function ovTrendDays(qKeys, mktSel) {
+  const realQs = new Set(AN_DAILY_STAGE_RAW.map(r => r.q));
+  const byDay  = {};
+  AN_DAILY_STAGE_RAW.forEach(r => {
+    if (!qKeys.includes(r.q)) return;
+    if (mktSel !== 'all' && r.mkt !== mktSel) return;
+    byDay[r.day] = (byDay[r.day] || 0) + r.imps;
+  });
+  const rows = Object.keys(byDay).sort().map(day => {
+    const d = new Date(day + 'T00:00:00');
+    return { d, label: d.toLocaleDateString('en-US',{month:'short',day:'numeric'}), imps: byDay[day] };
+  });
+  DAILY_DATA.forEach(d => { if (qKeys.includes(d.q) && !realQs.has(d.q)) rows.push(d); });
+  return rows.sort((a,b) => a.d - b.d);
+}
+
+function renderOvTrend(qSel, mktSel, dateFrom, dateTo) {
   const qKeys = normQs(qSel);
-  let days = DAILY_DATA.filter(d => qKeys.includes(d.q));
+  let days = ovTrendDays(qKeys, mktSel);
   if (dateFrom) days = days.filter(d => isoLocal(d.d) >= dateFrom);
   if (dateTo)   days = days.filter(d => isoLocal(d.d) <= dateTo);
   days.sort((a, b) => a.d - b.d);
@@ -4213,10 +4346,14 @@ function renderOvTrend(qSel, dateFrom, dateTo) {
   const range = qKeys.length === 3 ? 'Jan – Present 2026 (Q1 + Q2 + Q3)'
               : qKeys.length === 1 ? singleRange[qKeys[0]]
               : qsLabel(qKeys) + ' 2026';
+  /* Subtitle carries three things now: the calendar range, the bucket count
+     (so "18 weeks" explains the point density), and the market — the chart
+     is market-filtered as of ovTrendDays, so the label has to say which. */
   const unit  = ovTrendGran === 'weekly' ? 'week' : 'day';
   const count = ovTrendPoints.length;
+  const base  = count ? `${range} · ${count} ${unit}${count === 1 ? '' : 's'}` : range;
   document.getElementById('ovTrendSub').textContent =
-    count ? `${range} · ${count} ${unit}${count === 1 ? '' : 's'}` : range;
+    mktSel === 'all' ? base : `${base} · ${mktSel}`;
 }
 
 /* ── Market split donut ─────────────────────────────────── */
@@ -4280,7 +4417,7 @@ function renderOverview() {
   const mktLabel = ovMkt === 'all' ? 'GM + USH' : ovMkt;
   const qLabel   = qsLabel(ovQs);
   renderOvKpis(totals, ovQs);
-  renderOvTrend(ovQs, ovDateFrom, ovDateTo);
+  renderOvTrend(ovQs, ovMkt, ovDateFrom, ovDateTo);
   if (ovMkt !== 'all') {
     // When a single market is selected, show stage donut instead
     const stagePalette = stages.slice(0,4).map((s,i)=>({
@@ -4595,7 +4732,7 @@ async function autoLoadCloudOfferMap() {
 }
 
 /* ── Filter state ────────────────────────────────────────── */
-const anState = { qs:[...ALL_QS], mkt:'all', stage:'all', view:'stage', search:'', dateFrom:null, dateTo:null, sortCol:'imps', sortDir:-1 };
+const anState = { qs:[...ALL_QS], mkt:'all', stage:'all', version:'all', view:'stage', search:'', dateFrom:null, dateTo:null, sortCol:'imps', sortDir:-1 };
 
 function anFilter(rows) {
   return rows.filter(r =>
@@ -4762,11 +4899,34 @@ function renderAnTable(rows, cols) {
   });
 }
 
+/* Stage- and creative-shaped pools for the current filter state. With a
+   version selected these come from that version's raw rows rolled up by the
+   same helpers the BigQuery loaders use, so both tables, the KPI tiles, the
+   charts and the export all see the familiar shapes and need no special
+   casing. Without one, the existing date-windowed pools are untouched. */
+function anPools() {
+  if (anState.version !== 'all' && vfLoaded) {
+    const raw = vfRawRows(anState.version, anState.dateFrom, anState.dateTo);
+    return {
+      stageRows:    withReach(aggStageRawRows(raw)),
+      creativeRows: aggCreativeRawRows(raw),
+    };
+  }
+  return {
+    stageRows:    withReach(effectiveStageRows(anState.dateFrom, anState.dateTo)),
+    creativeRows: effectiveCreativeRows(anState.dateFrom, anState.dateTo),
+  };
+}
+
 /* ── Top-level render ────────────────────────────────────── */
 function renderAnalytics() {
-  const isCreative  = anState.view === 'creative';
-  const stageRows   = withReach(effectiveStageRows(anState.dateFrom, anState.dateTo));
-  const creativeRows = effectiveCreativeRows(anState.dateFrom, anState.dateTo);
+  const isCreative = anState.view === 'creative';
+  /* A date window over a single version needs that version's day-level rows,
+     which are fetched on demand — this re-renders once they arrive. */
+  vfEnsureDaily(anState.version, !!(anState.dateFrom || anState.dateTo), renderAnalytics);
+  if (vfLoaded) vfPopulateSelect('anVersionFilter', anState.version, anState.qs, anState.mkt);
+
+  const { stageRows, creativeRows } = anPools();
   const pool  = isCreative ? creativeRows : stageRows;
   const rows  = anFilter(pool);
   renderAnKpis(anFilter(stageRows));     // KPIs always from stage data
@@ -4778,6 +4938,9 @@ function renderAnalytics() {
 function exportAnXlsx() {
   const q   = anState.qs.length === 3 ? 'All' : anState.qs.join('-');
   const mkt = anState.mkt !== 'all' ? anState.mkt : 'All';
+  const ver = anState.version !== 'all'
+    ? '_' + String(anState.version).replace(/[^\w.-]+/g, '-')
+    : '';
 
   function sheetFromData(cols, rows) {
     const data = [cols.map(c => c.label)].concat(
@@ -4786,11 +4949,12 @@ function exportAnXlsx() {
     return XLSX.utils.aoa_to_sheet(data);
   }
 
+  const { stageRows, creativeRows } = anPools();
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheetFromData(STAGE_COLS,    anFilter(withReach(effectiveStageRows(anState.dateFrom, anState.dateTo)))), 'By Stage');
-  XLSX.utils.book_append_sheet(wb, sheetFromData(CREATIVE_COLS, anFilter(effectiveCreativeRows(anState.dateFrom, anState.dateTo))),         'By Creative');
+  XLSX.utils.book_append_sheet(wb, sheetFromData(STAGE_COLS,    anFilter(stageRows)),    'By Stage');
+  XLSX.utils.book_append_sheet(wb, sheetFromData(CREATIVE_COLS, anFilter(creativeRows)), 'By Creative');
 
-  const filename = `CRKT_Analytics_${q}_${mkt}_${new Date().toISOString().slice(0,10)}.xlsx`;
+  const filename = `CRKT_Analytics_${q}_${mkt}${ver}_${new Date().toISOString().slice(0,10)}.xlsx`;
   XLSX.writeFile(wb, filename);
 }
 
@@ -4812,6 +4976,10 @@ document.getElementById('anQFilter').addEventListener('click', e => {
   if (!next) return; // can't deselect the last remaining quarter
   anState.qs = next;
   btn.classList.toggle('active', anState.qs.includes(btn.dataset.q));
+  renderAnalytics();
+});
+document.getElementById('anVersionFilter').addEventListener('change', e => {
+  anState.version = e.target.value;
   renderAnalytics();
 });
 document.getElementById('anDateFrom').addEventListener('change', e => {
@@ -5222,7 +5390,7 @@ function stageShort(s) { return s.replace(/^\d+ - /,''); }
 
 const CF_VARIANT      = 'public';
 const CF_SIGN_TTL_SEC = 7200;                 // 2h — outlives the 1h asset cache
-const CF_CACHE_KEY    = '_cfCricketAssets_v3';
+const CF_CACHE_KEY    = '_cfCricketAssets_v6';
 const CF_CACHE_TTL_MS = 60 * 60 * 1000;
 
 /* The delivery report's version column has been exported under several names.
@@ -5240,11 +5408,32 @@ const CF_VERSION_FIELDS = ['Version Name', 'Version', 'FT Version Name',
    it only affects which candidate is shown first. */
 const CF_SIZE_PREFERENCE = ['300x250', '728x90', '300x600', '160x600', '320x50'];
 
-let cfPreviewsByOffer = {};                   // normalized offer name -> [signedUrl]
+/* Keyed by Segment + Creative Offer Name, not offer name alone: the same offer
+   name is trafficked with different creative per segment (e.g. "Standard
+   Template" in Homepage Visitor is a different asset than "Standard Template"
+   in Cart Abandoner), so grouping by offer alone merged unrelated versions
+   into one bucket and showed whichever one happened to sort first — right
+   file name resolution, wrong card. See cfSegmentOfferKey/cfOfferWildcardKey. */
+let cfPreviewsByOffer = {};                   // composite key (see below) -> [{url, filename}]
 let _cfLoadP          = null;
 
 function cfNormOffer(s) {
   return String(s || '').trim().toLowerCase();
+}
+
+/* The composite grouping/lookup key. Prefixed so it can never collide with
+   the wildcard key below, even if a segment were literally named "*". */
+function cfSegmentOfferKey(stage, offer) {
+  return 's:' + cfNormOffer(stage) + '|' + cfNormOffer(offer);
+}
+
+/* Used only for versions resolved through the OFFER_MAP fallback (see
+   cfVersionOfferMapFromOfferMap), which has no Segment data to key on —
+   matches any card with this offer name regardless of segment, same
+   cross-segment risk this whole scheme exists to avoid. Only reached when
+   deliveries_view exposes none of CF_VERSION_FIELDS at all. */
+function cfOfferWildcardKey(offer) {
+  return 'w:' + cfNormOffer(offer);
 }
 
 /* CF file names carry decoration the Version Name never does: an upload folder
@@ -5259,17 +5448,28 @@ function cfNormFilename(filename) {
     .toLowerCase();
 }
 
-/* A CF file name matches a Version Name when it starts with it AND the next
-   character is a separator. Plain startsWith would let version …_2936 claim
-   …_29361's files; plain includes() — as the paid-media dashboard does — would
-   be far worse here, since these IDs share long prefixes and a
-   wrong-but-present image looks correct on the card.
+/* A CF file name matches a Version Name when the version appears anywhere in
+   it — not just as a prefix. The capturer/uploader routinely adds a batch or
+   campaign prefix before the version (e.g. "2026Q3_DTP_<version>_300x250"),
+   so requiring the version at position 0 missed those outright. Both edges
+   of the match still have to land on a separator (or string boundary): plain
+   indexOf() would let version …_2936 claim …_29361's files or match inside
+   an unrelated longer token, and plain includes() — as the paid-media
+   dashboard does — would be far worse here, since these IDs share long
+   prefixes and a wrong-but-present image looks correct on the card.
 
    Both arguments must already be through cfNormFilename / toLowerCase. */
 function cfFilenameMatchesVersion(filename, version) {
-  if (!filename.startsWith(version)) return false;
-  const next = filename.charAt(version.length);
-  return next === '' || next === '_' || next === '-' || next === '.';
+  const isSep = ch => ch === '' || ch === undefined || ch === '_' || ch === '-' || ch === '.';
+  let from = 0;
+  for (;;) {
+    const idx = filename.indexOf(version, from);
+    if (idx === -1) return false;
+    const before = idx === 0 ? '' : filename.charAt(idx - 1);
+    const after  = filename.charAt(idx + version.length);
+    if (isSep(before) && isSep(after)) return true;
+    from = idx + 1;
+  }
 }
 
 /* Lower rank wins. The size token may sit anywhere in the file name — inside the
@@ -5295,14 +5495,20 @@ async function cfApi(path, opts) {
 /* Version Name -> Creative Offer Name, straight from the same view the cards
    use. Returns { map, field } so the console line can name the column that
    actually worked; map is empty if none of them did. */
+/* Version Name -> { segment, offer }. Segment comes along for the ride so a
+   version trafficked to Cart Abandoner and a same-named-offer version
+   trafficked to Homepage Visitor resolve to two distinct creatives instead of
+   colliding into one (see cfSegmentOfferKey). Version Name is already
+   segment-specific in Flashtalking — each version belongs to exactly one
+   segment×offer pair — so this is a plain 1:1 lookup, not an aggregation. */
 async function cfFetchVersionOfferMap() {
   for (const field of CF_VERSION_FIELDS) {
     let rows;
     try {
       rows = await bqQuery(`
-        SELECT DISTINCT \`${field}\` as version, \`Creative Offer Name\` as offer
+        SELECT DISTINCT \`${field}\` as version, \`Segment\` as segment, \`Creative Offer Name\` as offer
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
-        WHERE \`${field}\` IS NOT NULL AND \`Creative Offer Name\` IS NOT NULL
+        WHERE \`${field}\` IS NOT NULL AND \`Creative Offer Name\` IS NOT NULL AND \`Segment\` IS NOT NULL
       `);
     } catch (e) {
       continue;                               // column doesn't exist — try the next name
@@ -5310,7 +5516,7 @@ async function cfFetchVersionOfferMap() {
     const map = {};
     (rows || []).forEach(r => {
       const v = String(r.version || '').trim();
-      if (v) map[v] = String(r.offer || '').trim();
+      if (v) map[v] = { segment: String(r.segment || '').trim(), offer: String(r.offer || '').trim() };
     });
     if (Object.keys(map).length) return { map, field };
   }
@@ -5320,7 +5526,14 @@ async function cfFetchVersionOfferMap() {
 /* Fallback bridge when the view exposes no version column: the trafficker
    export the user already uploads maps FT Version Name -> the card's offer
    label, which is the same hop by a different route (see mpResolveOffer).
-   Keyed the same way as the BigQuery map so the caller can't tell them apart. */
+   Keyed the same way as the BigQuery map so the caller can't tell them apart —
+   except segment is always null here. The export's only segment-adjacent
+   column is "Tactic | Segment", a combined free-text field that isn't a
+   reliable match against the clean Segment values deliveries_view uses, so
+   versions resolved this way fall back to the offer-only wildcard key
+   (cfOfferWildcardKey) and carry the same cross-segment risk this whole
+   change exists to fix. Only reached when deliveries_view exposes none of
+   CF_VERSION_FIELDS at all. */
 async function cfVersionOfferMapFromOfferMap() {
   const keys = Object.keys(OFFER_MAP || {});
   if (!keys.length) return {};
@@ -5343,9 +5556,294 @@ async function cfVersionOfferMapFromOfferMap() {
     const label = OFFER_MAP[version];
     const hit = offerNames.find(o =>
       mpNorm(o) === mpNorm(label) || mpNorm(offerLabel(o)) === mpNorm(label));
-    if (hit) map[String(version).trim()] = hit;
+    if (hit) map[String(version).trim()] = { segment: null, offer: hit };
   });
   return map;
+}
+
+/* ══ Version Name filter (Analytics + Trends) ═══════════════════
+   Both tabs aggregate at quarter × market × stage — the Analytics
+   creative view adds Creative Offer Name — and none of those rows carry
+   a Version Name. So a version filter can't be served by running the
+   selection through cfFetchVersionOfferMap() and reusing the offer-level
+   rows already loaded: one offer name spans many versions (see the
+   three-hop note above), so every version under an offer would report
+   that whole offer's numbers under a single version's label.
+
+   Instead the version column cfFetchVersionOfferMap() probes for becomes
+   a real GROUP BY key, giving one row per quarter × market × stage ×
+   offer × version. Raw pixel/reach counts are selected rather than
+   pre-divided rates, so aggStageRawRows/aggCreativeRawRows can roll a
+   version's rows up into exactly the shapes AN_STAGES and AN_CREATIVES
+   already have — which is what lets every downstream renderer, column
+   formatter and export stay untouched.
+
+   The day-level equivalent would be version × day × market, far too wide
+   to hold client-side, so it's fetched one version at a time on selection
+   and cached — see vfLoadVersionDaily. Everything here degrades the same
+   way the date-range pickers do: if the view exposes no version column,
+   the dropdowns stay hidden rather than offering a filter that can't
+   return rows. */
+
+const VF_DATE_FIELDS = ['Date Breakdown', 'Date', 'Report Date', 'Day'];
+
+let VF_FIELD            = null;   // version column that exists in the view
+let VF_OFFER_BY_VERSION = {};     // version name -> { segment, offer } (see cfFetchVersionOfferMap)
+let VF_STAGES           = [];     // q, mkt, stage, creative, version + raw counts
+let VF_DATE_FIELD       = null;   // date column that worked for the daily fetch
+let vfLoaded            = false;
+let vfAttempted         = false;
+const VF_DAILY          = {};     // version -> resolved day-level rows
+const VF_DAILY_P        = {};     // version -> in-flight promise (dedupes renders)
+
+/* bqQuery takes raw SQL with no parameter binding and version names come
+   out of the data, so anything interpolated into a WHERE clause gets
+   quoted properly rather than concatenated. */
+function bqLiteral(s) {
+  return "'" + String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+}
+
+/* Raw counts, not rates — see the note above on why. */
+const VF_METRIC_COLS = `
+          SUM(\`Total Ads Requested\`) as imps,
+          SUM(\`Clicks\`) as clicks,
+          SUM(\`CKT_bNON_HISPANIC_ORDER Count\`) as gmOrdCount,
+          SUM(\`CKT_bHISPANIC_ORDER Count\`) as hmOrdCount,
+          SUM(\`CKT_bNON_HISPANIC_GLOBAL_RT Count\`) as gmLpvCount,
+          SUM(\`CKT_bHISPANIC_GLOBAL_RT Count\`) as hmLpvCount,
+          SUM(\`Total Cost\`) as spend,
+          SUM(\`Cookie ID Reach: Total Ad Reach\`) as reach`;
+
+function vfNumRow(r, dims) {
+  return Object.assign({
+    imps:       Number(r.imps)       || 0,
+    clicks:     Number(r.clicks)     || 0,
+    gmOrdCount: Number(r.gmOrdCount) || 0,
+    hmOrdCount: Number(r.hmOrdCount) || 0,
+    gmLpvCount: Number(r.gmLpvCount) || 0,
+    hmLpvCount: Number(r.hmLpvCount) || 0,
+    spend:      Number(r.spend)      || 0,
+    reach:      Number(r.reach)      || 0,
+  }, dims);
+}
+
+async function vfLoadVersionData() {
+  if (vfAttempted || !ACCESS_TOKEN) return;
+  vfAttempted = true;
+
+  /* Same probe the previews use, so the winning column name is resolved
+     once and the version list comes from the same place as the map. */
+  const probe = await cfFetchVersionOfferMap();
+  if (!probe.field) {
+    console.warn('[Version filter] no version column in deliveries_view —',
+                 'tried:', CF_VERSION_FIELDS.join(', '));
+    vfSyncControls();
+    return;
+  }
+  VF_FIELD            = probe.field;
+  VF_OFFER_BY_VERSION = probe.map;
+
+  try {
+    const rows = await bqQuery(`
+      SELECT
+        \`Flight\` as q,
+        CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
+        \`Segment\` as stage,
+        \`Creative Offer Name\` as creative,
+        \`${VF_FIELD}\` as version,${VF_METRIC_COLS}
+      FROM \`crk-dco-dash.reporting_data.deliveries_view\`
+      WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
+        AND \`${VF_FIELD}\` IS NOT NULL
+      GROUP BY q, mkt, stage, creative, version
+    `);
+    VF_STAGES = (rows || [])
+      .map(r => vfNumRow(r, {
+        q: r.q, mkt: r.mkt, stage: r.stage,
+        creative: r.creative || '',
+        version: String(r.version || '').trim(),
+      }))
+      .filter(r => r.version);
+    vfLoaded = VF_STAGES.length > 0;
+    console.log('[Version filter] loaded', VF_STAGES.length, 'version-level rows via',
+                `"${VF_FIELD}" —`, vfVersionCount(), 'distinct versions');
+  } catch (e) {
+    console.warn('[Version filter] version-level load failed:', e.message);
+  }
+  vfSyncControls();
+}
+
+/* One version's day-level rows. Probes the date column the same way
+   tryLoadTrendDailyData does, then reuses whichever name worked. */
+async function vfFetchVersionDaily(version) {
+  const fields = VF_DATE_FIELD ? [VF_DATE_FIELD] : VF_DATE_FIELDS;
+  for (const dateField of fields) {
+    try {
+      const rows = await bqQuery(`
+        SELECT
+          CAST(\`${dateField}\` AS STRING) as day,
+          \`Flight\` as q,
+          CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
+          \`Segment\` as stage,
+          \`Creative Offer Name\` as creative,${VF_METRIC_COLS}
+        FROM \`crk-dco-dash.reporting_data.deliveries_view\`
+        WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
+          AND \`${VF_FIELD}\` = ${bqLiteral(version)}
+        GROUP BY day, q, mkt, stage, creative
+        ORDER BY day
+      `);
+      if (rows && rows.length) {
+        VF_DATE_FIELD = dateField;
+        return rows.map(r => vfNumRow(r, {
+          day: r.day, q: r.q, mkt: r.mkt, stage: r.stage, creative: r.creative || '',
+        }));
+      }
+    } catch (e) { /* wrong column name — try the next candidate */ }
+  }
+  return [];   // no date column, or this version genuinely has no rows
+}
+
+/* Memoized on the promise, not the result, so several renders firing
+   before the first fetch resolves don't each start their own query. */
+function vfLoadVersionDaily(version) {
+  if (!VF_DAILY_P[version]) {
+    VF_DAILY_P[version] = vfFetchVersionDaily(version)
+      .then(rows => { VF_DAILY[version] = rows; return rows; })
+      .catch(e => { console.warn('[Version filter] daily load failed:', e.message);
+                    VF_DAILY[version] = []; return []; });
+  }
+  return VF_DAILY_P[version];
+}
+
+/* Starts the day-level fetch when a caller actually needs day granularity
+   (a date window on Analytics, or Trends' Daily view) and re-renders once
+   it lands. Safe on every render: an empty result is cached too, so a
+   version with no day-level rows re-renders once and then stays quiet. */
+function vfEnsureDaily(version, needed, onReady) {
+  if (!needed || !version || version === 'all' || !VF_FIELD) return;
+  if (VF_DAILY[version]) return;
+  vfLoadVersionDaily(version).then(() => { if (typeof onReady === 'function') onReady(); });
+}
+
+/* Raw-count rows for one version, windowed by date when a range is set and
+   that version's day-level rows are in hand. Callers roll the result up
+   with aggStageRawRows / aggCreativeRawRows. */
+function vfRawRows(version, dateFrom, dateTo) {
+  if (dateFrom || dateTo) {
+    const daily = VF_DAILY[version];
+    if (daily && daily.length) {
+      let rows = daily;
+      if (dateFrom) rows = rows.filter(r => r.day >= dateFrom);
+      if (dateTo)   rows = rows.filter(r => r.day <= dateTo);
+      return rows;
+    }
+    /* Day-level rows aren't here yet (still fetching) or don't exist (no
+       date column in the view) — fall back to the full-quarter rows rather
+       than blanking the table. vfEnsureDaily() re-renders when they land. */
+  }
+  return VF_STAGES.filter(r => r.version === version);
+}
+
+/* Day-level rows for one version rolled up to day × quarter × market — the
+   shape trDailyData has, so the Trends daily path is a pool swap. */
+function vfDailyByDay(version) {
+  const daily = VF_DAILY[version];
+  if (!daily || !daily.length) return [];
+  const groups = new Map();
+  daily.forEach(r => {
+    const key = `${r.day}|${r.q}|${r.mkt}`;
+    if (!groups.has(key)) groups.set(key, vfNumRow({}, { day:r.day, q:r.q, mkt:r.mkt }));
+    const g = groups.get(key);
+    g.imps += r.imps; g.clicks += r.clicks;
+    g.gmOrdCount += r.gmOrdCount; g.hmOrdCount += r.hmOrdCount;
+    g.gmLpvCount += r.gmLpvCount; g.hmLpvCount += r.hmLpvCount;
+    g.spend += r.spend; g.reach += r.reach;
+  });
+  return [...groups.values()].map(g => ({
+    day: g.day, q: g.q, mkt: g.mkt,
+    imps: g.imps, clicks: g.clicks,
+    ctr:    g.imps   ? g.clicks/g.imps       : 0,
+    gmOrd:  g.gmOrdCount, hmOrd: g.hmOrdCount,
+    gmLpvr: g.imps   ? g.gmLpvCount/g.imps   : 0,
+    hmLpvr: g.imps   ? g.hmLpvCount/g.imps   : 0,
+    gmTdor: g.imps   ? g.gmOrdCount/g.imps   : 0,
+    gmCvr:  g.clicks ? g.gmOrdCount/g.clicks : 0,
+    spend:  g.spend,
+    cpc:    g.clicks ? g.spend/g.clicks      : 0,
+    freq:   g.reach  ? g.imps/g.reach        : 1,
+  }));
+}
+
+function vfVersionCount() {
+  return new Set(VF_STAGES.map(r => r.version)).size;
+}
+
+/* Versions present in the given quarter/market selection, grouped by their
+   offer name — a version name on its own is an opaque ID, so the offer is
+   what makes the list navigable. Scoping to the selection keeps the
+   dropdown from offering versions that would return an empty table. */
+function vfVersionGroups(qs, mkt) {
+  const offerOf = new Map();
+  VF_STAGES.forEach(r => {
+    if (qs && !qs.includes(r.q)) return;
+    if (mkt && mkt !== 'all' && r.mkt !== mkt) return;
+    if (!offerOf.has(r.version)) {
+      const mapped = VF_OFFER_BY_VERSION[r.version];
+      offerOf.set(r.version, (mapped && mapped.offer) || r.creative || '');
+    }
+  });
+  const groups = new Map();
+  [...offerOf.keys()].sort().forEach(v => {
+    const label = offerLabel(offerOf.get(v)) || 'Unmapped';
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(v);
+  });
+  return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+const VF_SEL_SIG = {};   // select id -> signature of what's rendered in it
+
+/* Rebuilds one version <select>. A selection that the current quarter/market
+   no longer covers is kept as its own option rather than silently reset —
+   the table's empty state is the honest answer, and dropping the selection
+   here would look like the filter cleared itself.
+
+   Guarded by a signature because the render functions that call this run on
+   every keystroke of the Analytics search box: re-emitting hundreds of
+   <option>s that often is wasteful, and replacing innerHTML under an open
+   dropdown closes it mid-interaction. */
+function vfPopulateSelect(id, current, qs, mkt) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const sig = [id, (qs || []).join('+'), mkt, current, VF_STAGES.length].join('|');
+  if (VF_SEL_SIG[id] === sig) return;
+  VF_SEL_SIG[id] = sig;
+  const groups = vfVersionGroups(qs, mkt);
+  const total  = groups.reduce((n, [, vs]) => n + vs.length, 0);
+  let html = `<option value="all">All Versions${total ? ` (${total})` : ''}</option>`;
+  groups.forEach(([offer, versions]) => {
+    html += `<optgroup label="${esc(offer)}">` +
+      versions.map(v =>
+        `<option value="${esc(v)}"${v === current ? ' selected' : ''}>${esc(v)}</option>`).join('') +
+      '</optgroup>';
+  });
+  if (current && current !== 'all' && !groups.some(([, vs]) => vs.includes(current))) {
+    html += `<optgroup label="Not in current quarter/market">` +
+      `<option value="${esc(current)}" selected>${esc(current)}</option></optgroup>`;
+  }
+  sel.innerHTML = html;
+}
+
+/* Reveals the version dropdowns once version-level rows are in hand — the
+   same graceful-hide pattern the date-range pickers use — and re-renders
+   the two tabs that have one. */
+function vfSyncControls() {
+  ['anVersionGroup', 'trVersionGroup'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = vfLoaded ? 'flex' : 'none';
+  });
+  if (!vfLoaded) return;
+  if (typeof renderAnalytics === 'function') renderAnalytics();
+  if (typeof renderTrends    === 'function') renderTrends();
 }
 
 async function cfFetchImages() {
@@ -5380,9 +5878,15 @@ function cfLoadPreviews() {
     const cached = JSON.parse(sessionStorage.getItem(CF_CACHE_KEY) || 'null');
     if (cached && Date.now() - cached._ts < CF_CACHE_TTL_MS && cached.byOffer) {
       cfPreviewsByOffer = cached.byOffer;
+      const n = Object.keys(cached.byOffer).length;
+      console.log(`[CF] Previews from cache — ${n} segment/offer combo${n === 1 ? '' : 's'} covered ` +
+                  `(sessionStorage, ${Math.round((Date.now() - cached._ts) / 60000)}m old). ` +
+                  `Run sessionStorage.removeItem('${CF_CACHE_KEY}') and reload to force a fresh fetch.`);
       return Promise.resolve(cfPreviewsByOffer);
     }
   } catch (_) {}
+
+  console.log('[CF] Loading previews —', CF_VERSION_FIELDS.length, 'version-column candidates to probe…');
 
   _cfLoadP = Promise.all([cfFetchVersionOfferMap(), cfFetchImages()])
     .then(async ([{ map, field }, images]) => {
@@ -5404,26 +5908,28 @@ function cfLoadPreviews() {
       /* Lowercased for matching; longest first so the most specific Version
          wins when one prefixes another. */
       const index = Object.keys(versionToOffer)
-        .map(v => ({ key: v.toLowerCase(), offer: versionToOffer[v] }))
+        .map(v => ({ key: v.toLowerCase(), segment: versionToOffer[v].segment, offer: versionToOffer[v].offer }))
         .sort((a, b) => b.key.length - a.key.length);
       const exact = {};
-      index.forEach(e => { if (!(e.key in exact)) exact[e.key] = e.offer; });
+      index.forEach(e => { if (!(e.key in exact)) exact[e.key] = e; });
 
-      const byOffer    = {};
+      const byOffer    = {};   // composite key (cfSegmentOfferKey/cfOfferWildcardKey) -> candidates
       const matchedIds = [];
       const idToMeta   = {};
       const unmatched  = [];
 
       images.forEach(img => {
         const fname = cfNormFilename(img.filename);
-        let offer = exact[fname];                        // exact hit, cheap path
-        if (!offer) {
-          const e = index.find(x => cfFilenameMatchesVersion(fname, x.key));
-          if (e) offer = e.offer;
+        let entry = exact[fname];                        // exact hit, cheap path
+        if (!entry) {
+          entry = index.find(x => cfFilenameMatchesVersion(fname, x.key));
         }
-        if (!offer) { unmatched.push(img.filename); return; }
+        if (!entry) { unmatched.push(img.filename); return; }
         matchedIds.push(img.id);
-        idToMeta[img.id] = { offer: cfNormOffer(offer), rank: cfSizeRank(img.filename) };
+        const groupKey = entry.segment
+          ? cfSegmentOfferKey(entry.segment, entry.offer)
+          : cfOfferWildcardKey(entry.offer);
+        idToMeta[img.id] = { groupKey, rank: cfSizeRank(img.filename), filename: img.filename };
       });
 
       const signed = await cfSignIds(matchedIds);
@@ -5431,10 +5937,14 @@ function cfLoadPreviews() {
       Object.keys(signed).forEach(id => {
         const meta = idToMeta[id];
         if (!meta) return;
-        (ranked[meta.offer] = ranked[meta.offer] || []).push({ url: signed[id], rank: meta.rank });
+        (ranked[meta.groupKey] = ranked[meta.groupKey] || [])
+          .push({ url: signed[id], rank: meta.rank, filename: meta.filename });
       });
       Object.keys(ranked).forEach(key => {
-        byOffer[key] = ranked[key].sort((a, b) => a.rank - b.rank).map(x => x.url);
+        // filename travels alongside the URL so the creative-detail dialog can
+        // show which Cloudflare asset is actually on screen, not just its src.
+        byOffer[key] = ranked[key].sort((a, b) => a.rank - b.rank)
+          .map(x => ({ url: x.url, filename: x.filename }));
       });
       cfPreviewsByOffer = byOffer;
       try {
@@ -5442,7 +5952,7 @@ function cfLoadPreviews() {
       } catch (_) {}
 
       console.log(`[CF] Previews ready — ${images.length} assets, ${matchedIds.length} matched, ` +
-                  `${Object.keys(byOffer).length} offers covered ` +
+                  `${Object.keys(byOffer).length} segment/offer combos covered ` +
                   `(versions from ${source}, ${index.length} known)`);
       if (unmatched.length) {
         console.warn(`[CF] ${unmatched.length} asset(s) matched no Version Name, e.g.`,
@@ -5460,9 +5970,81 @@ function cfLoadPreviews() {
   return _cfLoadP;
 }
 
-function crPreviewSrc(offerName) {
-  const arr = cfPreviewsByOffer[cfNormOffer(offerName)];
-  return arr && arr.length ? arr[0] : null;
+/* Segment-scoped lookup first (the normal, correctly-disambiguated case),
+   falling back to the wildcard bucket only for versions resolved through the
+   OFFER_MAP fallback (no segment data — see cfVersionOfferMapFromOfferMap). */
+function cfPreviewCandidates(offerName, stage) {
+  const scoped = cfPreviewsByOffer[cfSegmentOfferKey(stage, offerName)];
+  if (scoped && scoped.length) return scoped;
+  const wild = cfPreviewsByOffer[cfOfferWildcardKey(offerName)];
+  return (wild && wild.length) ? wild : null;
+}
+
+function crPreviewSrc(offerName, stage) {
+  const arr = cfPreviewCandidates(offerName, stage);
+  return arr ? arr[0].url : null;
+}
+
+/* The file name behind whichever preview is actually on screen — the top-ranked
+   Cloudflare candidate if there is one, else the manually uploaded file. Powers
+   the "Cloudflare File" row in the creative-detail dialog. */
+function crPreviewFilename(offerName, stage) {
+  const arr = cfPreviewCandidates(offerName, stage);
+  if (arr) return { filename: arr[0].filename, source: 'Cloudflare' };
+  // Manual uploads aren't segment-scoped (mpResolveOffer matches on offer name
+  // text alone), so this leg carries the same cross-segment risk the
+  // Cloudflare path above no longer has.
+  const mpKey = cfNormOffer(offerName);
+  if (mpFilenameByOffer[mpKey]) return { filename: mpFilenameByOffer[mpKey], source: 'Manual upload' };
+  return null;
+}
+
+/* Manual escape hatch for the sessionStorage-cache-hides-a-stale-result trap:
+   without this, un-sticking a bad match required opening devtools and running
+   sessionStorage.removeItem(...) by hand. Drops the cache, forces a live
+   re-fetch, and surfaces the outcome next to the button instead of only in
+   the console. */
+let __crRefreshStatusTimer = null;
+
+function cfForceRefreshPreviews() {
+  const btn    = document.getElementById('crRefreshPreviewsBtn');
+  const status = document.getElementById('crRefreshPreviewsStatus');
+  if (!btn) return;
+
+  try { sessionStorage.removeItem(CF_CACHE_KEY); } catch (_) {}
+  cfPreviewsByOffer = {};
+  _cfLoadP = null;
+
+  clearTimeout(__crRefreshStatusTimer);
+  btn.disabled = true;
+  btn.classList.add('cr-refresh-spinning');
+  if (status) {
+    status.textContent = 'Refreshing…';
+    status.classList.remove('cr-refresh-status-warn');
+  }
+
+  cfLoadPreviews()
+    .then(byOffer => {
+      if (typeof renderCreatives === 'function') renderCreatives();
+      const n = Object.keys(byOffer || {}).length;
+      if (status) {
+        status.textContent = n
+          ? `${n} segment/offer combo${n === 1 ? '' : 's'} covered`
+          : 'No previews matched — see console for unmatched file names';
+        status.classList.toggle('cr-refresh-status-warn', !n);
+      }
+    })
+    .catch(e => {
+      if (status) {
+        status.textContent = 'Refresh failed — ' + (e && e.message ? e.message : 'see console');
+        status.classList.add('cr-refresh-status-warn');
+      }
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.classList.remove('cr-refresh-spinning');
+      __crRefreshStatusTimer = setTimeout(() => { if (status) status.textContent = ''; }, 8000);
+    });
 }
 
 /* ── Manual preview fallback ─────────────────────────────── */
@@ -5473,11 +6055,15 @@ function crPreviewSrc(offerName) {
    (600x500), which blows the ~5MB localStorage quota outright. IndexedDB also
    stores the Blobs as-is, so nothing is re-encoded and quality is preserved.
 
-   Keyed by normalized Creative Offer Name, matching cfPreviewsByOffer. */
+   Keyed by normalized Creative Offer Name only — not segment-scoped like
+   cfPreviewsByOffer, since mpResolveOffer matches purely on offer-name text.
+   A manually uploaded preview is shared across every segment that offer
+   appears in until Cloudflare has a segment-scoped match for that card. */
 
 const MP_DB = 'crkt-previews', MP_STORE = 'manual';
 
-let mpByOffer = {};   // normalized offer name -> object URL
+let mpByOffer = {};           // normalized offer name -> object URL
+let mpFilenameByOffer = {};   // normalized offer name -> original uploaded file name
 
 function mpOpen() {
   return new Promise((res, rej) => {
@@ -5532,9 +6118,12 @@ async function mpLoad() {
     });
     Object.values(mpByOffer).forEach(URL.revokeObjectURL);
     mpByOffer = {};
+    mpFilenameByOffer = {};
     keys.forEach((k, i) => {
       const rec = vals[i];
-      if (rec && rec.blob) mpByOffer[k] = URL.createObjectURL(rec.blob);
+      if (!rec || !rec.blob) return;
+      mpByOffer[k] = URL.createObjectURL(rec.blob);
+      if (rec.filename) mpFilenameByOffer[k] = rec.filename;
     });
   } catch (e) {
     console.warn('[MP] Load failed:', e && e.message);
@@ -5644,7 +6233,7 @@ function crThumbContent(c) {
   }
   const fallback = crThumbFallback(c.mkt, c.q, c.stage, null);
   // Cloudflare takes precedence; the manual upload is the fallback beneath it
-  const src      = crPreviewSrc(c.creative) || mpByOffer[cfNormOffer(c.creative)] || null;
+  const src      = crPreviewSrc(c.creative, c.stage) || mpByOffer[cfNormOffer(c.creative)] || null;
   if (!src) return fallback;
 
   // Placeholder renders underneath; crWireCards drops the img if the file 404s
@@ -5738,12 +6327,18 @@ function crWireCards() {
     img.addEventListener('error', () => img.remove());
   });
 
-  // Edit buttons
+  // Edit buttons — stopPropagation so they don't also open the detail dialog
   document.querySelectorAll('.cr-edit-btn').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       crOpenModal(btn.dataset.id);
     });
+  });
+
+  // Card body -> detail dialog (excludes the dashed "Add Creative" tile, which
+  // has its own click handler below and no data to show)
+  document.querySelectorAll('.creative-card:not(.creative-card--add)').forEach(card => {
+    card.addEventListener('click', () => crOpenDetail(card.dataset.id));
   });
 
   // Add card
@@ -5786,6 +6381,63 @@ function crOpenModal(id) {
 
 function crCloseModal() {
   document.getElementById('crModalOverlay').classList.remove('open');
+}
+
+/* ── Detail dialog ───────────────────────────────────────── */
+/* Reuses crThumbContent() for the big preview so it's guaranteed to show
+   whatever the card itself is showing — same Cloudflare-then-manual-then-
+   placeholder precedence, no second source of truth to drift out of sync. */
+function crOpenDetail(id) {
+  const c = crGetAll().find(x => x.id === id);
+  if (!c) return;
+
+  document.getElementById('crDetailPreview').innerHTML = crThumbContent(c);
+  // crWireCards() does this same drop-on-404 for grid cards; the dialog's img
+  // is a separate DOM node crWireCards() never sees, so it needs its own copy.
+  const previewImg = document.querySelector('#crDetailPreview .cr-preview-img');
+  if (previewImg) {
+    if (previewImg.complete && previewImg.naturalWidth === 0) previewImg.remove();
+    else previewImg.addEventListener('error', () => previewImg.remove());
+  }
+  document.getElementById('crDetailTitle').textContent = c.creative || '(untitled creative)';
+  document.getElementById('crDetailBadges').innerHTML = `
+    <span class="data-badge ${esc(c.mkt.toLowerCase())}">${esc(c.mkt)}</span>
+    <span class="data-badge ${esc(c.q.toLowerCase())}">${esc(c.q)}</span>
+    <span class="creative-stage-label">${esc(c.stage)}</span>
+  `;
+
+  const fileMeta = crPreviewFilename(c.creative, c.stage);
+  document.getElementById('crDetailFileRow').innerHTML = fileMeta
+    ? `<span class="cr-detail-file-tag">${esc(fileMeta.source)} file</span> ${esc(fileMeta.filename)}`
+    : `<span class="cr-detail-file-tag">Preview</span> No matched file — showing placeholder`;
+
+  const imps   = c.imps   ? fmtM(c.imps)     : '—';
+  const clicks = c.clicks ? fmtN(c.clicks)   : '—';
+  const ctr    = c.ctr    ? fmtPct(c.ctr)    : '—';
+  const gmOrd  = c.gmOrd  ? fmtN(c.gmOrd)    : '—';
+  const gmLpvr = c.gmLpvr ? fmtPct(c.gmLpvr) : '—';
+  const gmCvr  = c.gmCvr  ? fmtPct(c.gmCvr)  : '—';
+  const tdorV  = oneSheetDeriveTdor(c);
+  const tdor   = tdorV ? (tdorV * 100).toFixed(4) + '%' : '—';
+  const cpoV   = oneSheetDeriveCpo(c.spend, c.gmOrd);
+  const cpo    = cpoV != null ? '$' + cpoV.toFixed(2) : '—';
+  const spend  = c.spend ? '$' + fmtN(Math.round(c.spend)) : '—';
+  const cpc    = c.cpc   ? '$' + c.cpc.toFixed(2) : '—';
+
+  document.getElementById('crDetailStats').innerHTML = [
+    ['Impressions', imps], ['Clicks', clicks], ['CTR', ctr], ['GM Orders', gmOrd],
+    ['GM LPVR', gmLpvr], ['GM CVR', gmCvr], ['TDOR', tdor], ['CPO', cpo],
+    ['Spend', spend], ['CPC', cpc],
+  ].map(([label, val]) =>
+    `<div class="cs-item"><div class="cs-label">${esc(label)}</div><div class="cs-val">${esc(val)}</div></div>`
+  ).join('');
+
+  document.getElementById('crDetailEditBtn').dataset.id = id;
+  document.getElementById('crDetailOverlay').classList.add('open');
+}
+
+function crCloseDetail() {
+  document.getElementById('crDetailOverlay').classList.remove('open');
 }
 
 function crSaveModal() {
@@ -5880,7 +6532,7 @@ async function mpImportFiles(fileList) {
     `<strong>${images.length}</strong> image${images.length !== 1 ? 's' : ''} read · ` +
     `<strong>${matched.length}</strong> matched to a creative · ` +
     `<strong>${mpPending.length}</strong> unmatched.` +
-    (cfCount ? ` Cloudflare currently covers ${cfCount} creative${cfCount !== 1 ? 's' : ''} and takes precedence over these.` : '');
+    (cfCount ? ` Cloudflare currently covers ${cfCount} segment/offer combo${cfCount !== 1 ? 's' : ''} and takes precedence over these.` : '');
 
   mpRenderUnmatched(mpPending);
 }
@@ -5916,6 +6568,8 @@ function mpRenderUnmatched(list) {
   });
 }
 
+document.getElementById('crRefreshPreviewsBtn').addEventListener('click', cfForceRefreshPreviews);
+
 document.getElementById('crUploadBtn').addEventListener('click', () => {
   document.getElementById('crUploadInput').click();
 });
@@ -5943,6 +6597,20 @@ document.getElementById('crModalCancel').addEventListener('click', crCloseModal)
 document.getElementById('crModalSave').addEventListener('click', crSaveModal);
 document.getElementById('crModalOverlay').addEventListener('click', e => {
   if (e.target === document.getElementById('crModalOverlay')) crCloseModal();
+});
+
+document.getElementById('crDetailClose').addEventListener('click', crCloseDetail);
+document.getElementById('crDetailOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('crDetailOverlay')) crCloseDetail();
+});
+document.getElementById('crDetailEditBtn').addEventListener('click', () => {
+  const id = document.getElementById('crDetailEditBtn').dataset.id;
+  crCloseDetail();
+  crOpenModal(id);
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (document.getElementById('crDetailOverlay').classList.contains('open')) crCloseDetail();
 });
 
 document.getElementById('crMarketFilter').addEventListener('click', e => {
@@ -7576,32 +8244,51 @@ function trLiveQuarterInfo(q) {
    isn't loaded (caller should fall back to the full-quarter comparison). */
 function trGetValClipped(q, mkt, metric, daysLive) {
   const bounds = TR_QUARTER_BOUNDS[q];
-  if (!bounds || !trDailyData.length) return null;
+  const daily  = trDailyRows();
+  if (!bounds || !daily.length) return null;
   const cutoff = trDateAdd(bounds.start, daysLive - 1);
-  let rows = trDailyData.filter(r => r.q === q && r.day >= bounds.start && r.day <= cutoff);
+  let rows = daily.filter(r => r.q === q && r.day >= bounds.start && r.day <= cutoff);
   if (mkt !== 'all') rows = rows.filter(r => r.mkt === mkt);
   return pvAggregate(rows, metric);
 }
 
-let trState   = { metric:'imps', mkt:'all', gran:'quarterly', quarters:['Q1','Q2','Q3'], dateFrom:null, dateTo:null };
+let trState   = { metric:'imps', mkt:'all', gran:'quarterly', quarters:['Q1','Q2','Q3'], version:'all', dateFrom:null, dateTo:null };
 let trDailyData = [];
 let trDailyLoaded = false;
 let trDailyAttempted = false;
 let trTooltipPoints  = []; // set fresh by trBuildSvg on every render
 
+/* Quarter-level pool, AN_STAGES-shaped. With a version selected it's that
+   version's rows rolled up by the same helper the BigQuery loader uses, so
+   trGetVal/trGetValClipped and the summary table stay shape-agnostic. */
+function trStageRows() {
+  return (trState.version !== 'all' && vfLoaded)
+    ? aggStageRawRows(VF_STAGES.filter(r => r.version === trState.version))
+    : AN_STAGES;
+}
+
+/* Day-level pool, trDailyData-shaped. Returns an empty series while the
+   selected version's day-level rows are still in flight — vfEnsureDaily()
+   re-renders when they land. */
+function trDailyRows() {
+  if (trState.version === 'all' || !vfLoaded) return trDailyData;
+  return vfDailyByDay(trState.version);
+}
+
 function trGetVal(q, mkt, metric) {
-  let rows = AN_STAGES;
+  let rows = trStageRows();
   if (q   !== 'all') rows = rows.filter(r => r.q   === q);
   if (mkt !== 'all') rows = rows.filter(r => r.mkt === mkt);
   return pvAggregate(rows, metric);
 }
 
 function trBuildSeries(metric, useDailyData) {
-  if (useDailyData && trDailyData.length) {
+  const daily = trDailyRows();
+  if (useDailyData && daily.length) {
     const mkts  = trState.mkt === 'all' ? ['GM','USH'] : [trState.mkt];
     const colors = { GM:'var(--accent)', USH:'var(--blue)' };
     return mkts.map(mkt => {
-      let rows = trDailyData.filter(r => r.mkt === mkt && trState.quarters.includes(r.q));
+      let rows = daily.filter(r => r.mkt === mkt && trState.quarters.includes(r.q));
       if (trState.dateFrom) rows = rows.filter(r => r.day >= trState.dateFrom);
       if (trState.dateTo)   rows = rows.filter(r => r.day <= trState.dateTo);
       const labels = [...new Set(rows.map(r => r.day))].sort();
@@ -7808,7 +8495,13 @@ function renderMetricPills() {
 
 function renderTrendChart() {
   const m       = TR_METRICS.find(x => x.key === trState.metric);
-  const useDaily = trState.gran === 'daily' && trDailyData.length > 0;
+  /* Every Trends filter handler calls straight into here, so the version
+     dropdown is rescoped and the on-demand day-level fetch kicked off here
+     rather than in renderTrends() — otherwise changing quarter or market
+     would leave the version list showing versions those filters exclude. */
+  vfEnsureDaily(trState.version, true, renderTrendChart);
+  if (vfLoaded) vfPopulateSelect('trVersionFilter', trState.version, trState.quarters, trState.mkt);
+  const useDaily = trState.gran === 'daily' && trDailyRows().length > 0;
   const series  = trBuildSeries(trState.metric, useDaily);
 
   document.getElementById('trChartArea').innerHTML = trBuildSvg(series, m.fmt, m.direction);
@@ -7964,6 +8657,11 @@ document.getElementById('trGranToggle').addEventListener('click', e => {
   document.querySelectorAll('#trGranToggle button').forEach(b => b.classList.toggle('active', b===btn));
   const rangeGroup = document.getElementById('trDateRangeGroup');
   if (rangeGroup) rangeGroup.style.display = trState.gran === 'daily' ? '' : 'none';
+  renderTrendChart();
+});
+
+document.getElementById('trVersionFilter').addEventListener('change', e => {
+  trState.version = e.target.value;
   renderTrendChart();
 });
 
