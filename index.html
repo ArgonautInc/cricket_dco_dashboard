@@ -74,6 +74,108 @@ body {
   line-height: 1.5;
 }
 
+/* ─── Loading overlay ───────────────────────────────────────
+   Blocking cue for the slow async paths only — sign-in/BigQuery, the
+   Cloud Storage report fallback, and CSV uploads. Filter changes are
+   synchronous and use the non-blocking topbar bar/chip instead; a veil
+   that flashes for 5ms would read as a glitch.
+   z-index clears the creative lightbox (9000) but deliberately stays
+   under the JS error banner (99999). ────────────────────────────── */
+#loading-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  /* Theme-aware, so the veil works in both light and dark */
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: loFadeIn .15s ease;
+}
+@keyframes loFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.lo-card {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 24px 48px -8px rgba(0,0,0,.22), 0 0 0 1px rgba(0,0,0,.04);
+  padding: 40px 44px;
+  min-width: 280px;   /* stops the box resizing as messages change length */
+  text-align: center;
+}
+.lo-card:focus { outline: none; }
+
+.lo-brand { display: flex; align-items: center; gap: 8px; }
+.lo-wordmark {
+  font-size: 11px; font-weight: 800; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--muted);
+}
+/* Namespaced — the app already scopes a .dot for the auth/sidebar logos */
+.lo-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  flex-shrink: 0;
+}
+
+.lo-spinner {
+  width: 180px; height: 3px;
+  background: var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.lo-track { width: 100%; height: 100%; position: relative; overflow: hidden; }
+.lo-fill {
+  position: absolute; top: 0; left: 0;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  animation: loadingPulse 1.1s ease-in-out infinite;
+}
+@keyframes loadingPulse { 0%,100% { width: 20%; } 50% { width: 80%; } }
+
+/* Determinate mode — cancels the indeterminate pulse */
+.lo-fill.lo-has-progress {
+  animation: none;
+  width: 0%;
+  transition: width .28s cubic-bezier(.4, 0, .2, 1);
+}
+
+.lo-progress-row {
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px; margin-top: -4px;
+}
+.lo-pct {
+  font-size: 11px; font-weight: 700;
+  color: var(--accent); letter-spacing: .04em;
+  min-width: 32px; text-align: center;   /* stops 9%->10% jitter */
+}
+
+.lo-msg {
+  font-size: 13px; font-weight: 600;
+  color: var(--fg2); letter-spacing: .01em;
+}
+
+.lo-error-row { display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+.lo-retry-btn {
+  font-size: 12px; font-weight: 600;
+  padding: 6px 18px;
+  border-radius: 999px;
+  border: 1.5px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  letter-spacing: .02em;
+  transition: background .12s, color .12s;
+}
+.lo-retry-btn:hover { background: var(--accent); color: #fff; }
+
+@media (prefers-reduced-motion: reduce) {
+  #loading-overlay { animation: none; }
+  .lo-fill { animation: none; width: 40%; }
+  .lo-fill.lo-has-progress { transition: none; }
+}
+
 /* ─── Auth overlay ──────────────────────────────────────── */
 #authOverlay {
   position: fixed;
@@ -952,22 +1054,6 @@ svg { display: block; }
   color: var(--fg); font-family: var(--font-d);
 }
 .chart-sub { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
-.chart-legend {
-  display: flex; gap: 14px;
-  font-size: 11.5px; color: var(--muted);
-  align-items: center;
-}
-.legend-dot {
-  display: inline-block;
-  width: 8px; height: 8px; border-radius: 50%;
-  margin-right: 4px;
-}
-.chart-axis {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10.5px; color: var(--muted);
-  margin-top: 6px;
-}
 
 /* donut */
 .donut-wrap  { display: flex; justify-content: center; margin: 8px 0 14px; }
@@ -1601,15 +1687,15 @@ body.compact .chart-card      { padding: 14px 16px; }
         <div class="chart-card">
           <div class="chart-card-header">
             <div>
-              <div class="chart-title">Daily Impressions</div>
+              <div class="chart-title">Impressions Over Time</div>
               <div class="chart-sub" id="ovTrendSub">Jan – Apr 2026</div>
             </div>
-            <div class="chart-legend">
-              <span><span class="legend-dot" style="background:#5BC500"></span>Impressions</span>
+            <div class="seg-tabs" id="ovTrendGran">
+              <button class="active" data-gran="weekly">Weekly</button>
+              <button data-gran="daily">Daily</button>
             </div>
           </div>
           <div id="ovTrendChart"></div>
-          <div class="chart-axis" id="ovTrendAxis"></div>
         </div>
 
         <div class="chart-card">
@@ -1620,6 +1706,8 @@ body.compact .chart-card      { padding: 14px 16px; }
           <div class="donut-legend" id="ovDonutLegend"></div>
         </div>
       </div>
+
+      <div id="ovTooltip" class="tr-tooltip"></div>
 
       <!-- Funnel stage table -->
       <div class="funnel-card">
@@ -2684,6 +2772,9 @@ async function loadBigQueryData() {
           CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
           \`Segment\` as stage,
           \`Creative Offer Name\` as creative,
+          ARRAY_TO_STRING(ARRAY_AGG(DISTINCT CAST(\`Version ID\` AS STRING) IGNORE NULLS LIMIT 500), ' ') as versionIds,
+          ARRAY_TO_STRING(ARRAY_AGG(DISTINCT CAST(\`Creative ID\` AS STRING) IGNORE NULLS LIMIT 100), ' ') as creativeIds,
+          ARRAY_TO_STRING(ARRAY_AGG(DISTINCT \`Version\` IGNORE NULLS LIMIT 500), ' ') as versions,
           SUM(\`Total Ads Requested\`) as imps,
           SUM(\`Clicks\`) as clicks,
           SAFE_DIVIDE(SUM(\`Clicks\`), SUM(\`Total Ads Requested\`)) as ctr,
@@ -2756,7 +2847,10 @@ async function loadBigQueryData() {
         q:        r.q,
         mkt:      r.mkt,
         stage:    r.stage,
-        creative: r.creative || '',
+        creative:   r.creative   || '',
+        versionIds:  r.versionIds  || '',
+        creativeIds: r.creativeIds || '',
+        versions:    r.versions    || '',
         imps:     Number(r.imps)   || 0,
         clicks:   Number(r.clicks) || 0,
         ctr:      Number(r.ctr)    || 0,
@@ -3066,11 +3160,21 @@ async function loadCloudDeliveryFallback() {
       PIVOT_DATA.quarters[q] = { GM: buildMkt('GM'), USH: buildMkt('USH') };
     });
 
-    // Real per-day totals (from activity_date) for the daily trend chart —
-    // only for quarters that are actual gaps, same rule as above.
-    if (gapFlights.length) {
+    /* Real per-day totals (from activity_date) for the daily trend chart.
+       Deliberately NOT limited to gapFlights like the quarterly aggregates
+       above: the BigQuery view exposes no per-day granularity at all, so
+       there is nothing here to overwrite or protect. Gating this on gaps is
+       what left Q3 with quarterly totals but an empty daily chart once
+       BigQuery started returning Q3 rows. Manual uploads still win, since
+       they're the more curated source. */
+    const manualDailyQs = new Set(
+      DAILY_DATA.filter(r => r._source === 'manual-upload').map(r => r.q));
+    const dailyQs = [...new Set(Object.values(dailyAgg).map(v => v.q))]
+      .filter(q => !manualDailyQs.has(q));
+
+    if (dailyQs.length) {
       const newDailyRows = Object.keys(dailyAgg)
-        .filter(dateStr => gapFlights.includes(dailyAgg[dateStr].q))
+        .filter(dateStr => dailyQs.includes(dailyAgg[dateStr].q))
         .map(dateStr => {
           const d = new Date(dateStr + 'T00:00:00');
           return {
@@ -3081,7 +3185,7 @@ async function loadCloudDeliveryFallback() {
           };
         })
         .sort((a, b) => a.d - b.d);
-      DAILY_DATA = DAILY_DATA.filter(r => !gapFlights.includes(r.q)).concat(newDailyRows);
+      DAILY_DATA = DAILY_DATA.filter(r => !dailyQs.includes(r.q)).concat(newDailyRows);
     }
 
     if (typeof renderOverview === 'function') renderOverview();
@@ -3356,6 +3460,65 @@ function computeInitials(name, email) {
   return (email || '').trim().charAt(0).toUpperCase() || '?';
 }
 
+/* ── Sign-in data chain ──────────────────────────────────────
+   Wraps the three slow post-auth steps behind the loading overlay, so
+   there's one place to narrate progress and one place to fail. Retry
+   re-enters this whole function rather than resuming partway — a
+   half-populated PIVOT_DATA is worse than starting over.
+
+   Note loadBigQueryData() and loadCloudDeliveryFallback() both swallow
+   their own errors and fall back to static data by design, so in practice
+   the error state is reached via the timeout rather than a rejection.
+
+   onDataReady fires between the BigQuery load and the report fallbacks —
+   the session-restore path uses it to reveal the app only once real data
+   is in, which is the ordering that path already had. ───────────────── */
+const BOOT_TIMEOUT_MS = 40000;
+let __bootGen = 0;
+
+async function bootDataLoad(onDataReady) {
+  /* Guards against a retry (or a second restore) interleaving with an
+     in-flight chain and calling hideLoading() out from under it. */
+  const myGen = ++__bootGen;
+  const stale = () => myGen !== __bootGen;
+
+  showLoading('Loading delivery data…', 10);
+
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error('Connection timed out — check your network and try again')),
+      BOOT_TIMEOUT_MS);
+  });
+
+  const work = (async () => {
+    await loadBigQueryData();
+    if (stale()) return;
+    if (onDataReady) onDataReady();
+
+    setLoadingProgress(65, 'Applying uploaded reports…');
+    applyManualPerformanceData();
+    if (stale()) return;
+
+    setLoadingProgress(80, 'Checking Cloud Storage for newer reports…');
+    await loadCloudDeliveryFallback();
+  })();
+
+  try {
+    await Promise.race([work, timeout]);
+    if (stale()) return;
+    hideLoading();
+  } catch (e) {
+    if (stale()) return;
+    console.error('[boot] data load failed:', e);
+    showLoadingError(
+      'Could not load data — ' + (e.message || 'connection failed'),
+      () => bootDataLoad(onDataReady));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /* ── Google OAuth token handler ─────────────────────────── */
 async function handleGoogleToken(resp) {
   if (resp.error) {
@@ -3387,10 +3550,7 @@ async function handleGoogleToken(resp) {
 
   CURRENT_USER = user;
   onAuthSuccess(user);
-  loadBigQueryData().then(() => {
-    applyManualPerformanceData();
-    return loadCloudDeliveryFallback();
-  });
+  bootDataLoad();
   autoLoadCloudOfferMap();
 }
 
@@ -3420,11 +3580,13 @@ function initGoogleAuth() {
         ACCESS_TOKEN = sess.token;
         const user = { email: sess.email, name: sess.name, initials: sess.initials, role: sess.role };
         CURRENT_USER = user;
-        loadBigQueryData().then(() => {
-          onAuthSuccess(user);
-          applyManualPerformanceData();
-          loadCloudDeliveryFallback();
-        });
+        /* Restore path reveals the app only once BigQuery data is in, so the
+           shell never flashes static placeholder numbers. Deferred to
+           DOMContentLoaded because bootstrap() runs during parse, while the
+           loading-overlay module (showLoading et al.) is further down the
+           document — the network work was already async, so nothing is lost. */
+        document.addEventListener('DOMContentLoaded',
+          () => bootDataLoad(() => onAuthSuccess(user)));
         autoLoadCloudOfferMap();
         return;
       }
@@ -3623,27 +3785,6 @@ function deltaPill(val) {
 }
 
 /* ── SVG chart helpers ──────────────────────────────────── */
-function svgLine(data, { w=600,h=200,color='#5BC500',stroke=2.2 }={}) {
-  if (!data.length) return '';
-  const pad={l:4,r:4,t:10,b:8};
-  const max=Math.max(...data)*1.05, min=Math.min(...data)*0.96;
-  const rng=max-min||1;
-  const xs=data.map((_,i)=>pad.l+(i/(data.length-1||1))*(w-pad.l-pad.r));
-  const ys=data.map(v=>pad.t+(1-(v-min)/rng)*(h-pad.t-pad.b));
-  const path=xs.map((x,i)=>`${i?'L':'M'}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
-  const area=`${path} L${xs.at(-1).toFixed(1)},${h-pad.b} L${xs[0].toFixed(1)},${h-pad.b} Z`;
-  const gid=`lg${color.replace('#','')}`;
-  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px;display:block" preserveAspectRatio="none">
-    <defs><linearGradient id="${gid}" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0%" stop-color="${color}" stop-opacity=".28"/>
-      <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
-    </linearGradient></defs>
-    <path d="${area}" fill="url(#${gid})"/>
-    <path d="${path}" stroke="${color}" stroke-width="${stroke}" fill="none"
-      stroke-linejoin="round" stroke-linecap="round"/>
-  </svg>`;
-}
-
 function svgDonut(segs, {size=140,thick=22,label='',val=''}={}) {
   const total=segs.reduce((s,x)=>s+x.v,0)||1;
   const r=size/2-thick/2, circ=2*Math.PI*r;
@@ -3955,26 +4096,127 @@ function renderOvKpis(t, qSel, prevQ) {
   }).join('');
 }
 
-/* ── Trend chart render ─────────────────────────────────── */
+/* ── Trend chart render ─────────────────────────────────────
+   A full quarter is 90+ daily points in a ~600px card, which reads as a
+   noisy band rather than a trend — and day-to-day swing here is mostly
+   weekday/weekend pacing, not signal. So the chart buckets by week by
+   default and keeps Daily behind a toggle. Exact figures come from the
+   hover tooltip instead of the line itself. ─────────────────────────── */
+let ovTrendGran   = 'weekly';
+let ovTrendPoints = [];   // refreshed by renderOvTrend on every render
+
+const ovMonthDay = d => d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+
+/* Monday-anchored week start, in local time to match isoLocal/DAILY_DATA. */
+function ovWeekStart(d) {
+  const s = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  s.setDate(s.getDate() - ((s.getDay() + 6) % 7));
+  return s;
+}
+
+/* Rolls the filtered day rows into whatever the current granularity is.
+   Each point carries its own day count so a clipped first/last week can be
+   labelled as partial rather than read as a real drop-off. */
+function ovBucketDays(days) {
+  if (ovTrendGran === 'daily') {
+    return days.map(r => ({ label: ovMonthDay(r.d), range: ovMonthDay(r.d), imps: r.imps, days: 1 }));
+  }
+  const weeks = new Map();
+  days.forEach(r => {
+    const start = ovWeekStart(r.d);
+    const key   = isoLocal(start);
+    if (!weeks.has(key)) weeks.set(key, { start, end: r.d, imps: 0, days: 0 });
+    const w = weeks.get(key);
+    w.imps += r.imps;
+    w.days += 1;
+    if (r.d > w.end) w.end = r.d;
+  });
+  return [...weeks.values()]
+    .sort((a, b) => a.start - b.start)
+    .map(w => ({
+      label: ovMonthDay(w.start),
+      range: `${ovMonthDay(w.start)} – ${ovMonthDay(w.end)}`,
+      imps:  w.imps,
+      days:  w.days,
+    }));
+}
+
+function ovBuildTrendSvg(pts) {
+  const VW = 660, VH = 205;
+  const PL = 52, PR = 14, PT = 14, PB = 28;
+  const cW = VW - PL - PR, cH = VH - PT - PB;
+
+  if (!pts.length) {
+    return `<svg viewBox="0 0 ${VW} ${VH}" width="100%" style="display:block">
+      <text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="var(--muted)" font-size="13">
+        No day-level data for this selection</text></svg>`;
+  }
+
+  const N    = pts.length;
+  const maxV = Math.max(...pts.map(p => p.imps)) || 1;
+  const xOf  = i => PL + (N === 1 ? cW / 2 : (i / (N - 1)) * cW);
+  const yOf  = v => PT + cH - (v / maxV) * cH;
+
+  let svg = `<svg viewBox="0 0 ${VW} ${VH}" width="100%" style="display:block;overflow:visible">`;
+
+  /* Gridlines + y labels — the old sparkline had no scale at all, so a tall
+     peak told you nothing about how many impressions it represented. */
+  [0, .25, .5, .75, 1].forEach(f => {
+    const y = yOf(maxV * f).toFixed(1);
+    svg += `<line x1="${PL}" y1="${y}" x2="${VW - PR}" y2="${y}" stroke="var(--border)" stroke-width="1"${f ? ' stroke-dasharray="4 3"' : ''}/>`;
+    svg += `<text x="${PL - 8}" y="${(+y + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" fill="var(--muted)">${FMT.abbr(maxV * f)}</text>`;
+  });
+
+  const step = Math.max(1, Math.ceil(N / 10));
+  pts.forEach((p, i) => {
+    if (i % step !== 0 && i !== N - 1) return;
+    svg += `<text x="${xOf(i).toFixed(1)}" y="${VH - 9}" text-anchor="middle" font-size="9.5" font-weight="600" fill="var(--muted)">${p.label}</text>`;
+  });
+
+  const coords = pts.map((p, i) => `${xOf(i).toFixed(1)},${yOf(p.imps).toFixed(1)}`);
+  svg += `<path d="M${xOf(0).toFixed(1)},${PT + cH} L${coords.join(' L')} L${xOf(N - 1).toFixed(1)},${PT + cH} Z" fill="#5BC500" opacity=".10"/>`;
+  svg += `<polyline points="${coords.join(' ')}" fill="none" stroke="#5BC500" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`;
+
+  // Dots stay off for daily-length series, where they'd merge into the line
+  if (N <= 32) {
+    pts.forEach((p, i) => {
+      svg += `<circle cx="${xOf(i).toFixed(1)}" cy="${yOf(p.imps).toFixed(1)}" r="3.2" fill="#5BC500" stroke="var(--card)" stroke-width="2"/>`;
+    });
+  }
+
+  /* One full-height hit column per point so the whole plot is hoverable,
+     not just the exact vertices. Painted last so they sit above the line
+     and actually receive the pointer events. Reuses .tr-hit purely for its
+     crosshair cursor — the Trends handler is bound to #trChartArea only. */
+  const colW = N > 1 ? cW / (N - 1) : cW;
+  pts.forEach((p, i) => {
+    svg += `<rect class="tr-hit" data-idx="${i}" x="${(xOf(i) - colW / 2).toFixed(1)}" y="${PT}" width="${colW.toFixed(1)}" height="${cH}" fill="transparent"/>`;
+  });
+
+  return svg + '</svg>';
+}
+
 function renderOvTrend(qSel, dateFrom, dateTo) {
   const qKeys = normQs(qSel);
   let days = DAILY_DATA.filter(d => qKeys.includes(d.q));
   if (dateFrom) days = days.filter(d => isoLocal(d.d) >= dateFrom);
   if (dateTo)   days = days.filter(d => isoLocal(d.d) <= dateTo);
-  const vals = days.map(d => d.imps);
-  document.getElementById('ovTrendChart').innerHTML = svgLine(vals, {h:190,color:'#5BC500'});
+  days.sort((a, b) => a.d - b.d);
 
-  // Axis labels: first, middle, last
-  const picks = [days[0], days[Math.floor(days.length/2)], days.at(-1)].filter(Boolean);
-  document.getElementById('ovTrendAxis').innerHTML =
-    picks.map(d => `<span>${d.label}</span>`).join('');
+  ovTrendPoints = ovBucketDays(days);
+  document.getElementById('ovTrendChart').innerHTML = ovBuildTrendSvg(ovTrendPoints);
+  document.querySelectorAll('#ovTrendGran button').forEach(b =>
+    b.classList.toggle('active', b.dataset.gran === ovTrendGran));
 
   // Single-quarter selections get their calendar range; multi/all get a generic label.
   const singleRange = { Q1:'Jan – Mar 2026', Q2:'Apr – Jun 2026', Q3:'Jul 2026 – Present' };
-  const label = qKeys.length === 3 ? 'Jan – Present 2026 (Q1 + Q2 + Q3)'
+  const range = qKeys.length === 3 ? 'Jan – Present 2026 (Q1 + Q2 + Q3)'
               : qKeys.length === 1 ? singleRange[qKeys[0]]
               : qsLabel(qKeys) + ' 2026';
-  document.getElementById('ovTrendSub').textContent = label;
+  const unit  = ovTrendGran === 'weekly' ? 'week' : 'day';
+  const count = ovTrendPoints.length;
+  document.getElementById('ovTrendSub').textContent =
+    count ? `${range} · ${count} ${unit}${count === 1 ? '' : 's'}` : range;
 }
 
 /* ── Market split donut ─────────────────────────────────── */
@@ -4091,6 +4333,48 @@ function wireOverviewFilters() {
     document.getElementById('ovDateTo').value   = '';
     renderOverview();
   });
+
+  document.getElementById('ovTrendGran').addEventListener('click', e => {
+    const btn = e.target.closest('button[data-gran]');
+    if (!btn) return;
+    ovTrendGran = btn.dataset.gran;
+    renderOverview();
+  });
+
+  /* Hover readout. Delegated on the container rather than the hit-rects,
+     which are replaced on every render; ovTrendPoints is refreshed in step. */
+  const chartEl   = document.getElementById('ovTrendChart');
+  const tooltipEl = document.getElementById('ovTooltip');
+
+  chartEl.addEventListener('mousemove', e => {
+    const hit = e.target.closest('.tr-hit');
+    const pt  = hit && ovTrendPoints[Number(hit.dataset.idx)];
+    if (!pt) { tooltipEl.style.display = 'none'; return; }
+
+    // Flag short buckets so a clipped edge week isn't misread as a dip
+    const partial = ovTrendGran === 'weekly' && pt.days < 7
+      ? `<div class="tr-tooltip-row"><span>Partial week</span><span class="tr-tooltip-val">${pt.days} day${pt.days === 1 ? '' : 's'}</span></div>`
+      : '';
+    tooltipEl.innerHTML = `
+      <div class="tr-tooltip-date">${pt.range}</div>
+      <div class="tr-tooltip-row">
+        <span class="tr-tooltip-dot" style="background:#5BC500"></span>
+        <span>Impressions</span>
+        <span class="tr-tooltip-val">${FMT.num(pt.imps)}</span>
+      </div>${partial}`;
+    tooltipEl.style.display = 'block';
+
+    const pad = 14;
+    let left = e.clientX + pad;
+    let top  = e.clientY + pad;
+    const tw = tooltipEl.offsetWidth, th = tooltipEl.offsetHeight;
+    if (left + tw > window.innerWidth)  left = e.clientX - tw - pad;
+    if (top  + th > window.innerHeight) top  = e.clientY - th - pad;
+    tooltipEl.style.left = `${left}px`;
+    tooltipEl.style.top  = `${top}px`;
+  });
+
+  chartEl.addEventListener('mouseleave', () => { tooltipEl.style.display = 'none'; });
 }
 
 /* ── Register with shell ────────────────────────────────── */
@@ -4834,12 +5118,25 @@ function crGetAll() {
 /* ── Filter state ────────────────────────────────────────── */
 const crState = { qs:[...ALL_QS], mkt:'all', stage:'all', search:'', dateFrom:null, dateTo:null, sort:'none', sortDir:'desc' };
 
+function crMatchesSearch(r, term) {
+  if (!term) return true;
+  const t = term.toLowerCase();
+  // Version ID / Creative ID are space-delimited numeric tokens — match whole
+  // tokens only, so "593" can't false-hit inside an unrelated id like
+  // "1593142". Offer name and raw Version strings keep substring matching.
+  const hitsToken = (list) => (list || '').toLowerCase().split(' ').includes(t);
+  return (r.creative || '').toLowerCase().includes(t)
+      || (r.versions  || '').toLowerCase().includes(t)
+      || hitsToken(r.versionIds)
+      || hitsToken(r.creativeIds);
+}
+
 function crFilter(rows) {
   return rows.filter(r =>
     crState.qs.includes(r.q) &&
     (crState.mkt   === 'all' || r.mkt   === crState.mkt)   &&
     (crState.stage === 'all' || r.stage === crState.stage) &&
-    (!crState.search || (r.creative||'').toLowerCase().includes(crState.search.toLowerCase()))
+    crMatchesSearch(r, crState.search)
   );
 }
 
@@ -8649,9 +8946,14 @@ document.getElementById('perfDataClearBtn').addEventListener('click', () => {
   localStorage.removeItem(PERF_DATA_KEY);
   clearManualPerformanceFlights();
   updatePerfDataChip();
-  loadCloudDeliveryFallback();
-  if (typeof renderOverview  === 'function') renderOverview();
-  if (typeof renderAnalytics === 'function') renderAnalytics();
+  /* Dropping the manual data re-opens the gaps it was filling, so the GCS
+     reports have to be re-read before the tabs can be re-rendered. */
+  showLoading('Reloading Cloud Storage reports…');
+  loadCloudDeliveryFallback().finally(() => {
+    hideLoading();
+    if (typeof renderOverview  === 'function') renderOverview();
+    if (typeof renderAnalytics === 'function') renderAnalytics();
+  });
 });
 
 document.getElementById('perfDataFileInput').addEventListener('change', e => {
@@ -8662,21 +8964,203 @@ document.getElementById('perfDataFileInput').addEventListener('change', e => {
 
   const readAs = ext === 'csv' ? file.text() : file.arrayBuffer();
 
+  /* Parsing a full delivery export is seconds of blocking work, so the veil
+     both explains the freeze and stops a second upload landing mid-parse. */
+  showLoading(`Reading ${file.name}…`, 20);
+
   readAs
     .then(data => parsePerformanceRowsByExt(data, ext))
     .then(rows => {
+      setLoadingProgress(70, 'Aggregating delivery rows…');
       const incoming = aggregateManualPerformanceRows(rows);
       MANUAL_PERF_DATA = mergePerfAggregates(MANUAL_PERF_DATA, incoming);
       localStorage.setItem(PERF_DATA_KEY, JSON.stringify(MANUAL_PERF_DATA));
       applyManualPerformanceData();
       updatePerfDataChip();
+      hideLoading();
     })
     .catch(err => {
       console.warn('Manual performance data upload failed:', err);
+      /* The input was cleared before parsing, so "try again" means re-picking
+         a file rather than replaying the same bad one. */
+      showLoadingError(`Couldn't read ${file.name} — ${err.message || 'unsupported or malformed file'}`,
+        () => document.getElementById('perfDataFileInput').click());
     });
 });
 
 updatePerfDataChip();
+</script>
+
+<!-- Loading overlay — see MODULE · LOADING OVERLAY below -->
+<div id="loading-overlay" style="display:none" aria-live="polite" aria-label="Loading">
+  <div class="lo-card" id="lo-card" tabindex="-1">
+    <div class="lo-brand">
+      <div class="lo-dot" aria-hidden="true"></div>
+      <span class="lo-wordmark">CRICKET · ARGONAUT</span>
+    </div>
+    <div class="lo-spinner" id="lo-spinner" aria-hidden="true">
+      <div class="lo-track"><div class="lo-fill" id="lo-fill"></div></div>
+    </div>
+    <div class="lo-progress-row" id="lo-progress-row" style="display:none">
+      <div class="lo-pct" id="lo-pct">0%</div>
+    </div>
+    <div class="lo-msg" id="lo-msg">Loading…</div>
+    <div class="lo-error-row" id="lo-error-row" style="display:none">
+      <button id="lo-retry-btn" class="lo-retry-btn">Try again</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODULE · LOADING OVERLAY
+     ═══════════════════════════════════════════════════════════ -->
+<script>
+/* Blocking overlay for the slow async paths — sign-in/BigQuery, the Cloud
+   Storage report fallback, and CSV uploads, which run anywhere from a
+   few hundred ms to tens of seconds. Doubles as the error surface so a
+   dead fetch can't leave a spinner going forever behind a separate modal.
+
+   Ported from the PCE Creative Optimization Dashboard (see
+   SPEC_loading_overlay.md), with the accessibility gaps that spec flags
+   as unfixed closed here: focus management, role=progressbar in
+   determinate mode, alertdialog in error state, and reduced-motion. */
+
+/* Element the user was on before the overlay took focus, so it can be
+   handed back on hide rather than dumping focus at the top of the page. */
+let __loPrevFocus = null;
+
+function showLoading(msg = 'Loading…', pct = null) {
+  const el    = document.getElementById('loading-overlay');
+  const msgEl = document.getElementById('lo-msg');
+  if (!el) return;   // deliberate no-op so callers don't need to guard
+  if (msgEl) msgEl.textContent = msg;
+  _setLoFill(pct);
+
+  const wasHidden = el.style.display === 'none';
+  el.style.display = 'flex';
+
+  /* Only capture focus on the transition into view — re-entrant calls
+     during a load would otherwise overwrite the saved element with the
+     overlay card itself. */
+  if (wasHidden) {
+    __loPrevFocus = document.activeElement;
+    document.getElementById('lo-card')?.focus();
+  }
+}
+
+/* Update an already-visible overlay. Does not show it — pair with showLoading. */
+function setLoadingProgress(pct, msg) {
+  const msgEl = document.getElementById('lo-msg');
+  if (msg && msgEl) msgEl.textContent = msg;
+  _setLoFill(pct);
+}
+
+/* The determinate/indeterminate switch. null => hand width back to the
+   keyframe animation; a number => pin the width and expose the value to
+   assistive tech. */
+function _setLoFill(pct) {
+  const fill  = document.getElementById('lo-fill');
+  const row   = document.getElementById('lo-progress-row');
+  const pctEl = document.getElementById('lo-pct');
+  const bar   = document.getElementById('lo-spinner');
+  if (!fill) return;
+
+  if (pct !== null && pct !== undefined) {
+    const v = Math.min(100, Math.max(0, Math.round(pct)));
+    fill.classList.add('lo-has-progress');
+    fill.style.width = `${v}%`;
+    if (row)   row.style.display = 'flex';
+    if (pctEl) pctEl.textContent = `${v}%`;
+    if (bar) {
+      bar.setAttribute('role', 'progressbar');
+      bar.setAttribute('aria-valuemin', '0');
+      bar.setAttribute('aria-valuemax', '100');
+      bar.setAttribute('aria-valuenow', String(v));
+      bar.removeAttribute('aria-hidden');
+    }
+  } else {
+    fill.classList.remove('lo-has-progress');
+    fill.style.width = '';
+    if (row)   row.style.display = 'none';
+    if (pctEl) pctEl.textContent = '';
+    if (bar) {
+      // Indeterminate carries no value, so go back to being decorative
+      ['role','aria-valuemin','aria-valuemax','aria-valuenow'].forEach(a => bar.removeAttribute(a));
+      bar.setAttribute('aria-hidden', 'true');
+    }
+  }
+}
+
+/* Hide and fully reset, so the next showLoading() starts clean — the
+   overlay is reused many times per session. */
+function hideLoading() {
+  const el = document.getElementById('loading-overlay');
+  if (el) {
+    el.style.display = 'none';
+    el.removeAttribute('role');
+    el.removeAttribute('aria-modal');
+    el.setAttribute('aria-live', 'polite');
+  }
+  _setLoFill(null);
+  const errRow = document.getElementById('lo-error-row');
+  if (errRow) errRow.style.display = 'none';
+  const spinner = document.getElementById('lo-spinner');
+  if (spinner) spinner.style.display = '';
+
+  if (__loPrevFocus && document.contains(__loPrevFocus)) __loPrevFocus.focus();
+  __loPrevFocus = null;
+}
+
+function showLoadingError(msg, retryFn) {
+  const el       = document.getElementById('loading-overlay');
+  const msgEl    = document.getElementById('lo-msg');
+  const errRow   = document.getElementById('lo-error-row');
+  const retryBtn = document.getElementById('lo-retry-btn');
+  if (!el) return;
+
+  if (msgEl)  msgEl.textContent    = msg;
+  if (errRow) errRow.style.display = 'flex';
+  /* Clear any progress first — a dead percentage left on screen implies
+     work still in flight. For the same reason the bar itself is hidden:
+     _setLoFill(null) hands it back to the indeterminate pulse, which would
+     keep animating under an error message. */
+  _setLoFill(null);
+  const spinner = document.getElementById('lo-spinner');
+  if (spinner) spinner.style.display = 'none';
+
+  if (retryBtn && retryFn) {
+    /* Cloned to drop the handler from a previous failure; the same button
+       element is reused across every error. */
+    const fresh = retryBtn.cloneNode(true);
+    retryBtn.parentNode.replaceChild(fresh, retryBtn);
+    fresh.addEventListener('click', () => { hideLoading(); retryFn(); });
+  }
+
+  /* Blocking and demands a decision, so upgrade from a polite status to a
+     modal alert while in this state. */
+  el.setAttribute('role', 'alertdialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-live', 'assertive');
+
+  const wasHidden = el.style.display === 'none';
+  el.style.display = 'flex';
+  if (wasHidden) __loPrevFocus = document.activeElement;
+  document.getElementById('lo-retry-btn')?.focus();
+}
+
+/* Keeps focus inside the card while the overlay is up — without this a
+   keyboard user can tab into the app behind the veil. */
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Tab') return;
+  const el = document.getElementById('loading-overlay');
+  if (!el || el.style.display === 'none') return;
+  const focusable = [...el.querySelectorAll('button, [tabindex]:not([tabindex="-1"])')]
+    .filter(n => n.offsetParent !== null);
+  if (!focusable.length) { e.preventDefault(); return; }
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}, true);
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════
