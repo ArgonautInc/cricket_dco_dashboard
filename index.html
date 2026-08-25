@@ -4894,23 +4894,33 @@ function stageShort(s) { return s.replace(/^\d+ - /,''); }
 /* Assets live in Cloudflare Images with requireSignedURLs on, so previews are
    resolved in three hops:
 
-     CF filename  ──prefix──>  Version  ──BigQuery──>  Creative Offer Name
+     CF file name  ──match──>  Version Name  ──BigQuery──>  Creative Offer Name
 
    The cards aggregate by Creative Offer Name (see the by-creative query, which
-   GROUPs BY it), while Cloudflare is keyed on Version — one offer name covers
-   many versions across sizes, placements and publishers. So each card holds an
-   array of candidates, sorted by CF_SIZE_PREFERENCE, and displays the first.
+   GROUPs BY it), while Cloudflare is keyed on the Flashtalking Version Name —
+   one offer name covers many versions across sizes, placements and publishers.
+   So each card holds an array of candidates, sorted by CF_SIZE_PREFERENCE, and
+   displays the first.
 
    Signing happens in /api/cf-sign-images; the API token and signing key stay in
    Vercel env vars and never reach the browser. */
 
 const CF_VARIANT      = 'public';
 const CF_SIGN_TTL_SEC = 7200;                 // 2h — outlives the 1h asset cache
-const CF_CACHE_KEY    = '_cfCricketAssets_v2';
+const CF_CACHE_KEY    = '_cfCricketAssets_v3';
 const CF_CACHE_TTL_MS = 60 * 60 * 1000;
 
+/* The delivery report's version column has been exported under several names.
+   Probed in order, same approach as tryLoadTrendDailyData — a wrong guess is a
+   BigQuery error, not empty rows, so each candidate needs its own attempt.
+   `Version` used to be the only one tried, and when the view exposes
+   `Version Name` instead the whole preview load failed with one console warning
+   and every card silently fell back to a gradient. */
+const CF_VERSION_FIELDS = ['Version Name', 'Version', 'FT Version Name',
+                           'Creative Version Name', 'Creative Version'];
+
 /* One offer name spans many versions, so a card has to pick one image. Prefer
-   by ad size, read out of the CF filename. Anything with a size we don't list
+   by ad size, read out of the CF file name. Anything with a size we don't list
    sorts after these; anything with no size at all sorts last. Reorder freely —
    it only affects which candidate is shown first. */
 const CF_SIZE_PREFERENCE = ['300x250', '728x90', '300x600', '160x600', '320x50'];
@@ -4922,18 +4932,32 @@ function cfNormOffer(s) {
   return String(s || '').trim().toLowerCase();
 }
 
-/* A CF filename matches a Version when it starts with it AND the next character
-   is a separator. Plain startsWith would let version …_2936 claim …_29361's
-   files; plain includes() — as the paid-media dashboard does — would be far
-   worse here, since these IDs share long prefixes and a wrong-but-present image
-   looks correct on the card. */
+/* CF file names carry decoration the Version Name never does: an upload folder
+   prefix, an image extension, and sometimes a _2/_3 suffix from a re-upload.
+   Strip all of it and lowercase, because CF preserves whatever case the
+   uploader used while the delivery report is authoritative on casing. */
+function cfNormFilename(filename) {
+  return String(filename || '')
+    .trim()
+    .replace(/^.*\//, '')                     // drop any upload folder prefix
+    .replace(/\.(png|jpe?g|webp|gif|svg)$/i, '')
+    .toLowerCase();
+}
+
+/* A CF file name matches a Version Name when it starts with it AND the next
+   character is a separator. Plain startsWith would let version …_2936 claim
+   …_29361's files; plain includes() — as the paid-media dashboard does — would
+   be far worse here, since these IDs share long prefixes and a
+   wrong-but-present image looks correct on the card.
+
+   Both arguments must already be through cfNormFilename / toLowerCase. */
 function cfFilenameMatchesVersion(filename, version) {
   if (!filename.startsWith(version)) return false;
   const next = filename.charAt(version.length);
   return next === '' || next === '_' || next === '-' || next === '.';
 }
 
-/* Lower rank wins. The size token may sit anywhere in the filename — inside the
+/* Lower rank wins. The size token may sit anywhere in the file name — inside the
    version itself or in whatever suffix follows it — so just scan the whole name. */
 function cfSizeRank(filename) {
   const m = String(filename || '').match(/(\d{2,4})x(\d{2,4})/i);
@@ -4953,17 +4977,58 @@ async function cfApi(path, opts) {
   return res.json();
 }
 
-/* Version -> Creative Offer Name, straight from the same view the cards use. */
+/* Version Name -> Creative Offer Name, straight from the same view the cards
+   use. Returns { map, field } so the console line can name the column that
+   actually worked; map is empty if none of them did. */
 async function cfFetchVersionOfferMap() {
-  const rows = await bqQuery(`
-    SELECT DISTINCT \`Version\` as version, \`Creative Offer Name\` as offer
-    FROM \`crk-dco-dash.reporting_data.deliveries_view\`
-    WHERE \`Version\` IS NOT NULL AND \`Creative Offer Name\` IS NOT NULL
-  `);
+  for (const field of CF_VERSION_FIELDS) {
+    let rows;
+    try {
+      rows = await bqQuery(`
+        SELECT DISTINCT \`${field}\` as version, \`Creative Offer Name\` as offer
+        FROM \`crk-dco-dash.reporting_data.deliveries_view\`
+        WHERE \`${field}\` IS NOT NULL AND \`Creative Offer Name\` IS NOT NULL
+      `);
+    } catch (e) {
+      continue;                               // column doesn't exist — try the next name
+    }
+    const map = {};
+    (rows || []).forEach(r => {
+      const v = String(r.version || '').trim();
+      if (v) map[v] = String(r.offer || '').trim();
+    });
+    if (Object.keys(map).length) return { map, field };
+  }
+  return { map: {}, field: null };
+}
+
+/* Fallback bridge when the view exposes no version column: the trafficker
+   export the user already uploads maps FT Version Name -> the card's offer
+   label, which is the same hop by a different route (see mpResolveOffer).
+   Keyed the same way as the BigQuery map so the caller can't tell them apart. */
+async function cfVersionOfferMapFromOfferMap() {
+  const keys = Object.keys(OFFER_MAP || {});
+  if (!keys.length) return {};
+
+  let offerNames = [];
+  try {
+    const rows = await bqQuery(`
+      SELECT DISTINCT \`Creative Offer Name\` as offer
+      FROM \`crk-dco-dash.reporting_data.deliveries_view\`
+      WHERE \`Creative Offer Name\` IS NOT NULL
+    `);
+    offerNames = (rows || []).map(r => String(r.offer || '').trim()).filter(Boolean);
+  } catch (e) {
+    return {};
+  }
+  if (!offerNames.length) return {};
+
   const map = {};
-  (rows || []).forEach(r => {
-    const v = String(r.version || '').trim();
-    if (v) map[v] = String(r.offer || '').trim();
+  keys.forEach(version => {
+    const label = OFFER_MAP[version];
+    const hit = offerNames.find(o =>
+      mpNorm(o) === mpNorm(label) || mpNorm(offerLabel(o)) === mpNorm(label));
+    if (hit) map[String(version).trim()] = hit;
   });
   return map;
 }
@@ -5005,46 +5070,71 @@ function cfLoadPreviews() {
   } catch (_) {}
 
   _cfLoadP = Promise.all([cfFetchVersionOfferMap(), cfFetchImages()])
-    .then(([versionToOffer, images]) => {
-      const versions = Object.keys(versionToOffer);
-      // Longest first so the most specific Version wins when one prefixes another
-      versions.sort((a, b) => b.length - a.length);
+    .then(async ([{ map, field }, images]) => {
+      let versionToOffer = map;
+      let source = field ? `deliveries_view.\`${field}\`` : null;
 
-      const byOffer = {};
+      if (!Object.keys(versionToOffer).length) {
+        versionToOffer = await cfVersionOfferMapFromOfferMap();
+        source = Object.keys(versionToOffer).length ? 'uploaded offer map' : null;
+      }
+      if (!source) {
+        console.warn('[CF] No Version Name -> Creative Offer Name mapping available. Tried ' +
+                     CF_VERSION_FIELDS.map(f => `"${f}"`).join(', ') +
+                     ' on deliveries_view, and the uploaded offer map. Previews stay off.');
+        _cfLoadP = null;
+        return {};
+      }
+
+      /* Lowercased for matching; longest first so the most specific Version
+         wins when one prefixes another. */
+      const index = Object.keys(versionToOffer)
+        .map(v => ({ key: v.toLowerCase(), offer: versionToOffer[v] }))
+        .sort((a, b) => b.key.length - a.key.length);
+      const exact = {};
+      index.forEach(e => { if (!(e.key in exact)) exact[e.key] = e.offer; });
+
+      const byOffer    = {};
       const matchedIds = [];
       const idToMeta   = {};
+      const unmatched  = [];
 
       images.forEach(img => {
-        const fname = img.filename;
-        let offer = versionToOffer[fname];               // exact hit, cheap path
+        const fname = cfNormFilename(img.filename);
+        let offer = exact[fname];                        // exact hit, cheap path
         if (!offer) {
-          const v = versions.find(ver => cfFilenameMatchesVersion(fname, ver));
-          if (v) offer = versionToOffer[v];
+          const e = index.find(x => cfFilenameMatchesVersion(fname, x.key));
+          if (e) offer = e.offer;
         }
-        if (!offer) return;
+        if (!offer) { unmatched.push(img.filename); return; }
         matchedIds.push(img.id);
-        idToMeta[img.id] = { offer: cfNormOffer(offer), rank: cfSizeRank(fname) };
+        idToMeta[img.id] = { offer: cfNormOffer(offer), rank: cfSizeRank(img.filename) };
       });
 
-      return cfSignIds(matchedIds).then(signed => {
-        const ranked = {};
-        Object.keys(signed).forEach(id => {
-          const meta = idToMeta[id];
-          if (!meta) return;
-          (ranked[meta.offer] = ranked[meta.offer] || []).push({ url: signed[id], rank: meta.rank });
-        });
-        Object.keys(ranked).forEach(key => {
-          byOffer[key] = ranked[key].sort((a, b) => a.rank - b.rank).map(x => x.url);
-        });
-        cfPreviewsByOffer = byOffer;
-        try {
-          sessionStorage.setItem(CF_CACHE_KEY, JSON.stringify({ byOffer, _ts: Date.now() }));
-        } catch (_) {}
-        console.log('[CF] Previews ready —', images.length, 'assets,',
-                    matchedIds.length, 'matched,', Object.keys(byOffer).length, 'offers covered');
-        _cfLoadP = null;
-        return byOffer;
+      const signed = await cfSignIds(matchedIds);
+      const ranked = {};
+      Object.keys(signed).forEach(id => {
+        const meta = idToMeta[id];
+        if (!meta) return;
+        (ranked[meta.offer] = ranked[meta.offer] || []).push({ url: signed[id], rank: meta.rank });
       });
+      Object.keys(ranked).forEach(key => {
+        byOffer[key] = ranked[key].sort((a, b) => a.rank - b.rank).map(x => x.url);
+      });
+      cfPreviewsByOffer = byOffer;
+      try {
+        sessionStorage.setItem(CF_CACHE_KEY, JSON.stringify({ byOffer, _ts: Date.now() }));
+      } catch (_) {}
+
+      console.log(`[CF] Previews ready — ${images.length} assets, ${matchedIds.length} matched, ` +
+                  `${Object.keys(byOffer).length} offers covered ` +
+                  `(versions from ${source}, ${index.length} known)`);
+      if (unmatched.length) {
+        console.warn(`[CF] ${unmatched.length} asset(s) matched no Version Name, e.g.`,
+                     unmatched.slice(0, 10));
+      }
+      _cfLoadP = null;
+      return byOffer;
     })
     .catch(e => {
       console.warn('[CF] Preview load failed:', e.message);
