@@ -513,6 +513,23 @@ svg { display: block; }
   .refresh-bar.active > span { transform: translateX(0); width: 100%; }
 }
 
+/* ── Creative previews refresh button ────────────────────── */
+#crRefreshPreviewsBtn.cr-refresh-spinning svg-icon {
+  display: inline-flex;
+  animation: cr-refresh-spin .8s linear infinite;
+}
+@keyframes cr-refresh-spin { to { transform: rotate(360deg); } }
+.cr-refresh-status {
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: 2px;
+  white-space: nowrap;
+}
+.cr-refresh-status-warn { color: #d33; }
+@media (prefers-reduced-motion: reduce) {
+  #crRefreshPreviewsBtn.cr-refresh-spinning svg-icon { animation: none; }
+}
+
 /* ── Page title row ──────────────────────────────────────── */
 .page-header {
   display: flex;
@@ -1716,6 +1733,12 @@ body.compact .chart-card      { padding: 14px 16px; }
             <option>21 - Order (ajdx)</option>
           </optgroup>
         </select>
+        <!-- Version Name (hidden until version-level data loads) -->
+        <div id="anVersionGroup" style="display:none;align-items:center;gap:6px">
+          <select class="an-select" id="anVersionFilter" title="Filter to a single Flashtalking Version Name. Grouped by Creative Offer Name — one offer covers many versions.">
+            <option value="all">All Versions</option>
+          </select>
+        </div>
         <div class="an-search">
           <svg-icon name="search" size="13" color="var(--muted)"></svg-icon>
           <input id="anSearch" type="text" placeholder="Search creative…"/>
@@ -1815,6 +1838,10 @@ body.compact .chart-card      { padding: 14px 16px; }
           <h1>Creatives</h1>
         </div>
         <div class="page-header-actions">
+          <button class="btn-ghost btn-sm" id="crRefreshPreviewsBtn" title="Clear the cached Cloudflare preview matches and re-fetch from BigQuery + Cloudflare. Use this after uploading new creative or fixing a version-name mismatch.">
+            <svg-icon name="refresh" size="13"></svg-icon> Refresh Previews
+          </button>
+          <span class="cr-refresh-status" id="crRefreshPreviewsStatus"></span>
           <button class="btn-ghost btn-sm" id="crUploadBtn" title="Fallback for when Cloudflare previews are unavailable. Upload the ad-screenshot-capturer ZIP, or loose PNG/JPGs. Cloudflare still takes precedence wherever it has an image.">
             <svg-icon name="plus" size="13"></svg-icon> Upload Previews
           </button>
@@ -2272,6 +2299,12 @@ body.compact .chart-card      { padding: 14px 16px; }
             <button data-mkt="USH">USH</button>
           </div>
         </div>
+        <div class="pv-control-group" id="trVersionGroup" style="display:none">
+          <span class="pv-label">Version</span>
+          <select class="an-select" id="trVersionFilter" title="Filter every series to a single Flashtalking Version Name. Grouped by Creative Offer Name — one offer covers many versions.">
+            <option value="all">All Versions</option>
+          </select>
+        </div>
         <div class="pv-control-group" id="trDateRangeGroup" style="display:none;align-items:center;gap:6px">
           <span class="pv-label">Date Range</span>
           <input type="date" id="trDateFrom" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px">
@@ -2436,6 +2469,10 @@ body.compact .chart-card      { padding: 14px 16px; }
   </symbol>
   <symbol id="ico-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
     <path d="M12 20V8M6 14l6-6 6 6M4 4h16" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="ico-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <path d="M4 4v6h6M20 20v-6h-6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M4.5 15a8 8 0 0 0 14.1 3M19.5 9A8 8 0 0 0 5.4 6" stroke-linecap="round" stroke-linejoin="round"/>
   </symbol>
   <symbol id="ico-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
     <circle cx="9" cy="8" r="3.5"/>
@@ -3575,6 +3612,12 @@ window.__onAuth = function(user) {
     });
   }
 
+  /* Version-level rows for the Analytics/Trends Version Name filter. Needs the
+     Google token like every other BigQuery load, and shares the version-column
+     probe with the preview loader above. The dropdowns stay hidden until this
+     resolves, so a slow or unavailable load just means no version filter. */
+  if (typeof vfLoadVersionData === 'function') vfLoadVersionData();
+
   /* Manually uploaded previews are local (IndexedDB) so they need no auth, but
      load them here too so a Cloudflare outage still leaves the cards populated. */
   if (typeof mpLoad === 'function') {
@@ -4366,7 +4409,7 @@ async function autoLoadCloudOfferMap() {
 }
 
 /* ── Filter state ────────────────────────────────────────── */
-const anState = { qs:[...ALL_QS], mkt:'all', stage:'all', view:'stage', search:'', dateFrom:null, dateTo:null, sortCol:'imps', sortDir:-1 };
+const anState = { qs:[...ALL_QS], mkt:'all', stage:'all', version:'all', view:'stage', search:'', dateFrom:null, dateTo:null, sortCol:'imps', sortDir:-1 };
 
 function anFilter(rows) {
   return rows.filter(r =>
@@ -4533,11 +4576,34 @@ function renderAnTable(rows, cols) {
   });
 }
 
+/* Stage- and creative-shaped pools for the current filter state. With a
+   version selected these come from that version's raw rows rolled up by the
+   same helpers the BigQuery loaders use, so both tables, the KPI tiles, the
+   charts and the export all see the familiar shapes and need no special
+   casing. Without one, the existing date-windowed pools are untouched. */
+function anPools() {
+  if (anState.version !== 'all' && vfLoaded) {
+    const raw = vfRawRows(anState.version, anState.dateFrom, anState.dateTo);
+    return {
+      stageRows:    withReach(aggStageRawRows(raw)),
+      creativeRows: aggCreativeRawRows(raw),
+    };
+  }
+  return {
+    stageRows:    withReach(effectiveStageRows(anState.dateFrom, anState.dateTo)),
+    creativeRows: effectiveCreativeRows(anState.dateFrom, anState.dateTo),
+  };
+}
+
 /* ── Top-level render ────────────────────────────────────── */
 function renderAnalytics() {
-  const isCreative  = anState.view === 'creative';
-  const stageRows   = withReach(effectiveStageRows(anState.dateFrom, anState.dateTo));
-  const creativeRows = effectiveCreativeRows(anState.dateFrom, anState.dateTo);
+  const isCreative = anState.view === 'creative';
+  /* A date window over a single version needs that version's day-level rows,
+     which are fetched on demand — this re-renders once they arrive. */
+  vfEnsureDaily(anState.version, !!(anState.dateFrom || anState.dateTo), renderAnalytics);
+  if (vfLoaded) vfPopulateSelect('anVersionFilter', anState.version, anState.qs, anState.mkt);
+
+  const { stageRows, creativeRows } = anPools();
   const pool  = isCreative ? creativeRows : stageRows;
   const rows  = anFilter(pool);
   renderAnKpis(anFilter(stageRows));     // KPIs always from stage data
@@ -4549,6 +4615,9 @@ function renderAnalytics() {
 function exportAnXlsx() {
   const q   = anState.qs.length === 3 ? 'All' : anState.qs.join('-');
   const mkt = anState.mkt !== 'all' ? anState.mkt : 'All';
+  const ver = anState.version !== 'all'
+    ? '_' + String(anState.version).replace(/[^\w.-]+/g, '-')
+    : '';
 
   function sheetFromData(cols, rows) {
     const data = [cols.map(c => c.label)].concat(
@@ -4557,11 +4626,12 @@ function exportAnXlsx() {
     return XLSX.utils.aoa_to_sheet(data);
   }
 
+  const { stageRows, creativeRows } = anPools();
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheetFromData(STAGE_COLS,    anFilter(withReach(effectiveStageRows(anState.dateFrom, anState.dateTo)))), 'By Stage');
-  XLSX.utils.book_append_sheet(wb, sheetFromData(CREATIVE_COLS, anFilter(effectiveCreativeRows(anState.dateFrom, anState.dateTo))),         'By Creative');
+  XLSX.utils.book_append_sheet(wb, sheetFromData(STAGE_COLS,    anFilter(stageRows)),    'By Stage');
+  XLSX.utils.book_append_sheet(wb, sheetFromData(CREATIVE_COLS, anFilter(creativeRows)), 'By Creative');
 
-  const filename = `CRKT_Analytics_${q}_${mkt}_${new Date().toISOString().slice(0,10)}.xlsx`;
+  const filename = `CRKT_Analytics_${q}_${mkt}${ver}_${new Date().toISOString().slice(0,10)}.xlsx`;
   XLSX.writeFile(wb, filename);
 }
 
@@ -4583,6 +4653,10 @@ document.getElementById('anQFilter').addEventListener('click', e => {
   if (!next) return; // can't deselect the last remaining quarter
   anState.qs = next;
   btn.classList.toggle('active', anState.qs.includes(btn.dataset.q));
+  renderAnalytics();
+});
+document.getElementById('anVersionFilter').addEventListener('change', e => {
+  anState.version = e.target.value;
   renderAnalytics();
 });
 document.getElementById('anDateFrom').addEventListener('change', e => {
@@ -5099,6 +5173,290 @@ async function cfVersionOfferMapFromOfferMap() {
   return map;
 }
 
+/* ══ Version Name filter (Analytics + Trends) ═══════════════════
+   Both tabs aggregate at quarter × market × stage — the Analytics
+   creative view adds Creative Offer Name — and none of those rows carry
+   a Version Name. So a version filter can't be served by running the
+   selection through cfFetchVersionOfferMap() and reusing the offer-level
+   rows already loaded: one offer name spans many versions (see the
+   three-hop note above), so every version under an offer would report
+   that whole offer's numbers under a single version's label.
+
+   Instead the version column cfFetchVersionOfferMap() probes for becomes
+   a real GROUP BY key, giving one row per quarter × market × stage ×
+   offer × version. Raw pixel/reach counts are selected rather than
+   pre-divided rates, so aggStageRawRows/aggCreativeRawRows can roll a
+   version's rows up into exactly the shapes AN_STAGES and AN_CREATIVES
+   already have — which is what lets every downstream renderer, column
+   formatter and export stay untouched.
+
+   The day-level equivalent would be version × day × market, far too wide
+   to hold client-side, so it's fetched one version at a time on selection
+   and cached — see vfLoadVersionDaily. Everything here degrades the same
+   way the date-range pickers do: if the view exposes no version column,
+   the dropdowns stay hidden rather than offering a filter that can't
+   return rows. */
+
+const VF_DATE_FIELDS = ['Date Breakdown', 'Date', 'Report Date', 'Day'];
+
+let VF_FIELD            = null;   // version column that exists in the view
+let VF_OFFER_BY_VERSION = {};     // version name -> Creative Offer Name
+let VF_STAGES           = [];     // q, mkt, stage, creative, version + raw counts
+let VF_DATE_FIELD       = null;   // date column that worked for the daily fetch
+let vfLoaded            = false;
+let vfAttempted         = false;
+const VF_DAILY          = {};     // version -> resolved day-level rows
+const VF_DAILY_P        = {};     // version -> in-flight promise (dedupes renders)
+
+/* bqQuery takes raw SQL with no parameter binding and version names come
+   out of the data, so anything interpolated into a WHERE clause gets
+   quoted properly rather than concatenated. */
+function bqLiteral(s) {
+  return "'" + String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+}
+
+/* Raw counts, not rates — see the note above on why. */
+const VF_METRIC_COLS = `
+          SUM(\`Total Ads Requested\`) as imps,
+          SUM(\`Clicks\`) as clicks,
+          SUM(\`CKT_bNON_HISPANIC_ORDER Count\`) as gmOrdCount,
+          SUM(\`CKT_bHISPANIC_ORDER Count\`) as hmOrdCount,
+          SUM(\`CKT_bNON_HISPANIC_GLOBAL_RT Count\`) as gmLpvCount,
+          SUM(\`CKT_bHISPANIC_GLOBAL_RT Count\`) as hmLpvCount,
+          SUM(\`Total Cost\`) as spend,
+          SUM(\`Cookie ID Reach: Total Ad Reach\`) as reach`;
+
+function vfNumRow(r, dims) {
+  return Object.assign({
+    imps:       Number(r.imps)       || 0,
+    clicks:     Number(r.clicks)     || 0,
+    gmOrdCount: Number(r.gmOrdCount) || 0,
+    hmOrdCount: Number(r.hmOrdCount) || 0,
+    gmLpvCount: Number(r.gmLpvCount) || 0,
+    hmLpvCount: Number(r.hmLpvCount) || 0,
+    spend:      Number(r.spend)      || 0,
+    reach:      Number(r.reach)      || 0,
+  }, dims);
+}
+
+async function vfLoadVersionData() {
+  if (vfAttempted || !ACCESS_TOKEN) return;
+  vfAttempted = true;
+
+  /* Same probe the previews use, so the winning column name is resolved
+     once and the version list comes from the same place as the map. */
+  const probe = await cfFetchVersionOfferMap();
+  if (!probe.field) {
+    console.warn('[Version filter] no version column in deliveries_view —',
+                 'tried:', CF_VERSION_FIELDS.join(', '));
+    vfSyncControls();
+    return;
+  }
+  VF_FIELD            = probe.field;
+  VF_OFFER_BY_VERSION = probe.map;
+
+  try {
+    const rows = await bqQuery(`
+      SELECT
+        \`Flight\` as q,
+        CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
+        \`Segment\` as stage,
+        \`Creative Offer Name\` as creative,
+        \`${VF_FIELD}\` as version,${VF_METRIC_COLS}
+      FROM \`crk-dco-dash.reporting_data.deliveries_view\`
+      WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
+        AND \`${VF_FIELD}\` IS NOT NULL
+      GROUP BY q, mkt, stage, creative, version
+    `);
+    VF_STAGES = (rows || [])
+      .map(r => vfNumRow(r, {
+        q: r.q, mkt: r.mkt, stage: r.stage,
+        creative: r.creative || '',
+        version: String(r.version || '').trim(),
+      }))
+      .filter(r => r.version);
+    vfLoaded = VF_STAGES.length > 0;
+    console.log('[Version filter] loaded', VF_STAGES.length, 'version-level rows via',
+                `"${VF_FIELD}" —`, vfVersionCount(), 'distinct versions');
+  } catch (e) {
+    console.warn('[Version filter] version-level load failed:', e.message);
+  }
+  vfSyncControls();
+}
+
+/* One version's day-level rows. Probes the date column the same way
+   tryLoadTrendDailyData does, then reuses whichever name worked. */
+async function vfFetchVersionDaily(version) {
+  const fields = VF_DATE_FIELD ? [VF_DATE_FIELD] : VF_DATE_FIELDS;
+  for (const dateField of fields) {
+    try {
+      const rows = await bqQuery(`
+        SELECT
+          CAST(\`${dateField}\` AS STRING) as day,
+          \`Flight\` as q,
+          CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
+          \`Segment\` as stage,
+          \`Creative Offer Name\` as creative,${VF_METRIC_COLS}
+        FROM \`crk-dco-dash.reporting_data.deliveries_view\`
+        WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
+          AND \`${VF_FIELD}\` = ${bqLiteral(version)}
+        GROUP BY day, q, mkt, stage, creative
+        ORDER BY day
+      `);
+      if (rows && rows.length) {
+        VF_DATE_FIELD = dateField;
+        return rows.map(r => vfNumRow(r, {
+          day: r.day, q: r.q, mkt: r.mkt, stage: r.stage, creative: r.creative || '',
+        }));
+      }
+    } catch (e) { /* wrong column name — try the next candidate */ }
+  }
+  return [];   // no date column, or this version genuinely has no rows
+}
+
+/* Memoized on the promise, not the result, so several renders firing
+   before the first fetch resolves don't each start their own query. */
+function vfLoadVersionDaily(version) {
+  if (!VF_DAILY_P[version]) {
+    VF_DAILY_P[version] = vfFetchVersionDaily(version)
+      .then(rows => { VF_DAILY[version] = rows; return rows; })
+      .catch(e => { console.warn('[Version filter] daily load failed:', e.message);
+                    VF_DAILY[version] = []; return []; });
+  }
+  return VF_DAILY_P[version];
+}
+
+/* Starts the day-level fetch when a caller actually needs day granularity
+   (a date window on Analytics, or Trends' Daily view) and re-renders once
+   it lands. Safe on every render: an empty result is cached too, so a
+   version with no day-level rows re-renders once and then stays quiet. */
+function vfEnsureDaily(version, needed, onReady) {
+  if (!needed || !version || version === 'all' || !VF_FIELD) return;
+  if (VF_DAILY[version]) return;
+  vfLoadVersionDaily(version).then(() => { if (typeof onReady === 'function') onReady(); });
+}
+
+/* Raw-count rows for one version, windowed by date when a range is set and
+   that version's day-level rows are in hand. Callers roll the result up
+   with aggStageRawRows / aggCreativeRawRows. */
+function vfRawRows(version, dateFrom, dateTo) {
+  if (dateFrom || dateTo) {
+    const daily = VF_DAILY[version];
+    if (daily && daily.length) {
+      let rows = daily;
+      if (dateFrom) rows = rows.filter(r => r.day >= dateFrom);
+      if (dateTo)   rows = rows.filter(r => r.day <= dateTo);
+      return rows;
+    }
+    /* Day-level rows aren't here yet (still fetching) or don't exist (no
+       date column in the view) — fall back to the full-quarter rows rather
+       than blanking the table. vfEnsureDaily() re-renders when they land. */
+  }
+  return VF_STAGES.filter(r => r.version === version);
+}
+
+/* Day-level rows for one version rolled up to day × quarter × market — the
+   shape trDailyData has, so the Trends daily path is a pool swap. */
+function vfDailyByDay(version) {
+  const daily = VF_DAILY[version];
+  if (!daily || !daily.length) return [];
+  const groups = new Map();
+  daily.forEach(r => {
+    const key = `${r.day}|${r.q}|${r.mkt}`;
+    if (!groups.has(key)) groups.set(key, vfNumRow({}, { day:r.day, q:r.q, mkt:r.mkt }));
+    const g = groups.get(key);
+    g.imps += r.imps; g.clicks += r.clicks;
+    g.gmOrdCount += r.gmOrdCount; g.hmOrdCount += r.hmOrdCount;
+    g.gmLpvCount += r.gmLpvCount; g.hmLpvCount += r.hmLpvCount;
+    g.spend += r.spend; g.reach += r.reach;
+  });
+  return [...groups.values()].map(g => ({
+    day: g.day, q: g.q, mkt: g.mkt,
+    imps: g.imps, clicks: g.clicks,
+    ctr:    g.imps   ? g.clicks/g.imps       : 0,
+    gmOrd:  g.gmOrdCount, hmOrd: g.hmOrdCount,
+    gmLpvr: g.imps   ? g.gmLpvCount/g.imps   : 0,
+    hmLpvr: g.imps   ? g.hmLpvCount/g.imps   : 0,
+    gmTdor: g.imps   ? g.gmOrdCount/g.imps   : 0,
+    gmCvr:  g.clicks ? g.gmOrdCount/g.clicks : 0,
+    spend:  g.spend,
+    cpc:    g.clicks ? g.spend/g.clicks      : 0,
+    freq:   g.reach  ? g.imps/g.reach        : 1,
+  }));
+}
+
+function vfVersionCount() {
+  return new Set(VF_STAGES.map(r => r.version)).size;
+}
+
+/* Versions present in the given quarter/market selection, grouped by their
+   offer name — a version name on its own is an opaque ID, so the offer is
+   what makes the list navigable. Scoping to the selection keeps the
+   dropdown from offering versions that would return an empty table. */
+function vfVersionGroups(qs, mkt) {
+  const offerOf = new Map();
+  VF_STAGES.forEach(r => {
+    if (qs && !qs.includes(r.q)) return;
+    if (mkt && mkt !== 'all' && r.mkt !== mkt) return;
+    if (!offerOf.has(r.version)) {
+      offerOf.set(r.version, VF_OFFER_BY_VERSION[r.version] || r.creative || '');
+    }
+  });
+  const groups = new Map();
+  [...offerOf.keys()].sort().forEach(v => {
+    const label = offerLabel(offerOf.get(v)) || 'Unmapped';
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(v);
+  });
+  return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+const VF_SEL_SIG = {};   // select id -> signature of what's rendered in it
+
+/* Rebuilds one version <select>. A selection that the current quarter/market
+   no longer covers is kept as its own option rather than silently reset —
+   the table's empty state is the honest answer, and dropping the selection
+   here would look like the filter cleared itself.
+
+   Guarded by a signature because the render functions that call this run on
+   every keystroke of the Analytics search box: re-emitting hundreds of
+   <option>s that often is wasteful, and replacing innerHTML under an open
+   dropdown closes it mid-interaction. */
+function vfPopulateSelect(id, current, qs, mkt) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const sig = [id, (qs || []).join('+'), mkt, current, VF_STAGES.length].join('|');
+  if (VF_SEL_SIG[id] === sig) return;
+  VF_SEL_SIG[id] = sig;
+  const groups = vfVersionGroups(qs, mkt);
+  const total  = groups.reduce((n, [, vs]) => n + vs.length, 0);
+  let html = `<option value="all">All Versions${total ? ` (${total})` : ''}</option>`;
+  groups.forEach(([offer, versions]) => {
+    html += `<optgroup label="${esc(offer)}">` +
+      versions.map(v =>
+        `<option value="${esc(v)}"${v === current ? ' selected' : ''}>${esc(v)}</option>`).join('') +
+      '</optgroup>';
+  });
+  if (current && current !== 'all' && !groups.some(([, vs]) => vs.includes(current))) {
+    html += `<optgroup label="Not in current quarter/market">` +
+      `<option value="${esc(current)}" selected>${esc(current)}</option></optgroup>`;
+  }
+  sel.innerHTML = html;
+}
+
+/* Reveals the version dropdowns once version-level rows are in hand — the
+   same graceful-hide pattern the date-range pickers use — and re-renders
+   the two tabs that have one. */
+function vfSyncControls() {
+  ['anVersionGroup', 'trVersionGroup'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = vfLoaded ? 'flex' : 'none';
+  });
+  if (!vfLoaded) return;
+  if (typeof renderAnalytics === 'function') renderAnalytics();
+  if (typeof renderTrends    === 'function') renderTrends();
+}
+
 async function cfFetchImages() {
   const out = [];
   let token = null;
@@ -5180,7 +5538,7 @@ function cfLoadPreviews() {
         }
         if (!offer) { unmatched.push(img.filename); return; }
         matchedIds.push(img.id);
-        idToMeta[img.id] = { offer: cfNormOffer(offer), rank: cfSizeRank(img.filename) };
+        idToMeta[img.id] = { offer: cfNormOffer(offer), rank: cfSizeRank(img.filename), filename: img.filename };
       });
 
       const signed = await cfSignIds(matchedIds);
@@ -5188,10 +5546,14 @@ function cfLoadPreviews() {
       Object.keys(signed).forEach(id => {
         const meta = idToMeta[id];
         if (!meta) return;
-        (ranked[meta.offer] = ranked[meta.offer] || []).push({ url: signed[id], rank: meta.rank });
+        (ranked[meta.offer] = ranked[meta.offer] || [])
+          .push({ url: signed[id], rank: meta.rank, filename: meta.filename });
       });
       Object.keys(ranked).forEach(key => {
-        byOffer[key] = ranked[key].sort((a, b) => a.rank - b.rank).map(x => x.url);
+        // filename travels alongside the URL so the creative-detail dialog can
+        // show which Cloudflare asset is actually on screen, not just its src.
+        byOffer[key] = ranked[key].sort((a, b) => a.rank - b.rank)
+          .map(x => ({ url: x.url, filename: x.filename }));
       });
       cfPreviewsByOffer = byOffer;
       try {
@@ -5219,7 +5581,66 @@ function cfLoadPreviews() {
 
 function crPreviewSrc(offerName) {
   const arr = cfPreviewsByOffer[cfNormOffer(offerName)];
-  return arr && arr.length ? arr[0] : null;
+  return arr && arr.length ? arr[0].url : null;
+}
+
+/* The file name behind whichever preview is actually on screen — the top-ranked
+   Cloudflare candidate if there is one, else the manually uploaded file. Powers
+   the "Cloudflare File" row in the creative-detail dialog. */
+function crPreviewFilename(offerName) {
+  const key = cfNormOffer(offerName);
+  const arr = cfPreviewsByOffer[key];
+  if (arr && arr.length) return { filename: arr[0].filename, source: 'Cloudflare' };
+  if (mpFilenameByOffer[key]) return { filename: mpFilenameByOffer[key], source: 'Manual upload' };
+  return null;
+}
+
+/* Manual escape hatch for the sessionStorage-cache-hides-a-stale-result trap:
+   without this, un-sticking a bad match required opening devtools and running
+   sessionStorage.removeItem(...) by hand. Drops the cache, forces a live
+   re-fetch, and surfaces the outcome next to the button instead of only in
+   the console. */
+let __crRefreshStatusTimer = null;
+
+function cfForceRefreshPreviews() {
+  const btn    = document.getElementById('crRefreshPreviewsBtn');
+  const status = document.getElementById('crRefreshPreviewsStatus');
+  if (!btn) return;
+
+  try { sessionStorage.removeItem(CF_CACHE_KEY); } catch (_) {}
+  cfPreviewsByOffer = {};
+  _cfLoadP = null;
+
+  clearTimeout(__crRefreshStatusTimer);
+  btn.disabled = true;
+  btn.classList.add('cr-refresh-spinning');
+  if (status) {
+    status.textContent = 'Refreshing…';
+    status.classList.remove('cr-refresh-status-warn');
+  }
+
+  cfLoadPreviews()
+    .then(byOffer => {
+      if (typeof renderCreatives === 'function') renderCreatives();
+      const n = Object.keys(byOffer || {}).length;
+      if (status) {
+        status.textContent = n
+          ? `${n} offer${n === 1 ? '' : 's'} covered`
+          : 'No previews matched — see console for unmatched file names';
+        status.classList.toggle('cr-refresh-status-warn', !n);
+      }
+    })
+    .catch(e => {
+      if (status) {
+        status.textContent = 'Refresh failed — ' + (e && e.message ? e.message : 'see console');
+        status.classList.add('cr-refresh-status-warn');
+      }
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.classList.remove('cr-refresh-spinning');
+      __crRefreshStatusTimer = setTimeout(() => { if (status) status.textContent = ''; }, 8000);
+    });
 }
 
 /* ── Manual preview fallback ─────────────────────────────── */
@@ -5671,6 +6092,8 @@ function mpRenderUnmatched(list) {
     });
   });
 }
+
+document.getElementById('crRefreshPreviewsBtn').addEventListener('click', cfForceRefreshPreviews);
 
 document.getElementById('crUploadBtn').addEventListener('click', () => {
   document.getElementById('crUploadInput').click();
@@ -7332,32 +7755,51 @@ function trLiveQuarterInfo(q) {
    isn't loaded (caller should fall back to the full-quarter comparison). */
 function trGetValClipped(q, mkt, metric, daysLive) {
   const bounds = TR_QUARTER_BOUNDS[q];
-  if (!bounds || !trDailyData.length) return null;
+  const daily  = trDailyRows();
+  if (!bounds || !daily.length) return null;
   const cutoff = trDateAdd(bounds.start, daysLive - 1);
-  let rows = trDailyData.filter(r => r.q === q && r.day >= bounds.start && r.day <= cutoff);
+  let rows = daily.filter(r => r.q === q && r.day >= bounds.start && r.day <= cutoff);
   if (mkt !== 'all') rows = rows.filter(r => r.mkt === mkt);
   return pvAggregate(rows, metric);
 }
 
-let trState   = { metric:'imps', mkt:'all', gran:'quarterly', quarters:['Q1','Q2','Q3'], dateFrom:null, dateTo:null };
+let trState   = { metric:'imps', mkt:'all', gran:'quarterly', quarters:['Q1','Q2','Q3'], version:'all', dateFrom:null, dateTo:null };
 let trDailyData = [];
 let trDailyLoaded = false;
 let trDailyAttempted = false;
 let trTooltipPoints  = []; // set fresh by trBuildSvg on every render
 
+/* Quarter-level pool, AN_STAGES-shaped. With a version selected it's that
+   version's rows rolled up by the same helper the BigQuery loader uses, so
+   trGetVal/trGetValClipped and the summary table stay shape-agnostic. */
+function trStageRows() {
+  return (trState.version !== 'all' && vfLoaded)
+    ? aggStageRawRows(VF_STAGES.filter(r => r.version === trState.version))
+    : AN_STAGES;
+}
+
+/* Day-level pool, trDailyData-shaped. Returns an empty series while the
+   selected version's day-level rows are still in flight — vfEnsureDaily()
+   re-renders when they land. */
+function trDailyRows() {
+  if (trState.version === 'all' || !vfLoaded) return trDailyData;
+  return vfDailyByDay(trState.version);
+}
+
 function trGetVal(q, mkt, metric) {
-  let rows = AN_STAGES;
+  let rows = trStageRows();
   if (q   !== 'all') rows = rows.filter(r => r.q   === q);
   if (mkt !== 'all') rows = rows.filter(r => r.mkt === mkt);
   return pvAggregate(rows, metric);
 }
 
 function trBuildSeries(metric, useDailyData) {
-  if (useDailyData && trDailyData.length) {
+  const daily = trDailyRows();
+  if (useDailyData && daily.length) {
     const mkts  = trState.mkt === 'all' ? ['GM','USH'] : [trState.mkt];
     const colors = { GM:'var(--accent)', USH:'var(--blue)' };
     return mkts.map(mkt => {
-      let rows = trDailyData.filter(r => r.mkt === mkt && trState.quarters.includes(r.q));
+      let rows = daily.filter(r => r.mkt === mkt && trState.quarters.includes(r.q));
       if (trState.dateFrom) rows = rows.filter(r => r.day >= trState.dateFrom);
       if (trState.dateTo)   rows = rows.filter(r => r.day <= trState.dateTo);
       const labels = [...new Set(rows.map(r => r.day))].sort();
@@ -7564,7 +8006,13 @@ function renderMetricPills() {
 
 function renderTrendChart() {
   const m       = TR_METRICS.find(x => x.key === trState.metric);
-  const useDaily = trState.gran === 'daily' && trDailyData.length > 0;
+  /* Every Trends filter handler calls straight into here, so the version
+     dropdown is rescoped and the on-demand day-level fetch kicked off here
+     rather than in renderTrends() — otherwise changing quarter or market
+     would leave the version list showing versions those filters exclude. */
+  vfEnsureDaily(trState.version, true, renderTrendChart);
+  if (vfLoaded) vfPopulateSelect('trVersionFilter', trState.version, trState.quarters, trState.mkt);
+  const useDaily = trState.gran === 'daily' && trDailyRows().length > 0;
   const series  = trBuildSeries(trState.metric, useDaily);
 
   document.getElementById('trChartArea').innerHTML = trBuildSvg(series, m.fmt, m.direction);
@@ -7720,6 +8168,11 @@ document.getElementById('trGranToggle').addEventListener('click', e => {
   document.querySelectorAll('#trGranToggle button').forEach(b => b.classList.toggle('active', b===btn));
   const rangeGroup = document.getElementById('trDateRangeGroup');
   if (rangeGroup) rangeGroup.style.display = trState.gran === 'daily' ? '' : 'none';
+  renderTrendChart();
+});
+
+document.getElementById('trVersionFilter').addEventListener('change', e => {
+  trState.version = e.target.value;
   renderTrendChart();
 });
 
