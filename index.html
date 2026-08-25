@@ -5140,6 +5140,24 @@ function crFilter(rows) {
   );
 }
 
+// The <select> markup ships with a hardcoded, hand-typed list of stage
+// labels (e.g. "1 - Mid Funnel") left over from before BigQuery was wired
+// up. Live rows carry whatever `Segment` actually says in BigQuery (e.g.
+// "Mid Funnel", no number/prefix), so crFilter's strict r.stage === stage
+// check never matched anything except "all". Rebuild the option list from
+// the real distinct stage values instead of trusting the static markup.
+function crPopulateStageFilter() {
+  const sel = document.getElementById('crStageFilter');
+  if (!sel) return;
+  const stages = [...new Set(crGetAll().map(r => r.stage).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+  const keep = stages.includes(crState.stage) ? crState.stage : 'all';
+  sel.innerHTML = '<option value="all">All Stages</option>'
+    + stages.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+  sel.value = keep;
+  crState.stage = keep;
+}
+
 /* ── Sort ────────────────────────────────────────────────── */
 function crSortValue(c, metric) {
   switch (metric) {
@@ -5700,6 +5718,7 @@ function crAddCardHTML() {
 
 /* ── Render ──────────────────────────────────────────────── */
 function renderCreatives() {
+  crPopulateStageFilter();
   const all      = crGetAll();
   const filtered = crFilter(all);
   const sorted   = crSortRows(filtered, crState.sort, crState.sortDir);
