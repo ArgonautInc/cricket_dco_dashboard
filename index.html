@@ -5072,7 +5072,7 @@ function stageShort(s) { return s.replace(/^\d+ - /,''); }
 
 const CF_VARIANT      = 'public';
 const CF_SIGN_TTL_SEC = 7200;                 // 2h — outlives the 1h asset cache
-const CF_CACHE_KEY    = '_cfCricketAssets_v5';
+const CF_CACHE_KEY    = '_cfCricketAssets_v6';
 const CF_CACHE_TTL_MS = 60 * 60 * 1000;
 
 /* The delivery report's version column has been exported under several names.
@@ -5090,11 +5090,32 @@ const CF_VERSION_FIELDS = ['Version Name', 'Version', 'FT Version Name',
    it only affects which candidate is shown first. */
 const CF_SIZE_PREFERENCE = ['300x250', '728x90', '300x600', '160x600', '320x50'];
 
-let cfPreviewsByOffer = {};                   // normalized offer name -> [signedUrl]
+/* Keyed by Segment + Creative Offer Name, not offer name alone: the same offer
+   name is trafficked with different creative per segment (e.g. "Standard
+   Template" in Homepage Visitor is a different asset than "Standard Template"
+   in Cart Abandoner), so grouping by offer alone merged unrelated versions
+   into one bucket and showed whichever one happened to sort first — right
+   file name resolution, wrong card. See cfSegmentOfferKey/cfOfferWildcardKey. */
+let cfPreviewsByOffer = {};                   // composite key (see below) -> [{url, filename}]
 let _cfLoadP          = null;
 
 function cfNormOffer(s) {
   return String(s || '').trim().toLowerCase();
+}
+
+/* The composite grouping/lookup key. Prefixed so it can never collide with
+   the wildcard key below, even if a segment were literally named "*". */
+function cfSegmentOfferKey(stage, offer) {
+  return 's:' + cfNormOffer(stage) + '|' + cfNormOffer(offer);
+}
+
+/* Used only for versions resolved through the OFFER_MAP fallback (see
+   cfVersionOfferMapFromOfferMap), which has no Segment data to key on —
+   matches any card with this offer name regardless of segment, same
+   cross-segment risk this whole scheme exists to avoid. Only reached when
+   deliveries_view exposes none of CF_VERSION_FIELDS at all. */
+function cfOfferWildcardKey(offer) {
+  return 'w:' + cfNormOffer(offer);
 }
 
 /* CF file names carry decoration the Version Name never does: an upload folder
@@ -5156,14 +5177,20 @@ async function cfApi(path, opts) {
 /* Version Name -> Creative Offer Name, straight from the same view the cards
    use. Returns { map, field } so the console line can name the column that
    actually worked; map is empty if none of them did. */
+/* Version Name -> { segment, offer }. Segment comes along for the ride so a
+   version trafficked to Cart Abandoner and a same-named-offer version
+   trafficked to Homepage Visitor resolve to two distinct creatives instead of
+   colliding into one (see cfSegmentOfferKey). Version Name is already
+   segment-specific in Flashtalking — each version belongs to exactly one
+   segment×offer pair — so this is a plain 1:1 lookup, not an aggregation. */
 async function cfFetchVersionOfferMap() {
   for (const field of CF_VERSION_FIELDS) {
     let rows;
     try {
       rows = await bqQuery(`
-        SELECT DISTINCT \`${field}\` as version, \`Creative Offer Name\` as offer
+        SELECT DISTINCT \`${field}\` as version, \`Segment\` as segment, \`Creative Offer Name\` as offer
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
-        WHERE \`${field}\` IS NOT NULL AND \`Creative Offer Name\` IS NOT NULL
+        WHERE \`${field}\` IS NOT NULL AND \`Creative Offer Name\` IS NOT NULL AND \`Segment\` IS NOT NULL
       `);
     } catch (e) {
       continue;                               // column doesn't exist — try the next name
@@ -5171,7 +5198,7 @@ async function cfFetchVersionOfferMap() {
     const map = {};
     (rows || []).forEach(r => {
       const v = String(r.version || '').trim();
-      if (v) map[v] = String(r.offer || '').trim();
+      if (v) map[v] = { segment: String(r.segment || '').trim(), offer: String(r.offer || '').trim() };
     });
     if (Object.keys(map).length) return { map, field };
   }
@@ -5181,7 +5208,14 @@ async function cfFetchVersionOfferMap() {
 /* Fallback bridge when the view exposes no version column: the trafficker
    export the user already uploads maps FT Version Name -> the card's offer
    label, which is the same hop by a different route (see mpResolveOffer).
-   Keyed the same way as the BigQuery map so the caller can't tell them apart. */
+   Keyed the same way as the BigQuery map so the caller can't tell them apart —
+   except segment is always null here. The export's only segment-adjacent
+   column is "Tactic | Segment", a combined free-text field that isn't a
+   reliable match against the clean Segment values deliveries_view uses, so
+   versions resolved this way fall back to the offer-only wildcard key
+   (cfOfferWildcardKey) and carry the same cross-segment risk this whole
+   change exists to fix. Only reached when deliveries_view exposes none of
+   CF_VERSION_FIELDS at all. */
 async function cfVersionOfferMapFromOfferMap() {
   const keys = Object.keys(OFFER_MAP || {});
   if (!keys.length) return {};
@@ -5204,7 +5238,7 @@ async function cfVersionOfferMapFromOfferMap() {
     const label = OFFER_MAP[version];
     const hit = offerNames.find(o =>
       mpNorm(o) === mpNorm(label) || mpNorm(offerLabel(o)) === mpNorm(label));
-    if (hit) map[String(version).trim()] = hit;
+    if (hit) map[String(version).trim()] = { segment: null, offer: hit };
   });
   return map;
 }
@@ -5236,7 +5270,7 @@ async function cfVersionOfferMapFromOfferMap() {
 const VF_DATE_FIELDS = ['Date Breakdown', 'Date', 'Report Date', 'Day'];
 
 let VF_FIELD            = null;   // version column that exists in the view
-let VF_OFFER_BY_VERSION = {};     // version name -> Creative Offer Name
+let VF_OFFER_BY_VERSION = {};     // version name -> { segment, offer } (see cfFetchVersionOfferMap)
 let VF_STAGES           = [];     // q, mkt, stage, creative, version + raw counts
 let VF_DATE_FIELD       = null;   // date column that worked for the daily fetch
 let vfLoaded            = false;
@@ -5435,7 +5469,8 @@ function vfVersionGroups(qs, mkt) {
     if (qs && !qs.includes(r.q)) return;
     if (mkt && mkt !== 'all' && r.mkt !== mkt) return;
     if (!offerOf.has(r.version)) {
-      offerOf.set(r.version, VF_OFFER_BY_VERSION[r.version] || r.creative || '');
+      const mapped = VF_OFFER_BY_VERSION[r.version];
+      offerOf.set(r.version, (mapped && mapped.offer) || r.creative || '');
     }
   });
   const groups = new Map();
@@ -5526,7 +5561,7 @@ function cfLoadPreviews() {
     if (cached && Date.now() - cached._ts < CF_CACHE_TTL_MS && cached.byOffer) {
       cfPreviewsByOffer = cached.byOffer;
       const n = Object.keys(cached.byOffer).length;
-      console.log(`[CF] Previews from cache — ${n} offer${n === 1 ? '' : 's'} covered ` +
+      console.log(`[CF] Previews from cache — ${n} segment/offer combo${n === 1 ? '' : 's'} covered ` +
                   `(sessionStorage, ${Math.round((Date.now() - cached._ts) / 60000)}m old). ` +
                   `Run sessionStorage.removeItem('${CF_CACHE_KEY}') and reload to force a fresh fetch.`);
       return Promise.resolve(cfPreviewsByOffer);
@@ -5555,26 +5590,28 @@ function cfLoadPreviews() {
       /* Lowercased for matching; longest first so the most specific Version
          wins when one prefixes another. */
       const index = Object.keys(versionToOffer)
-        .map(v => ({ key: v.toLowerCase(), offer: versionToOffer[v] }))
+        .map(v => ({ key: v.toLowerCase(), segment: versionToOffer[v].segment, offer: versionToOffer[v].offer }))
         .sort((a, b) => b.key.length - a.key.length);
       const exact = {};
-      index.forEach(e => { if (!(e.key in exact)) exact[e.key] = e.offer; });
+      index.forEach(e => { if (!(e.key in exact)) exact[e.key] = e; });
 
-      const byOffer    = {};
+      const byOffer    = {};   // composite key (cfSegmentOfferKey/cfOfferWildcardKey) -> candidates
       const matchedIds = [];
       const idToMeta   = {};
       const unmatched  = [];
 
       images.forEach(img => {
         const fname = cfNormFilename(img.filename);
-        let offer = exact[fname];                        // exact hit, cheap path
-        if (!offer) {
-          const e = index.find(x => cfFilenameMatchesVersion(fname, x.key));
-          if (e) offer = e.offer;
+        let entry = exact[fname];                        // exact hit, cheap path
+        if (!entry) {
+          entry = index.find(x => cfFilenameMatchesVersion(fname, x.key));
         }
-        if (!offer) { unmatched.push(img.filename); return; }
+        if (!entry) { unmatched.push(img.filename); return; }
         matchedIds.push(img.id);
-        idToMeta[img.id] = { offer: cfNormOffer(offer), rank: cfSizeRank(img.filename), filename: img.filename };
+        const groupKey = entry.segment
+          ? cfSegmentOfferKey(entry.segment, entry.offer)
+          : cfOfferWildcardKey(entry.offer);
+        idToMeta[img.id] = { groupKey, rank: cfSizeRank(img.filename), filename: img.filename };
       });
 
       const signed = await cfSignIds(matchedIds);
@@ -5582,7 +5619,7 @@ function cfLoadPreviews() {
       Object.keys(signed).forEach(id => {
         const meta = idToMeta[id];
         if (!meta) return;
-        (ranked[meta.offer] = ranked[meta.offer] || [])
+        (ranked[meta.groupKey] = ranked[meta.groupKey] || [])
           .push({ url: signed[id], rank: meta.rank, filename: meta.filename });
       });
       Object.keys(ranked).forEach(key => {
@@ -5597,7 +5634,7 @@ function cfLoadPreviews() {
       } catch (_) {}
 
       console.log(`[CF] Previews ready — ${images.length} assets, ${matchedIds.length} matched, ` +
-                  `${Object.keys(byOffer).length} offers covered ` +
+                  `${Object.keys(byOffer).length} segment/offer combos covered ` +
                   `(versions from ${source}, ${index.length} known)`);
       if (unmatched.length) {
         console.warn(`[CF] ${unmatched.length} asset(s) matched no Version Name, e.g.`,
@@ -5615,19 +5652,32 @@ function cfLoadPreviews() {
   return _cfLoadP;
 }
 
-function crPreviewSrc(offerName) {
-  const arr = cfPreviewsByOffer[cfNormOffer(offerName)];
-  return arr && arr.length ? arr[0].url : null;
+/* Segment-scoped lookup first (the normal, correctly-disambiguated case),
+   falling back to the wildcard bucket only for versions resolved through the
+   OFFER_MAP fallback (no segment data — see cfVersionOfferMapFromOfferMap). */
+function cfPreviewCandidates(offerName, stage) {
+  const scoped = cfPreviewsByOffer[cfSegmentOfferKey(stage, offerName)];
+  if (scoped && scoped.length) return scoped;
+  const wild = cfPreviewsByOffer[cfOfferWildcardKey(offerName)];
+  return (wild && wild.length) ? wild : null;
+}
+
+function crPreviewSrc(offerName, stage) {
+  const arr = cfPreviewCandidates(offerName, stage);
+  return arr ? arr[0].url : null;
 }
 
 /* The file name behind whichever preview is actually on screen — the top-ranked
    Cloudflare candidate if there is one, else the manually uploaded file. Powers
    the "Cloudflare File" row in the creative-detail dialog. */
-function crPreviewFilename(offerName) {
-  const key = cfNormOffer(offerName);
-  const arr = cfPreviewsByOffer[key];
-  if (arr && arr.length) return { filename: arr[0].filename, source: 'Cloudflare' };
-  if (mpFilenameByOffer[key]) return { filename: mpFilenameByOffer[key], source: 'Manual upload' };
+function crPreviewFilename(offerName, stage) {
+  const arr = cfPreviewCandidates(offerName, stage);
+  if (arr) return { filename: arr[0].filename, source: 'Cloudflare' };
+  // Manual uploads aren't segment-scoped (mpResolveOffer matches on offer name
+  // text alone), so this leg carries the same cross-segment risk the
+  // Cloudflare path above no longer has.
+  const mpKey = cfNormOffer(offerName);
+  if (mpFilenameByOffer[mpKey]) return { filename: mpFilenameByOffer[mpKey], source: 'Manual upload' };
   return null;
 }
 
@@ -5661,7 +5711,7 @@ function cfForceRefreshPreviews() {
       const n = Object.keys(byOffer || {}).length;
       if (status) {
         status.textContent = n
-          ? `${n} offer${n === 1 ? '' : 's'} covered`
+          ? `${n} segment/offer combo${n === 1 ? '' : 's'} covered`
           : 'No previews matched — see console for unmatched file names';
         status.classList.toggle('cr-refresh-status-warn', !n);
       }
@@ -5687,7 +5737,10 @@ function cfForceRefreshPreviews() {
    (600x500), which blows the ~5MB localStorage quota outright. IndexedDB also
    stores the Blobs as-is, so nothing is re-encoded and quality is preserved.
 
-   Keyed by normalized Creative Offer Name, matching cfPreviewsByOffer. */
+   Keyed by normalized Creative Offer Name only — not segment-scoped like
+   cfPreviewsByOffer, since mpResolveOffer matches purely on offer-name text.
+   A manually uploaded preview is shared across every segment that offer
+   appears in until Cloudflare has a segment-scoped match for that card. */
 
 const MP_DB = 'crkt-previews', MP_STORE = 'manual';
 
@@ -5862,7 +5915,7 @@ function crThumbContent(c) {
   }
   const fallback = crThumbFallback(c.mkt, c.q, c.stage, null);
   // Cloudflare takes precedence; the manual upload is the fallback beneath it
-  const src      = crPreviewSrc(c.creative) || mpByOffer[cfNormOffer(c.creative)] || null;
+  const src      = crPreviewSrc(c.creative, c.stage) || mpByOffer[cfNormOffer(c.creative)] || null;
   if (!src) return fallback;
 
   // Placeholder renders underneath; crWireCards drops the img if the file 404s
@@ -6034,7 +6087,7 @@ function crOpenDetail(id) {
     <span class="creative-stage-label">${esc(c.stage)}</span>
   `;
 
-  const fileMeta = crPreviewFilename(c.creative);
+  const fileMeta = crPreviewFilename(c.creative, c.stage);
   document.getElementById('crDetailFileRow').innerHTML = fileMeta
     ? `<span class="cr-detail-file-tag">${esc(fileMeta.source)} file</span> ${esc(fileMeta.filename)}`
     : `<span class="cr-detail-file-tag">Preview</span> No matched file — showing placeholder`;
@@ -6160,7 +6213,7 @@ async function mpImportFiles(fileList) {
     `<strong>${images.length}</strong> image${images.length !== 1 ? 's' : ''} read · ` +
     `<strong>${matched.length}</strong> matched to a creative · ` +
     `<strong>${mpPending.length}</strong> unmatched.` +
-    (cfCount ? ` Cloudflare currently covers ${cfCount} creative${cfCount !== 1 ? 's' : ''} and takes precedence over these.` : '');
+    (cfCount ? ` Cloudflare currently covers ${cfCount} segment/offer combo${cfCount !== 1 ? 's' : ''} and takes precedence over these.` : '');
 
   mpRenderUnmatched(mpPending);
 }
