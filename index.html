@@ -2778,7 +2778,7 @@ async function loadBigQueryData() {
         GROUP BY \`Flight\`, mkt
       `),
       bqQuery(`
-        SELECT \`Flight\` as quarter, \`Segment\` as stage,
+        SELECT \`Flight\` as quarter, TRIM(\`Segment\`) as stage,
           CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
           SUM(\`Total Ads Requested\`) as imps,
           SUM(\`Clicks\`) as clicks,
@@ -2790,14 +2790,14 @@ async function loadBigQueryData() {
           ) as lpvr
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
         WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
-        GROUP BY \`Flight\`, \`Segment\`, mkt
+        GROUP BY \`Flight\`, stage, mkt
         ORDER BY \`Flight\`, imps DESC
       `),
       bqQuery(`
         SELECT
           \`Flight\` as q,
           CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
-          \`Segment\` as stage,
+          TRIM(\`Segment\`) as stage,
           SAFE_DIVIDE(SUM(\`Total Ads Requested\`), NULLIF(SUM(\`Cookie ID Reach: Total Ad Reach\`), 0)) as freq,
           SUM(\`Total Ads Requested\`) as imps,
           SUM(\`Clicks\`) as clicks,
@@ -2821,7 +2821,7 @@ async function loadBigQueryData() {
         SELECT
           \`Flight\` as q,
           CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
-          \`Segment\` as stage,
+          TRIM(\`Segment\`) as stage,
           \`Creative Offer Name\` as creative,
           ARRAY_TO_STRING(ARRAY_AGG(DISTINCT CAST(\`Version ID\` AS STRING) IGNORE NULLS LIMIT 500), ' ') as versionIds,
           ARRAY_TO_STRING(ARRAY_AGG(DISTINCT CAST(\`Creative ID\` AS STRING) IGNORE NULLS LIMIT 100), ' ') as creativeIds,
@@ -2961,7 +2961,7 @@ async function tryLoadStageCreativeDailyData() {
             CAST(\`${field}\` AS STRING) as day,
             \`Flight\` as q,
             CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
-            \`Segment\` as stage,
+            TRIM(\`Segment\`) as stage,
             SUM(\`Total Ads Requested\`) as imps,
             SUM(\`Clicks\`) as clicks,
             SUM(\`CKT_bNON_HISPANIC_ORDER Count\`) as gmOrdCount,
@@ -2979,7 +2979,7 @@ async function tryLoadStageCreativeDailyData() {
             CAST(\`${field}\` AS STRING) as day,
             \`Flight\` as q,
             CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
-            \`Segment\` as stage,
+            TRIM(\`Segment\`) as stage,
             \`Creative Offer Name\` as creative,
             SUM(\`Total Ads Requested\`) as imps,
             SUM(\`Clicks\`) as clicks,
@@ -5579,7 +5579,7 @@ async function vfLoadVersionData() {
       SELECT
         \`Flight\` as q,
         CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
-        \`Segment\` as stage,
+        TRIM(\`Segment\`) as stage,
         \`Creative Offer Name\` as creative,
         \`${VF_FIELD}\` as version,${VF_METRIC_COLS}
       FROM \`crk-dco-dash.reporting_data.deliveries_view\`
@@ -5614,7 +5614,7 @@ async function vfFetchVersionDaily(version) {
           CAST(\`${dateField}\` AS STRING) as day,
           \`Flight\` as q,
           CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
-          \`Segment\` as stage,
+          TRIM(\`Segment\`) as stage,
           \`Creative Offer Name\` as creative,${VF_METRIC_COLS}
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
         WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
