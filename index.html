@@ -2,6 +2,22 @@
 <html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8"/>
+<script>
+/* This app is reached two ways: proxied under /dco on the main domain
+   (vercel.json's rewrite there — crk.argocreativetools.com/dco), or directly
+   on this project's own domain. Vercel's rewrite preserves the browser's
+   visible URL, so a relative reference resolves against whatever the address
+   bar actually shows — and "/dco" (no trailing slash) is a *file* in URL
+   terms, so a plain relative path like "api/whoami" resolves to the domain
+   ROOT, not "/dco/api/whoami". This <base> makes every relative reference in
+   the document (img src, and every fetch() call that uses a relative path
+   rather than a leading slash) resolve correctly in both cases. Deliberately
+   NOT applied to the handful of intentionally-absolute paths (e.g. signOut's
+   call to /api/session, which lives on the main project, not this one). */
+document.write('<base href="' +
+  ((location.pathname === '/dco' || location.pathname.indexOf('/dco/') === 0) ? '/dco/' : '/') +
+  '">');
+</script>
 <title>Cricket DCO Dashboard</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='16' fill='%230d0d0d'/><text x='16' y='22' text-anchor='middle' font-family='Poppins,Arial,sans-serif' font-weight='800' font-size='19' fill='%235BC500'>C</text></svg>"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -2715,7 +2731,7 @@ function signOut() {
 
 /* ── BigQuery query helper — proxied through api/bq-query.js ── */
 async function bqQuery(sql) {
-  const res = await fetch('/api/bq-query', {
+  const res = await fetch('api/bq-query', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sql }),
@@ -2727,14 +2743,14 @@ async function bqQuery(sql) {
 
 /* ── Cloud Storage helpers — proxied through api/gcs-list.js / gcs-fetch.js ── */
 async function gcsListObjects(prefix = '') {
-  const res = await fetch('/api/gcs-list' + (prefix ? `?prefix=${encodeURIComponent(prefix)}` : ''));
+  const res = await fetch('api/gcs-list' + (prefix ? `?prefix=${encodeURIComponent(prefix)}` : ''));
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || 'Cloud Storage list failed');
   return data;
 }
 
 async function gcsFetchObject(name) {
-  const res = await fetch('/api/gcs-fetch?name=' + encodeURIComponent(name));
+  const res = await fetch('api/gcs-fetch?name=' + encodeURIComponent(name));
   if (!res.ok) throw new Error(`Cloud Storage fetch failed (${res.status})`);
   const ext = name.split('.').pop().toLowerCase();
   return ext === 'csv' ? res.text() : res.arrayBuffer();
@@ -3589,7 +3605,7 @@ async function bootDataLoad(onDataReady) {
 async function loadIdentity() {
   let res, data;
   try {
-    res = await fetch('/api/whoami');
+    res = await fetch('api/whoami');
     data = await res.json();
   } catch (e) {
     showAuthError('Could not reach the sign-in service. Please refresh.');
@@ -5758,7 +5774,7 @@ async function cfFetchImages() {
   let token = null;
   do {
     const qs = 'per_page=200' + (token ? '&continuation_token=' + encodeURIComponent(token) : '');
-    const d  = await cfApi('/api/cf-images?' + qs);
+    const d  = await cfApi('api/cf-images?' + qs);
     if (!d.success) { console.warn('[CF] Images API error', d.errors); break; }
     (d.result && d.result.images ? d.result.images : []).forEach(img => {
       out.push({ id: img.id, filename: img.filename || img.id });
@@ -5770,7 +5786,7 @@ async function cfFetchImages() {
 
 async function cfSignIds(ids) {
   if (!ids.length) return {};
-  const d = await cfApi('/api/cf-sign-images', {
+  const d = await cfApi('api/cf-sign-images', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ ids, variant: CF_VARIANT, ttl: CF_SIGN_TTL_SEC }),
