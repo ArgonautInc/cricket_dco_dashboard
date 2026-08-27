@@ -28,8 +28,15 @@ function loginOrigin() {
     'https://crk.argocreativetools.com';
 }
 
+// /api/* is deliberately excluded: those routes verify the same cookie
+// themselves (api/_auth.js) and return a proper 401 JSON body. Gating them
+// here too used to mean an expired/missing cookie made this middleware
+// 307-redirect a fetch('/api/whoami') call to an absolute cross-origin URL —
+// which the browser's CORS check kills, throwing a network error instead of
+// the intended 401 the client can act on. A redirect was never the right
+// response shape for a fetch()-based API call anyway.
 export const config = {
-  matcher: ['/((?!favicon.ico).*)'],
+  matcher: ['/((?!api/|favicon.ico).*)'],
 };
 
 export default async function middleware(request) {
