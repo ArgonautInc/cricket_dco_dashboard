@@ -3627,11 +3627,19 @@ async function loadIdentity() {
   CURRENT_USER = user;
 
   /* Reveals the app only once BigQuery data is in, so the shell never
-     flashes static placeholder numbers. Deferred to DOMContentLoaded because
-     loadIdentity() can resolve during parse, while the loading-overlay
-     module (showLoading et al.) is further down the document. */
-  document.addEventListener('DOMContentLoaded',
-    () => bootDataLoad(() => onAuthSuccess(user)));
+     flashes static placeholder numbers. Needs the loading-overlay module
+     (showLoading et al., further down the document) to exist first — but
+     loadIdentity() awaited a network round trip to get here, so by now
+     DOMContentLoaded has almost certainly already fired; addEventListener-ing
+     for an event that already happened never calls back. Call directly once
+     the document is done parsing, and only fall back to the listener if it
+     genuinely hasn't finished yet. */
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded',
+      () => bootDataLoad(() => onAuthSuccess(user)), { once: true });
+  } else {
+    bootDataLoad(() => onAuthSuccess(user));
+  }
   autoLoadCloudOfferMap();
 }
 
