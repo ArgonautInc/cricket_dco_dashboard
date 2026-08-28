@@ -2,6 +2,22 @@
 <html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8"/>
+<script>
+/* This app is reached two ways: proxied under /dco on the main domain
+   (vercel.json's rewrite there — crk.argocreativetools.com/dco), or directly
+   on this project's own domain. Vercel's rewrite preserves the browser's
+   visible URL, so a relative reference resolves against whatever the address
+   bar actually shows — and "/dco" (no trailing slash) is a *file* in URL
+   terms, so a plain relative path like "api/whoami" resolves to the domain
+   ROOT, not "/dco/api/whoami". This <base> makes every relative reference in
+   the document (img src, and every fetch() call that uses a relative path
+   rather than a leading slash) resolve correctly in both cases. Deliberately
+   NOT applied to the handful of intentionally-absolute paths (e.g. signOut's
+   call to /api/session, which lives on the main project, not this one). */
+document.write('<base href="' +
+  ((location.pathname === '/dco' || location.pathname.indexOf('/dco/') === 0) ? '/dco/' : '/') +
+  '">');
+</script>
 <title>Cricket DCO Dashboard</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='16' fill='%230d0d0d'/><text x='16' y='22' text-anchor='middle' font-family='Poppins,Arial,sans-serif' font-weight='800' font-size='19' fill='%235BC500'>C</text></svg>"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -10,7 +26,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://accounts.google.com/gsi/client" async></script>
 <script>
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('jsErrBanner');
@@ -1574,7 +1589,11 @@ body.compact .chart-card      { padding: 14px 16px; }
 
 <!-- ═══════════════════════════════════════════════════════════
      MODULE 1 — AUTH OVERLAY
-     Shows before the main app. Hidden on successful login.
+     Shows briefly while /api/whoami resolves the signed-in identity from the
+     shared crk_access cookie, and — rarely — if that cookie has expired
+     mid-session (the normal case is handled upstream: middleware.js blocks
+     an unauthenticated request from ever reaching this page at all).
+     Hidden once identity resolves.
      ═══════════════════════════════════════════════════════════ -->
 <div id="authOverlay">
   <div class="auth-card">
@@ -1587,23 +1606,12 @@ body.compact .chart-card      { padding: 14px 16px; }
       </div>
     </div>
 
-    <div class="auth-title">Welcome back!</div>
+    <div class="auth-title">Signing you in…</div>
 
     <div class="auth-error" id="loginError"></div>
 
-    <button type="button" class="auth-btn" id="googleSignInBtn" style="display:flex;align-items:center;justify-content:center;gap:10px;">
-      <svg width="18" height="18" viewBox="0 0 18 18" style="flex-shrink:0">
-        <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"/>
-        <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"/>
-        <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"/>
-        <path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"/>
-      </svg>
-      Sign in with Google
-    </button>
-
     <div class="auth-footer">
-      Argonaut · Cricket Wireless DCO<br/>
-      Sign in with your @argonautinc.com Google account.
+      Argonaut · Cricket Wireless DCO
     </div>
   </div>
 </div>
@@ -2678,23 +2686,14 @@ class SvgIcon extends HTMLElement {
 }
 customElements.define('svg-icon', SvgIcon);
 
-/* ── Google OAuth + BigQuery config ─────────────────────── */
-const GOOGLE_CLIENT_ID = '625036036670-tk3t8mmoah5l9gjq1a6rkl0vqbtqj0od.apps.googleusercontent.com';
-const BQ_PROJECT       = 'crk-dco-dash';
-const BQ_SCOPE         = 'https://www.googleapis.com/auth/bigquery.readonly';
-const GCS_SCOPE        = 'https://www.googleapis.com/auth/devstorage.read_only';
-/* Basic, non-sensitive scopes — needed so /oauth2/v3/userinfo actually
-   returns name/email. Without these the endpoint returns neither field
-   at all (not just a missing name), which is why every sign-in has been
-   silently treated as role:'viewer' regardless of the account's real
-   email. */
-const IDENTITY_SCOPE   = 'email profile';
-const GCS_BUCKET       = 'crk-dco-bucket-daily-performance';
+/* ── Identity + data config ──────────────────────────────── */
+// BigQuery/Cloud Storage access moved server-side (api/bq-query.js,
+// api/gcs-list.js, api/gcs-fetch.js) behind a GCP service account, so the
+// browser no longer holds any Google credential — identity comes entirely
+// from the shared crk_access cookie (api/whoami.js), same login as the rest
+// of the site. GCS_REPORTS_PREFIX stays here; it's just a query param value
+// this app passes to gcsListObjects(), not a credential.
 const GCS_REPORTS_PREFIX = 'reports/';
-const SESSION_KEY      = 'crkt_gsession';
-
-let ACCESS_TOKEN = null;
-let tokenClient  = null;
 
 /* ── Global: current user accessible to all modules ─────── */
 let CURRENT_USER = null;
@@ -2705,9 +2704,6 @@ function showAuthError(msg) {
   el.textContent = msg;
   el.classList.add('visible');
 }
-function hideAuthError() {
-  document.getElementById('loginError').classList.remove('visible');
-}
 
 /** Called after successful auth — hides overlay, shows app */
 function onAuthSuccess(user) {
@@ -2716,55 +2712,35 @@ function onAuthSuccess(user) {
   if (typeof window.__onAuth === 'function') window.__onAuth(user);
 }
 
-/** Sign out */
+/** Sign out — clears the shared cookie (same call the main site's own sign-out
+    makes) and returns to the splash page, which owns the actual login. */
 function signOut() {
-  sessionStorage.removeItem(SESSION_KEY);
   localStorage.removeItem('crkt_pw_hash');
-  if (ACCESS_TOKEN && typeof google !== 'undefined') {
-    try { google.accounts.oauth2.revoke(ACCESS_TOKEN); } catch (e) { console.warn('Token revoke failed:', e); }
-  }
-  ACCESS_TOKEN = null;
-  location.reload();
+  fetch('/api/session', { method: 'DELETE' }).finally(() => { location.href = '/'; });
 }
 
-/* ── BigQuery query helper ───────────────────────────────── */
+/* ── BigQuery query helper — proxied through api/bq-query.js ── */
 async function bqQuery(sql) {
-  const res = await fetch(
-    `https://bigquery.googleapis.com/bigquery/v2/projects/${BQ_PROJECT}/queries`,
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: sql, useLegacySql: false, location: 'US', timeoutMs: 30000 })
-    }
-  );
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  if (!data.rows) return [];
-  const fields = data.schema.fields.map(f => f.name);
-  return data.rows.map(row => {
-    const obj = {};
-    row.f.forEach((cell, i) => { obj[fields[i]] = cell.v; });
-    return obj;
+  const res = await fetch('api/bq-query', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sql }),
   });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || 'BigQuery query failed');
+  return data.rows;
 }
 
-/* ── Cloud Storage helpers (crk-dco-bucket-daily-performance) ── */
+/* ── Cloud Storage helpers — proxied through api/gcs-list.js / gcs-fetch.js ── */
 async function gcsListObjects(prefix = '') {
-  const url = `https://storage.googleapis.com/storage/v1/b/${GCS_BUCKET}/o?maxResults=500` +
-    (prefix ? `&prefix=${encodeURIComponent(prefix)}` : '');
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } });
+  const res = await fetch('api/gcs-list' + (prefix ? `?prefix=${encodeURIComponent(prefix)}` : ''));
   const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  return (data.items || [])
-    .filter(o => /\.(csv|xlsx|xls)$/i.test(o.name))
-    .sort((a, b) => new Date(b.updated) - new Date(a.updated));
+  if (!res.ok || data.error) throw new Error(data.error || 'Cloud Storage list failed');
+  return data;
 }
 
 async function gcsFetchObject(name) {
-  const res = await fetch(
-    `https://storage.googleapis.com/storage/v1/b/${GCS_BUCKET}/o/${encodeURIComponent(name)}?alt=media`,
-    { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } }
-  );
+  const res = await fetch('api/gcs-fetch?name=' + encodeURIComponent(name));
   if (!res.ok) throw new Error(`Cloud Storage fetch failed (${res.status})`);
   const ext = name.split('.').pop().toLowerCase();
   return ext === 'csv' ? res.text() : res.arrayBuffer();
@@ -2792,7 +2768,7 @@ async function loadBigQueryData() {
         GROUP BY \`Flight\`, mkt
       `),
       bqQuery(`
-        SELECT \`Flight\` as quarter, \`Segment\` as stage,
+        SELECT \`Flight\` as quarter, TRIM(\`Segment\`) as stage,
           CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
           SUM(\`Total Ads Requested\`) as imps,
           SUM(\`Clicks\`) as clicks,
@@ -2804,14 +2780,14 @@ async function loadBigQueryData() {
           ) as lpvr
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
         WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
-        GROUP BY \`Flight\`, \`Segment\`, mkt
+        GROUP BY \`Flight\`, stage, mkt
         ORDER BY \`Flight\`, imps DESC
       `),
       bqQuery(`
         SELECT
           \`Flight\` as q,
           CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
-          \`Segment\` as stage,
+          TRIM(\`Segment\`) as stage,
           SAFE_DIVIDE(SUM(\`Total Ads Requested\`), NULLIF(SUM(\`Cookie ID Reach: Total Ad Reach\`), 0)) as freq,
           SUM(\`Total Ads Requested\`) as imps,
           SUM(\`Clicks\`) as clicks,
@@ -2835,7 +2811,7 @@ async function loadBigQueryData() {
         SELECT
           \`Flight\` as q,
           CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
-          \`Segment\` as stage,
+          TRIM(\`Segment\`) as stage,
           \`Creative Offer Name\` as creative,
           ARRAY_TO_STRING(ARRAY_AGG(DISTINCT CAST(\`Version ID\` AS STRING) IGNORE NULLS LIMIT 500), ' ') as versionIds,
           ARRAY_TO_STRING(ARRAY_AGG(DISTINCT CAST(\`Creative ID\` AS STRING) IGNORE NULLS LIMIT 100), ' ') as creativeIds,
@@ -2963,7 +2939,7 @@ let anDailyLoaded    = false;
 let anDailyAttempted = false;
 
 async function tryLoadStageCreativeDailyData() {
-  if (!ACCESS_TOKEN || anDailyAttempted) return;
+  if (!CURRENT_USER || anDailyAttempted) return;
   anDailyAttempted = true;
   const dateFields = ['Date Breakdown', 'Date', 'Report Date', 'Day'];
 
@@ -2975,7 +2951,7 @@ async function tryLoadStageCreativeDailyData() {
             CAST(\`${field}\` AS STRING) as day,
             \`Flight\` as q,
             CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
-            \`Segment\` as stage,
+            TRIM(\`Segment\`) as stage,
             SUM(\`Total Ads Requested\`) as imps,
             SUM(\`Clicks\`) as clicks,
             SUM(\`CKT_bNON_HISPANIC_ORDER Count\`) as gmOrdCount,
@@ -2993,7 +2969,7 @@ async function tryLoadStageCreativeDailyData() {
             CAST(\`${field}\` AS STRING) as day,
             \`Flight\` as q,
             CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
-            \`Segment\` as stage,
+            TRIM(\`Segment\`) as stage,
             \`Creative Offer Name\` as creative,
             SUM(\`Total Ads Requested\`) as imps,
             SUM(\`Clicks\`) as clicks,
@@ -3544,11 +3520,7 @@ function applyManualPerformanceData() {
 }
 
 /* Derives avatar initials from a display name, falling back to the first
-   letter of the email when a first+last initial can't be determined (e.g.
-   Google's userinfo endpoint returns no `name` at all unless the OAuth
-   scope includes 'profile' — this app only requests BigQuery/Storage
-   scopes, so `name` is often empty and the email fallback is the common
-   case, not just an edge case). */
+   letter of the email when a first+last initial can't be determined. */
 function computeInitials(name, email) {
   const parts = (name || '').trim().split(/\s+/).filter(Boolean);
   if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -3614,94 +3586,54 @@ async function bootDataLoad(onDataReady) {
   }
 }
 
-/* ── Google OAuth token handler ─────────────────────────── */
-async function handleGoogleToken(resp) {
-  if (resp.error) {
-    showAuthError('Google sign-in failed. Please try again.');
+/* ── Bootstrap: resolve identity from the shared crk_access cookie ──
+   Replaces the old Google Sign-In flow. middleware.js already blocks an
+   unauthenticated request from ever reaching this page at all, so the
+   failure branch below is rare defense-in-depth (e.g. the cookie expiring
+   mid-session) rather than the normal path — there is no interactive login
+   here any more, just identity resolution. */
+async function loadIdentity() {
+  let res, data;
+  try {
+    res = await fetch('api/whoami');
+    data = await res.json();
+  } catch (e) {
+    showAuthError('Could not reach the sign-in service. Please refresh.');
     return;
   }
-  ACCESS_TOKEN = resp.access_token;
 
-  let info;
-  try {
-    info = await fetch('https://www.googleapis.com/oauth2/v3/userinfo',
-      { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }}).then(r => r.json());
-  } catch(e) {
-    showAuthError('Could not retrieve user info. Please try again.');
+  if (!res.ok) {
+    showAuthError('Session expired — redirecting to sign in…');
+    setTimeout(() => { location.href = data.next || '/'; }, 800);
     return;
   }
 
   const user = {
-    email:    info.email,
-    name:     info.name || info.email,
-    initials: computeInitials(info.name, info.email),
-    role:     (info.email||'').toLowerCase().endsWith('@argonautinc.com') ? 'admin' : 'viewer',
+    email:    data.email,
+    name:     data.name || data.email,
+    initials: computeInitials(data.name, data.email),
+    role:     (data.email || '').toLowerCase().endsWith('@argonautinc.com') ? 'admin' : 'viewer',
   };
-
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify({
-    ...user, token: ACCESS_TOKEN,
-    expires: Date.now() + ((resp.expires_in || 3600) * 1000)
-  }));
-
   CURRENT_USER = user;
-  onAuthSuccess(user);
-  bootDataLoad();
+
+  /* Reveals the app only once BigQuery data is in, so the shell never
+     flashes static placeholder numbers. Needs the loading-overlay module
+     (showLoading et al., further down the document) to exist first — but
+     loadIdentity() awaited a network round trip to get here, so by now
+     DOMContentLoaded has almost certainly already fired; addEventListener-ing
+     for an event that already happened never calls back. Call directly once
+     the document is done parsing, and only fall back to the listener if it
+     genuinely hasn't finished yet. */
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded',
+      () => bootDataLoad(() => onAuthSuccess(user)), { once: true });
+  } else {
+    bootDataLoad(() => onAuthSuccess(user));
+  }
   autoLoadCloudOfferMap();
 }
 
-/* ── Init Google OAuth token client ─────────────────────── */
-function initGoogleAuth() {
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope:     `${BQ_SCOPE} ${GCS_SCOPE} ${IDENTITY_SCOPE}`,
-    callback:  handleGoogleToken,
-  });
-  document.getElementById('googleSignInBtn').addEventListener('click', () => {
-    hideAuthError();
-    // 'consent' forces Google to re-show the scope grant screen instead of
-    // silently reusing a prior (narrower) grant — needed whenever we add a
-    // new scope, e.g. adding Cloud Storage access alongside BigQuery.
-    tokenClient.requestAccessToken({ prompt: 'consent select_account' });
-  });
-}
-
-/* ── Bootstrap: check existing session or wait for GSI ──── */
-(function bootstrap() {
-  const raw = sessionStorage.getItem(SESSION_KEY);
-  if (raw) {
-    try {
-      const sess = JSON.parse(raw);
-      if (sess.expires > Date.now()) {
-        ACCESS_TOKEN = sess.token;
-        const user = { email: sess.email, name: sess.name, initials: sess.initials, role: sess.role };
-        CURRENT_USER = user;
-        /* Restore path reveals the app only once BigQuery data is in, so the
-           shell never flashes static placeholder numbers. Deferred to
-           DOMContentLoaded because bootstrap() runs during parse, while the
-           loading-overlay module (showLoading et al.) is further down the
-           document — the network work was already async, so nothing is lost. */
-        document.addEventListener('DOMContentLoaded',
-          () => bootDataLoad(() => onAuthSuccess(user)));
-        autoLoadCloudOfferMap();
-        return;
-      }
-    } catch(e) {}
-    sessionStorage.removeItem(SESSION_KEY);
-  }
-
-  // GSI may load async — retry a few times
-  let attempts = 0;
-  const waitForGSI = setInterval(() => {
-    attempts++;
-    if (typeof google !== 'undefined' && google.accounts) {
-      clearInterval(waitForGSI);
-      initGoogleAuth();
-    } else if (attempts > 20) {
-      clearInterval(waitForGSI);
-      showAuthError('Google Sign-In could not load. Please refresh the page.');
-    }
-  }, 200);
-})();
+loadIdentity();
 
 /* ═══════════════════════════════════════════════════════════
    MODULE 2 JS — App Shell: routing, topbar, theme
@@ -3791,19 +3723,20 @@ window.__onAuth = function(user) {
   if (__shellWired) return;
   __shellWired = true;
 
-  /* Cloudflare previews need the Google token (the proxy routes verify it), so
-     they can only start once we're authed. Re-render when they land — cards
-     show placeholders until then rather than blocking the tab. */
+  /* Cloudflare previews need the crk_access cookie (the proxy routes verify
+     it), so they can only start once we're authed. Re-render when they
+     land — cards show placeholders until then rather than blocking the tab. */
   if (typeof cfLoadPreviews === 'function') {
     cfLoadPreviews().then(() => {
       if (typeof renderCreatives === 'function') renderCreatives();
     });
   }
 
-  /* Version-level rows for the Analytics/Trends Version Name filter. Needs the
-     Google token like every other BigQuery load, and shares the version-column
-     probe with the preview loader above. The dropdowns stay hidden until this
-     resolves, so a slow or unavailable load just means no version filter. */
+  /* Version-level rows for the Analytics/Trends Version Name filter. Needs
+     an active session like every other BigQuery load, and shares the
+     version-column probe with the preview loader above. The dropdowns stay
+     hidden until this resolves, so a slow or unavailable load just means no
+     version filter. */
   if (typeof vfLoadVersionData === 'function') vfLoadVersionData();
 
   /* Manually uploaded previews are local (IndexedDB) so they need no auth, but
@@ -5619,12 +5552,10 @@ function cfSizeRank(filename) {
 }
 
 async function cfApi(path, opts) {
-  const o = opts || {};
-  const headers = Object.assign({}, o.headers || {});
-  if (typeof ACCESS_TOKEN !== 'undefined' && ACCESS_TOKEN) {
-    headers.Authorization = 'Bearer ' + ACCESS_TOKEN;
-  }
-  const res = await fetch(path, Object.assign({}, o, { headers }));
+  // /api/cf-images and /api/cf-sign-images authenticate off the crk_access
+  // cookie now (api/_auth.js), which same-origin fetch sends automatically —
+  // no bearer token to attach here any more.
+  const res = await fetch(path, opts || {});
   if (!res.ok) throw new Error(path + ' -> HTTP ' + res.status);
   return res.json();
 }
@@ -5765,7 +5696,7 @@ function vfNumRow(r, dims) {
 }
 
 async function vfLoadVersionData() {
-  if (vfAttempted || !ACCESS_TOKEN) return;
+  if (vfAttempted || !CURRENT_USER) return;
   vfAttempted = true;
 
   /* Same probe the previews use, so the winning column name is resolved
@@ -5785,7 +5716,7 @@ async function vfLoadVersionData() {
       SELECT
         \`Flight\` as q,
         CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
-        \`Segment\` as stage,
+        TRIM(\`Segment\`) as stage,
         \`Creative Offer Name\` as creative,
         \`${VF_FIELD}\` as version,${VF_METRIC_COLS}
       FROM \`crk-dco-dash.reporting_data.deliveries_view\`
@@ -5820,7 +5751,7 @@ async function vfFetchVersionDaily(version) {
           CAST(\`${dateField}\` AS STRING) as day,
           \`Flight\` as q,
           CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
-          \`Segment\` as stage,
+          TRIM(\`Segment\`) as stage,
           \`Creative Offer Name\` as creative,${VF_METRIC_COLS}
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
         WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
@@ -5988,7 +5919,7 @@ async function cfFetchImages() {
   let token = null;
   do {
     const qs = 'per_page=200' + (token ? '&continuation_token=' + encodeURIComponent(token) : '');
-    const d  = await cfApi('/api/cf-images?' + qs);
+    const d  = await cfApi('api/cf-images?' + qs);
     if (!d.success) { console.warn('[CF] Images API error', d.errors); break; }
     (d.result && d.result.images ? d.result.images : []).forEach(img => {
       out.push({ id: img.id, filename: img.filename || img.id });
@@ -6000,7 +5931,7 @@ async function cfFetchImages() {
 
 async function cfSignIds(ids) {
   if (!ids.length) return {};
-  const d = await cfApi('/api/cf-sign-images', {
+  const d = await cfApi('api/cf-sign-images', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ ids, variant: CF_VARIANT, ttl: CF_SIGN_TTL_SEC }),
@@ -8642,7 +8573,7 @@ function renderTrends() {
 }
 
 async function tryLoadTrendDailyData() {
-  if (!ACCESS_TOKEN) return;
+  if (!CURRENT_USER) return;
   const dateFields = ['Date Breakdown', 'Date', 'Report Date', 'Day'];
 
   for (const field of dateFields) {
