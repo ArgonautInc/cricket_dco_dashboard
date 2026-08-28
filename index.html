@@ -669,7 +669,8 @@ svg { display: block; }
   color: var(--muted);
 }
 .pv-table-wrap {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 65vh;
   border-radius: 14px;
   border: 1px solid var(--border);
   background: var(--card);
@@ -690,9 +691,10 @@ svg { display: block; }
   white-space: nowrap;
   min-width: 220px;
   position: sticky;
+  top: 0;
   left: 0;
   background: var(--recess);
-  z-index: 2;
+  z-index: 3;
 }
 .pv-th-col, .pv-th-total {
   text-align: right;
@@ -705,10 +707,22 @@ svg { display: block; }
   white-space: nowrap;
   min-width: 110px;
   user-select: none;
+  position: sticky;
+  top: 0;
+  background: var(--recess);
+  z-index: 2;
 }
 .pv-th-col.sortable, .pv-th-total.sortable { cursor: pointer; }
 .pv-th-col.sortable:hover, .pv-th-total.sortable:hover { color: var(--fg); }
 .pv-th-total { color: var(--fg2); border-left: 1px solid var(--border-s); }
+.pv-col-resizer {
+  position: absolute;
+  top: 0; right: -3px; bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 4;
+}
+.pv-col-resizer:hover, .pv-col-resizer.resizing { background: var(--accent); opacity: .5; }
 .pv-td-label {
   padding: 9px 16px;
   font-size: 12px;
@@ -1376,6 +1390,7 @@ svg { display: block; }
 .creative-card-body { padding: 11px 12px 12px; flex: 1; display:flex; flex-direction:column; gap:8px; }
 .creative-meta-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
 .creative-stage-label { font-size:11px; color:var(--muted); font-weight:500; }
+.creative-flight-dates { font-size:10.5px; color:var(--muted); }
 .creative-name {
   font-size:13px; font-weight:600; color:var(--fg);
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
@@ -1806,46 +1821,11 @@ body.compact .chart-card      { padding: 14px 16px; }
         </div>
         <select class="an-select" id="anStageFilter">
           <option value="all">All Stages</option>
-          <optgroup label="Q1 / Q2">
-            <option>1 - Mid Funnel</option>
-            <option>2 - Prospecting</option>
-            <option>3 - Homepage Visitor</option>
-            <option>4 - BYOD Visitor</option>
-            <option>4 - Deals Research</option>
-            <option>5 - Plan Research</option>
-            <option>6 - Multi Month Plan Research</option>
-            <option>7 - Device Page Visitor</option>
-            <option>8 - Cart Abandoner</option>
-            <option>9 - Order/Checkout</option>
-          </optgroup>
-          <optgroup label="Q3">
-            <option>1 - Homepage (ajds)</option>
-            <option>2 - Mid Funnel Entry (apom)</option>
-            <option>3 - All Deals (apop)</option>
-            <option>4 - More (apoq)</option>
-            <option>5 - All Devices (apoo)</option>
-            <option>6 - Plans Research (apon)</option>
-            <option>7 - Tablet &amp; Smartwatch Plan (apos, apou)</option>
-            <option>8 - Plans - One Line Selected (ajuf)</option>
-            <option>9 - Plans - Two Lines Selected (ajug)</option>
-            <option>10 - Plans - Four Lines Selected</option>
-            <option>11 - Android Deals (apow)</option>
-            <option>12 - Smartphones (apo0)</option>
-            <option>13 - Device PDP (vcx)</option>
-            <option>14 - BYOD (sjn)</option>
-            <option>15 - Multi-Month (ani5)</option>
-            <option>16 - IMEI Check (apo4)</option>
-            <option>17 - Prompt Plan Select (apo6)</option>
-            <option>18 - Cart Abandoner (af0u)</option>
-            <option>19 - eSim Payment Method (apo5)</option>
-            <option>20 - Checkout Abandoner (apo7)</option>
-            <option>21 - Order (ajdx)</option>
-          </optgroup>
         </select>
-        <!-- Version Name (hidden until version-level data loads) -->
+        <!-- Creative Offer (hidden until version-level data loads) -->
         <div id="anVersionGroup" style="display:none;align-items:center;gap:6px">
-          <select class="an-select" id="anVersionFilter" title="Filter to a single Flashtalking Version Name. Grouped by Creative Offer Name — one offer covers many versions.">
-            <option value="all">All Versions</option>
+          <select class="an-select" id="anVersionFilter" title="Filter to a single Creative Offer Name (rolls up every Flashtalking version under that offer). Narrowed by the Stage filter above.">
+            <option value="all">All Offers</option>
           </select>
         </div>
         <div class="an-search">
@@ -2218,6 +2198,16 @@ body.compact .chart-card      { padding: 14px 16px; }
           </div>
         </div>
 
+        <div class="cr-form-row">
+          <div class="cr-form-group">
+            <div class="cr-form-label">Flight Start Date</div>
+            <input class="cr-form-input" id="crFFlightStart" type="date" title="Overrides the auto-detected start date. Leave blank to use whatever BigQuery's day-level data derives."/>
+          </div>
+          <div class="cr-form-group">
+            <div class="cr-form-label">Flight End Date</div>
+            <input class="cr-form-input" id="crFFlightEnd" type="date" title="Overrides the auto-detected end date. Leave blank to use whatever BigQuery's day-level data derives."/>
+          </div>
+        </div>
 
         <div class="cr-modal-actions">
           <button class="btn-ghost btn-sm" id="crModalCancel">Cancel</button>
@@ -2898,7 +2888,7 @@ async function loadBigQueryData() {
       const orders = Number(r.orders)||0;
       const clicks = Number(r.clicks)||0;
       return {
-        q: r.quarter, mkt: r.mkt === 'USH' ? 'USH' : 'GM', stage: r.stage,
+        q: r.quarter, mkt: r.mkt === 'USH' ? 'USH' : 'GM', stage: stageCanonicalKey(r.stage),
         imps: Number(r.imps)||0, clicks,
         gmOrd: orders, ctr: Number(r.ctr)||0,
         gmLpvr: Number(r.lpvr)||0, gmCvr: clicks ? orders/clicks : 0
@@ -2911,7 +2901,7 @@ async function loadBigQueryData() {
       AN_STAGES = anStageRows.map(r => ({
         q:      r.q,
         mkt:    r.mkt,
-        stage:  r.stage,
+        stage:  stageCanonicalKey(r.stage),
         imps:   Number(r.imps)   || 0,
         freq:   Number(r.freq)   || 1,
         clicks: Number(r.clicks) || 0,
@@ -2934,7 +2924,7 @@ async function loadBigQueryData() {
       AN_CREATIVES = anCreativeRows.map(r => ({
         q:        r.q,
         mkt:      r.mkt,
-        stage:    r.stage,
+        stage:    stageCanonicalKey(r.stage),
         creative:   r.creative   || '',
         versionIds:  r.versionIds  || '',
         creativeIds: r.creativeIds || '',
@@ -3019,7 +3009,7 @@ async function tryLoadStageCreativeDailyData() {
 
       if (stageRows.length || creativeRows.length) {
         AN_DAILY_STAGE_RAW = stageRows.map(r => ({
-          day: r.day, q: r.q, mkt: r.mkt, stage: r.stage,
+          day: r.day, q: r.q, mkt: r.mkt, stage: stageCanonicalKey(r.stage),
           imps:   Number(r.imps)   || 0,
           clicks: Number(r.clicks) || 0,
           gmOrdCount: Number(r.gmOrdCount) || 0,
@@ -3030,7 +3020,7 @@ async function tryLoadStageCreativeDailyData() {
           reach:  Number(r.reach)  || 0,
         }));
         AN_DAILY_CREATIVE_RAW = creativeRows.map(r => ({
-          day: r.day, q: r.q, mkt: r.mkt, stage: r.stage, creative: r.creative || '',
+          day: r.day, q: r.q, mkt: r.mkt, stage: stageCanonicalKey(r.stage), creative: r.creative || '',
           imps:   Number(r.imps)   || 0,
           clicks: Number(r.clicks) || 0,
           gmOrdCount: Number(r.gmOrdCount) || 0,
@@ -3435,7 +3425,7 @@ function aggregateManualPerformanceRows(rows) {
     stagesByFlight[flight] = Object.values(stageGroups).map(g => {
       const ord = g.gmOrdSum + g.hmOrdSum;
       return {
-        q: flight, mkt: g.mkt, stage: g.seg, imps: g.imps, clicks: g.clicks,
+        q: flight, mkt: g.mkt, stage: stageCanonicalKey(g.seg), imps: g.imps, clicks: g.clicks,
         gmOrd: ord, ctr: g.imps ? g.clicks/g.imps : 0,
         gmLpvr: g.imps ? (g.gmRtSum+g.hmRtSum)/g.imps : 0,
         gmCvr: g.clicks ? ord/g.clicks : 0,
@@ -3461,7 +3451,7 @@ function aggregateManualPerformanceRows(rows) {
       g.reach    += numCol(r, 'Cookie ID Reach: Total Ad Reach');
     });
     anStagesByFlight[flight] = Object.values(anStageGroups).map(g => ({
-      q: flight, mkt: g.mkt, stage: g.seg,
+      q: flight, mkt: g.mkt, stage: stageCanonicalKey(g.seg),
       freq: g.reach ? g.imps/g.reach : 1,
       imps: g.imps, clicks: g.clicks, ctr: g.imps ? g.clicks/g.imps : 0,
       gmOrd: g.gmOrdSum, hmOrd: g.hmOrdSum,
@@ -3488,7 +3478,7 @@ function aggregateManualPerformanceRows(rows) {
       g.spend    += numCol(r, 'Total Cost');
     });
     anCreativesByFlight[flight] = Object.values(anCreativeGroups).map(g => ({
-      q: flight, mkt: g.mkt, stage: g.seg, creative: g.creative,
+      q: flight, mkt: g.mkt, stage: stageCanonicalKey(g.seg), creative: g.creative,
       imps: g.imps, clicks: g.clicks, ctr: g.imps ? g.clicks/g.imps : 0,
       gmOrd: g.gmOrdSum, gmLpvr: g.imps ? g.gmRtSum/g.imps : 0,
       gmCvr: g.clicks ? g.gmOrdSum/g.clicks : 0,
@@ -3923,6 +3913,45 @@ function svgDonut(segs, {size=140,thick=22,label='',val=''}={}) {
   </div>`;
 }
 
+/* ── Canonical stage naming ───────────────────────────────
+   Q1/Q2 and Q3 use different names for the same underlying funnel
+   segment (e.g. Q2's "Homepage Visitor" is Q3's "Homepage"). This is
+   the single dashboard-wide fix point: every raw stage value coming
+   out of BigQuery, the static fallback data, or a manual-upload
+   matrix gets run through stageCanonicalKey() at ingestion, so every
+   consumer downstream (charts, filters, tables, exports) already
+   sees one collapsed name per group. Each group's FIRST entry is the
+   canonical/current name. Add further pairs here as new naming
+   mismatches turn up in future quarters. */
+const STAGE_ALIAS_GROUPS = [
+  ['Homepage', 'Homepage Visitor'],
+  ['Plans Selection', 'Plans Research', 'Plan Research'],
+  ['MultiMonth Plans', 'Multi-Month Visitor', 'Multi Month Plan Research'],
+  ['Mid Funnel', 'Mid Funnel Entry'],
+  ['Deals', 'Deals Browser'],
+  ['BYOD Visitor', 'BYOD Engager'],
+  ['Device Page Visitor', 'Device PDP'],
+];
+const STAGE_ALIAS_MAP = (() => {
+  const map = new Map();
+  STAGE_ALIAS_GROUPS.forEach(group => group.forEach(name => map.set(name, group[0])));
+  return map;
+})();
+
+/* Strips a leading "N - " stage number and a trailing "(code)"
+   annotation (seen in some Q3 segment names), so a segment renumbered
+   or re-annotated between quarters still matches on its name alone. */
+function stageLabel(stage) {
+  return String(stage || '').replace(/^\d+\s*-\s*/, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+}
+
+/* Canonical lookup/grouping key: stageLabel() plus alias resolution,
+   so e.g. "Homepage" and "Homepage Visitor" collapse to one bucket. */
+function stageCanonicalKey(stage) {
+  const label = stageLabel(stage);
+  return STAGE_ALIAS_MAP.get(label) || label;
+}
+
 /* ── Pivot data (real Q1/Q2 from CRKT_Q226 Excel) ────────── */
 const PIVOT_DATA = {
   quarters: {
@@ -3971,18 +4000,20 @@ const PIVOT_DATA = {
     {q:'Q2',mkt:'USH',stage:'8 - Cart Abandoner', imps:    160,clicks:   0,gmOrd: 0,ctr:0,        gmLpvr:0.056250,gmCvr:0},
   ],
 };
+PIVOT_DATA.stages = PIVOT_DATA.stages.map(r => ({ ...r, stage: stageCanonicalKey(r.stage) }));
 
 const STAGE_COLORS = {
-  '1 - Mid Funnel':               '#5BC500',
-  '2 - Prospecting':              '#82E02E',
-  '3 - Homepage Visitor':         '#1E8AFF',
-  '4 - BYOD Visitor':             '#00C2E0',
-  '4 - Deals Research':           '#FF8200',
-  '5 - Plan Research':            '#A050BE',
-  '6 - Multi Month Plan Research':'#E5202E',
-  '7 - Device Page Visitor':      '#FF6B35',
-  '8 - Cart Abandoner':           '#FFB800',
-  '9 - Order/Checkout':           '#2E7D32',
+  'Mid Funnel':          '#5BC500',
+  'Prospecting':         '#82E02E',
+  'Homepage':            '#1E8AFF',
+  'BYOD Visitor':        '#00C2E0',
+  'Deals':               '#FF8200',
+  'Deals Research':      '#D96C00',
+  'Plans Selection':     '#A050BE',
+  'MultiMonth Plans':    '#E5202E',
+  'Device Page Visitor': '#FF6B35',
+  'Cart Abandoner':      '#FFB800',
+  'Order/Checkout':      '#2E7D32',
 };
 
 /* ── Synthetic daily trend (based on real quarterly totals) ─ */
@@ -4564,6 +4595,7 @@ let AN_STAGES = [
   {q:'Q2',mkt:'USH',stage:'1 - Mid Funnel',       imps:10875979, freq:1.050,clicks:7532,  ctr:0.000693,gmOrd:16,  hmOrd:0,   gmLpvr:0.00775,hmLpvr:0,      gmTdor:0.0000015,hmTdor:0,gmCvr:0.00212,hmCvr:0},
   {q:'Q2',mkt:'USH',stage:'2 - Prospecting',      imps:341076,   freq:1.050,clicks:110,   ctr:0.000323,gmOrd:0,   hmOrd:0,   gmLpvr:0.00244,hmLpvr:0,      gmTdor:0,        hmTdor:0,gmCvr:0,      hmCvr:0},
 ];
+AN_STAGES = AN_STAGES.map(r => ({ ...r, stage: stageCanonicalKey(r.stage) }));
 
 let AN_CREATIVES = [
   // Q1 GM · Mid Funnel
@@ -4603,6 +4635,7 @@ let AN_CREATIVES = [
   {q:'Q2',mkt:'USH',stage:'1 - Mid Funnel',creative:'Template-PremiumDevice',                                             imps:3541780, clicks:2822,gmOrd:4, ctr:0.000797,gmLpvr:0.00797,gmCvr:0.00142},
   {q:'Q2',mkt:'USH',stage:'1 - Mid Funnel',creative:'Template-Transparency-Simplicity',                                   imps:3651320, clicks:2636,gmOrd:7, ctr:0.000722,gmLpvr:0.00764,gmCvr:0.00266},
 ];
+AN_CREATIVES = AN_CREATIVES.map(r => ({ ...r, stage: stageCanonicalKey(r.stage) }));
 
 /* ── Offer name lookup map ───────────────────────────────── */
 const OFFER_MAP_KEY         = 'crkt_offer_map_v1';
@@ -4732,7 +4765,50 @@ async function autoLoadCloudOfferMap() {
 }
 
 /* ── Filter state ────────────────────────────────────────── */
-const anState = { qs:[...ALL_QS], mkt:'all', stage:'all', version:'all', view:'stage', search:'', dateFrom:null, dateTo:null, sortCol:'imps', sortDir:-1 };
+const anState = { qs:[...ALL_QS], mkt:'all', stage:'all', offer:'all', view:'stage', search:'', dateFrom:null, dateTo:null, sortCol:'imps', sortDir:-1 };
+
+// Analytics' offer filter — collapses the 500+-version picker down to one
+// Creative Offer Name per option (there are far fewer offers than
+// versions), and cascades from the Stage filter: only offers that actually
+// ran in the currently-selected stage/quarter/market are listed.
+function anPopulateOfferFilter() {
+  const sel = document.getElementById('anVersionFilter');
+  if (!sel || !vfLoaded) return;
+  const offers = new Set();
+  VF_STAGES.forEach(r => {
+    if (!anState.qs.includes(r.q)) return;
+    if (anState.mkt   !== 'all' && r.mkt   !== anState.mkt)   return;
+    if (anState.stage !== 'all' && r.stage !== anState.stage) return;
+    if (r.creative) offers.add(r.creative);
+  });
+  const sorted = [...offers].sort((a, b) => offerLabel(a).localeCompare(offerLabel(b)));
+  const sig = ['anOffer', anState.qs.join('+'), anState.mkt, anState.stage, anState.offer, sorted.length].join('|');
+  if (anPopulateOfferFilter._sig === sig) return;
+  anPopulateOfferFilter._sig = sig;
+  const keep = sorted.includes(anState.offer) ? anState.offer : 'all';
+  sel.innerHTML = '<option value="all">All Offers</option>'
+    + sorted.map(o => `<option value="${esc(o)}"${o===keep?' selected':''}>${esc(offerLabel(o))}</option>`).join('');
+  anState.offer = keep;
+}
+
+/* Rebuilds the stage dropdown from the real distinct (canonicalized)
+   stage values across all quarters, rather than a hand-typed static
+   list — mirrors crPopulateStageFilter() on the Creatives tab. */
+// Cascades from Market/Quarter — see crPopulateStageFilter()'s comment.
+function anPopulateStageFilter() {
+  const sel = document.getElementById('anStageFilter');
+  if (!sel) return;
+  const scoped = AN_STAGES.filter(r =>
+    anState.qs.includes(r.q) && (anState.mkt === 'all' || r.mkt === anState.mkt)
+  );
+  const stages = [...new Set(scoped.map(r => r.stage).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+  const keep = stages.includes(anState.stage) ? anState.stage : 'all';
+  sel.innerHTML = '<option value="all">All Stages</option>'
+    + stages.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+  sel.value = keep;
+  anState.stage = keep;
+}
 
 function anFilter(rows) {
   return rows.filter(r =>
@@ -4899,14 +4975,20 @@ function renderAnTable(rows, cols) {
   });
 }
 
-/* Stage- and creative-shaped pools for the current filter state. With a
-   version selected these come from that version's raw rows rolled up by the
-   same helpers the BigQuery loaders use, so both tables, the KPI tiles, the
-   charts and the export all see the familiar shapes and need no special
-   casing. Without one, the existing date-windowed pools are untouched. */
+/* Stage- and creative-shaped pools for the current filter state. With an
+   offer selected these come from that offer's raw rows (every version
+   rolled into one Creative Offer Name) aggregated by the same helpers the
+   BigQuery loaders use, so both tables, the KPI tiles, the charts and the
+   export all see the familiar shapes and need no special casing. Without
+   one, the existing date-windowed pools are untouched.
+
+   Note: day-level rows in VF_DAILY are keyed per exact version string, not
+   per offer, so a date-range window can't narrow an offer selection the
+   way it narrows a single-version one — same graceful "ignore what can't
+   be filtered" fallback used elsewhere for missing day-level data. */
 function anPools() {
-  if (anState.version !== 'all' && vfLoaded) {
-    const raw = vfRawRows(anState.version, anState.dateFrom, anState.dateTo);
+  if (anState.offer !== 'all' && vfLoaded) {
+    const raw = VF_STAGES.filter(r => r.creative === anState.offer);
     return {
       stageRows:    withReach(aggStageRawRows(raw)),
       creativeRows: aggCreativeRawRows(raw),
@@ -4920,11 +5002,9 @@ function anPools() {
 
 /* ── Top-level render ────────────────────────────────────── */
 function renderAnalytics() {
+  anPopulateStageFilter();
   const isCreative = anState.view === 'creative';
-  /* A date window over a single version needs that version's day-level rows,
-     which are fetched on demand — this re-renders once they arrive. */
-  vfEnsureDaily(anState.version, !!(anState.dateFrom || anState.dateTo), renderAnalytics);
-  if (vfLoaded) vfPopulateSelect('anVersionFilter', anState.version, anState.qs, anState.mkt);
+  if (vfLoaded) anPopulateOfferFilter();
 
   const { stageRows, creativeRows } = anPools();
   const pool  = isCreative ? creativeRows : stageRows;
@@ -4938,8 +5018,8 @@ function renderAnalytics() {
 function exportAnXlsx() {
   const q   = anState.qs.length === 3 ? 'All' : anState.qs.join('-');
   const mkt = anState.mkt !== 'all' ? anState.mkt : 'All';
-  const ver = anState.version !== 'all'
-    ? '_' + String(anState.version).replace(/[^\w.-]+/g, '-')
+  const ver = anState.offer !== 'all'
+    ? '_' + String(offerLabel(anState.offer)).replace(/[^\w.-]+/g, '-')
     : '';
 
   function sheetFromData(cols, rows) {
@@ -4979,7 +5059,7 @@ document.getElementById('anQFilter').addEventListener('click', e => {
   renderAnalytics();
 });
 document.getElementById('anVersionFilter').addEventListener('change', e => {
-  anState.version = e.target.value;
+  anState.offer = e.target.value;
   renderAnalytics();
 });
 document.getElementById('anDateFrom').addEventListener('change', e => {
@@ -5265,6 +5345,51 @@ let crSaved = crLoadSaved();
 let crUserList = (() => { try { return JSON.parse(localStorage.getItem(CR_KEY+'_user')||'[]'); } catch { return []; } })();
 function crSaveUserList() { localStorage.setItem(CR_KEY+'_user', JSON.stringify(crUserList)); }
 
+/* ── Flight dates ─────────────────────────────────────────
+   Derived from day-level BigQuery rows (AN_DAILY_CREATIVE_RAW) as the
+   first/last day the creative actually had impressions for its
+   creative+stage+quarter+market combo. Only available once live BQ
+   day-level data has loaded (same graceful "—" fallback as everything
+   else that depends on AN_DAILY_CREATIVE_RAW). A manual override in
+   crSaved/crUserList (flightStart/flightEnd) always wins over the
+   derived value — for creatives where BQ has no day-level rows yet, or
+   where the derived range is wrong. */
+function crDeriveFlightDates(c) {
+  if (!anDailyLoaded || !c) return { start: null, end: null };
+  const rows = AN_DAILY_CREATIVE_RAW.filter(r =>
+    r.creative === c.creative && r.q === c.q && r.mkt === c.mkt &&
+    r.stage === c.stage && r.imps > 0
+  );
+  if (!rows.length) return { start: null, end: null };
+  const days = rows.map(r => r.day).sort();
+  return { start: days[0], end: days[days.length - 1] };
+}
+
+function crFlightDates(c) {
+  const derived = crDeriveFlightDates(c);
+  return {
+    start: c.flightStart || derived.start || null,
+    end:   c.flightEnd   || derived.end   || null,
+  };
+}
+
+function fmtFlightDate(d) {
+  if (!d) return null;
+  // Parse YYYY-MM-DD as local calendar parts rather than `new Date(str)`,
+  // which treats a bare date string as UTC midnight and can display as the
+  // previous day once toLocaleDateString() converts it back to local time.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d);
+  if (!m) return d;
+  const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return dt.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+}
+
+function fmtFlightRange(c) {
+  const { start, end } = crFlightDates(c);
+  if (!start && !end) return 'Flight dates —';
+  return `${fmtFlightDate(start) || '—'} – ${fmtFlightDate(end) || '—'}`;
+}
+
 /* ── Merge base + user creatives ─────────────────────────── */
 function crGetAll() {
   // effectiveCreativeRows() preserves AN_CREATIVES's exact length/order
@@ -5278,7 +5403,12 @@ function crGetAll() {
   const base = source.map((c, i) => {
     const id = 'base_' + i;
     const ov = crSaved[id] || {};
-    return { ...c, id, thumbDataUrl: ov.thumbDataUrl ?? null };
+    return {
+      ...c, id,
+      thumbDataUrl: ov.thumbDataUrl ?? null,
+      flightStart:  ov.flightStart ?? null,
+      flightEnd:    ov.flightEnd ?? null,
+    };
   });
   return [...base, ...crUserList];
 }
@@ -5314,10 +5444,17 @@ function crFilter(rows) {
 // "Mid Funnel", no number/prefix), so crFilter's strict r.stage === stage
 // check never matched anything except "all". Rebuild the option list from
 // the real distinct stage values instead of trusting the static markup.
+// Cascades from Market/Quarter: only offers stages that actually have a
+// row under the currently-selected market/quarter, so picking a market or
+// quarter narrows this list instead of leaving stale options that would
+// just return an empty grid.
 function crPopulateStageFilter() {
   const sel = document.getElementById('crStageFilter');
   if (!sel) return;
-  const stages = [...new Set(crGetAll().map(r => r.stage).filter(Boolean))]
+  const scoped = crGetAll().filter(r =>
+    crState.qs.includes(r.q) && (crState.mkt === 'all' || r.mkt === crState.mkt)
+  );
+  const stages = [...new Set(scoped.map(r => r.stage).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b));
   const keep = stages.includes(crState.stage) ? crState.stage : 'all';
   sel.innerHTML = '<option value="all">All Stages</option>'
@@ -6279,6 +6416,7 @@ function crCardHTML(c) {
       </div>
       <div class="creative-stage-label">${esc(stageShort(c.stage))}</div>
       <div class="creative-name" title="${esc(c.creative)}">${esc(c.creative)}</div>
+      <div class="creative-flight-dates">${esc(fmtFlightRange(c))}</div>
       <div class="creative-stats-grid">
         <div class="cs-item"><div class="cs-label">Impressions</div><div class="cs-val">${imps}</div></div>
         <div class="cs-item"><div class="cs-label">Clicks</div><div class="cs-val">${clicks}</div></div>
@@ -6367,11 +6505,16 @@ function crOpenModal(id) {
     document.getElementById('crFClicks').value  = c.clicks || '';
     document.getElementById('crFOrd').value     = c.gmOrd || '';
     document.getElementById('crFCtr').value     = c.ctr || '';
+    // Manual override wins; otherwise show the derived value as a
+    // placeholder-like starting point so an edit only overrides on purpose.
+    const derived = crDeriveFlightDates(c);
+    document.getElementById('crFFlightStart').value = c.flightStart || derived.start || '';
+    document.getElementById('crFFlightEnd').value   = c.flightEnd   || derived.end   || '';
   } else {
     // New
     title.textContent = 'Add Creative';
     editId.value = '';
-    ['crFName','crFImps','crFClicks','crFOrd','crFCtr'].forEach(id2=>document.getElementById(id2).value='');
+    ['crFName','crFImps','crFClicks','crFOrd','crFCtr','crFFlightStart','crFFlightEnd'].forEach(id2=>document.getElementById(id2).value='');
     document.getElementById('crFQ').value     = 'Q2';
     document.getElementById('crFMkt').value   = 'GM';
     document.getElementById('crFStage').value = '1 - Mid Funnel';
@@ -6404,6 +6547,7 @@ function crOpenDetail(id) {
     <span class="data-badge ${esc(c.mkt.toLowerCase())}">${esc(c.mkt)}</span>
     <span class="data-badge ${esc(c.q.toLowerCase())}">${esc(c.q)}</span>
     <span class="creative-stage-label">${esc(c.stage)}</span>
+    <span class="creative-flight-dates">${esc(fmtFlightRange(c))}</span>
   `;
 
   const fileMeta = crPreviewFilename(c.creative, c.stage);
@@ -6454,6 +6598,8 @@ function crSaveModal() {
     gmOrd:       Number(document.getElementById('crFOrd').value)   || 0,
     ctr:         Number(document.getElementById('crFCtr').value)   || 0,
     gmLpvr:      0, gmCvr: 0,
+    flightStart: document.getElementById('crFFlightStart').value || null,
+    flightEnd:   document.getElementById('crFFlightEnd').value   || null,
   };
 
   if (id) {
@@ -7396,14 +7542,14 @@ function oneSheetPrevSegmentsMonthlyPaced(prevQ, mktSel) {
   const map = new Map();
   if (!anDailyLoaded) {
     const rows = effectiveStageRows(null, null).filter(r => r.q === prevQ && (mktSel === 'all' || r.mkt === mktSel));
-    oneSheetAggregateSegments(rows).forEach(s => map.set(oneSheetCanonicalSegmentKey(s.stage), { cpc: s.cpc, cpo: s.cpo }));
+    oneSheetAggregateSegments(rows).forEach(s => map.set(stageCanonicalKey(s.stage), { cpc: s.cpc, cpo: s.cpo }));
     return map;
   }
   const perSegment = new Map(); // canonicalKey -> { cpcs:[], cpos:[] }
   oneSheetQuarterMonthRanges(prevQ).forEach(month => {
     const rows = effectiveStageRows(month.start, month.end).filter(r => r.q === prevQ && (mktSel === 'all' || r.mkt === mktSel));
     oneSheetAggregateSegments(rows).forEach(s => {
-      const key = oneSheetCanonicalSegmentKey(s.stage);
+      const key = stageCanonicalKey(s.stage);
       if (!perSegment.has(key)) perSegment.set(key, { cpcs: [], cpos: [] });
       const entry = perSegment.get(key);
       if (s.cpc != null) entry.cpcs.push(s.cpc);
@@ -7498,56 +7644,28 @@ function oneSheetAggregateSegments(rows) {
   }));
 }
 
-/* Known cases where a segment's descriptive name (after stripping the
-   leading "N - " stage number) differs between quarters despite being the
-   same underlying funnel segment — confirmed by Emily from the Q2 vs Q3
-   Funnel Efficiency table (e.g. Q2's "Homepage Visitor" is Q3's
-   "Homepage"). Without this, Prev CPC/CPO silently show "—" for these
-   segments since the exact-string lookup misses. Add further pairs here
-   as new naming mismatches turn up in future quarters. Each group's FIRST
-   entry is the canonical/current name — keep that in sync with
-   ONESHEET_SEGMENT_ORDER below, which sorts on this same canonical form. */
-const ONESHEET_SEGMENT_ALIAS_GROUPS = [
-  ['Homepage', 'Homepage Visitor'],
-  ['Plans Selection', 'Plans Research'],
-  ['MultiMonth Plans', 'Multi-Month Visitor'],
-];
-const ONESHEET_SEGMENT_ALIAS_MAP = (() => {
-  const map = new Map();
-  ONESHEET_SEGMENT_ALIAS_GROUPS.forEach(group => group.forEach(name => map.set(name, group[0])));
-  return map;
-})();
-
-/* Canonical lookup key for matching a segment across quarters: strips the
-   leading stage number (so a segment renumbered between quarters still
-   matches on its name alone) and then resolves any known alias so e.g.
-   "Homepage" and "Homepage Visitor" are treated as the same segment. */
-function oneSheetCanonicalSegmentKey(stage) {
-  const label = oneSheetStageLabel(stage);
-  return ONESHEET_SEGMENT_ALIAS_MAP.get(label) || label;
-}
-
 /* Explicit funnel-flow row order, matching the reference one-sheeter
    exactly — not derivable from the stage numbers/labels alone (e.g. "Mid
    Funnel"/"Prospecting" sort first despite not having the lowest numeric
    prefix), so it's a hardcoded canonical sequence. Matched on the same
    canonical (stripped + alias-resolved) name used for cross-quarter
-   matching, so this stays correct even if a quarter's raw stage string or
-   numbering differs. A segment not in this list falls back to its
-   numeric prefix, placed after every named segment — so a brand-new or
-   unrecognized segment doesn't silently vanish, just add it here once
-   its place in the funnel is known. */
+   matching (see stageCanonicalKey, defined dashboard-wide above), so
+   this stays correct even if a quarter's raw stage string or numbering
+   differs. A segment not in this list falls back to its numeric prefix,
+   placed after every named segment — so a brand-new or unrecognized
+   segment doesn't silently vanish, just add it here once its place in
+   the funnel is known. */
 const ONESHEET_SEGMENT_ORDER = [
-  'Mid Funnel', 'Prospecting', 'Homepage', 'Mid Funnel Entry', 'Deals',
-  'Cricket Research', 'Device Browser', 'Plans Browser', 'Tablet Plan',
-  'Smartwatch Plan', 'Deals Browser', 'Smartphones', 'Product Page Visitor',
-  'BYOD Visitor', 'BYOD Engager', 'MultiMonth Plans', 'CompatibilityCheck',
+  'Mid Funnel', 'Prospecting', 'Homepage', 'Deals',
+  'Cricket Research', 'Device Browser', 'Device Page Visitor', 'Plans Browser',
+  'Tablet Plan', 'Smartwatch Plan', 'Smartphones', 'Product Page Visitor',
+  'BYOD Visitor', 'MultiMonth Plans', 'CompatibilityCheck',
   'Plans Selection', 'Device Cart Plan Select', 'Cart Abandoner', 'Checkout',
   'Order', 'D-TREE Default',
 ];
 
 function oneSheetStageSortKey(stage) {
-  const key = oneSheetCanonicalSegmentKey(stage);
+  const key = stageCanonicalKey(stage);
   const idx = ONESHEET_SEGMENT_ORDER.indexOf(key);
   if (idx !== -1) return idx;
   const m = /^(\d+)/.exec(stage);
@@ -7570,7 +7688,7 @@ function oneSheetBuildFunnelRows(qSel, mktSel, dateFrom, dateTo) {
   return curSeg
     .sort((a, b) => oneSheetStageSortKey(a.stage) - oneSheetStageSortKey(b.stage))
     .map(s => {
-      const prev = prevByStage.get(oneSheetCanonicalSegmentKey(s.stage));
+      const prev = prevByStage.get(stageCanonicalKey(s.stage));
       return {
         ...s,
         prevCpc: prev ? prev.cpc : null,
@@ -7607,8 +7725,6 @@ function oneSheetTopNByCpo(rows, n = 5) {
     .slice(0, n)
     .map(r => ({ ...r, lowSample: r.imps < ONESHEET_LOW_SAMPLE_IMPS }));
 }
-
-function oneSheetStageLabel(stage) { return String(stage||'').replace(/^\d+ - /, ''); }
 
 /* Strips the first two hyphen-delimited segments from a creative name
    (e.g. "Q3-DoTheMost-HeroBanner" -> "HeroBanner") for the one-sheeter's
@@ -7656,7 +7772,7 @@ function oneSheetDraftInsights(model) {
   const byLpvr = [...creatives].sort((a,b)=>(b.gmLpvr||0)-(a.gmLpvr||0));
   const topOrd = byOrd[0], topCtr = byCtr[0], topLpvr = byLpvr[0];
 
-  if (topOrd) insights.push(`<strong>Top Order Driver:</strong> &ldquo;${esc(offerLabel(topOrd.creative))}&rdquo; (${esc(oneSheetStageLabel(topOrd.stage))}) led with <strong>${FMT.num(topOrd.gmOrd)} orders</strong> on ${FMT.abbr(topOrd.imps)} impressions.`);
+  if (topOrd) insights.push(`<strong>Top Order Driver:</strong> &ldquo;${esc(offerLabel(topOrd.creative))}&rdquo; (${esc(stageLabel(topOrd.stage))}) led with <strong>${FMT.num(topOrd.gmOrd)} orders</strong> on ${FMT.abbr(topOrd.imps)} impressions.`);
   if (insights.length < 3 && topCtr) insights.push(`<strong>Highest CTR:</strong> &ldquo;${esc(offerLabel(topCtr.creative))}&rdquo; achieved <strong>${FMT.pct(topCtr.ctr)} CTR</strong> on ${FMT.abbr(topCtr.imps)} impressions.`);
   if (insights.length < 3 && topLpvr && topLpvr.gmLpvr > 0) insights.push(`<strong>Best Post-Click Quality:</strong> &ldquo;${esc(offerLabel(topLpvr.creative))}&rdquo; had the highest LPVR at <strong>${FMT.pct2(topLpvr.gmLpvr)}</strong>.`);
 
@@ -7676,11 +7792,11 @@ function oneSheetDraftRecommendations(model) {
   const segsWithOrders = funnelRows.filter(s => s.gmOrd > 0 && s.cpo != null);
   const cheapestSeg = [...segsWithOrders].sort((a,b)=>a.cpo-b.cpo)[0];
   if (cheapestSeg && (!topOrd || cheapestSeg.stage !== topOrd.stage)) {
-    recs.push(`Expand rotation in <strong>${esc(oneSheetStageLabel(cheapestSeg.stage))}</strong> (the lowest CPO segment this period at $${cheapestSeg.cpo.toFixed(2)}) while scale remains limited.`);
+    recs.push(`Expand rotation in <strong>${esc(stageLabel(cheapestSeg.stage))}</strong> (the lowest CPO segment this period at $${cheapestSeg.cpo.toFixed(2)}) while scale remains limited.`);
   }
 
   const highestImpsSeg = [...funnelRows].sort((a,b)=>b.imps-a.imps)[0];
-  if (highestImpsSeg) recs.push(`Refresh creative variety in <strong>${esc(oneSheetStageLabel(highestImpsSeg.stage))}</strong> (the highest-delivery segment) to stay ahead of fatigue.`);
+  if (highestImpsSeg) recs.push(`Refresh creative variety in <strong>${esc(stageLabel(highestImpsSeg.stage))}</strong> (the highest-delivery segment) to stay ahead of fatigue.`);
 
   const byCtr = [...creatives].sort((a,b)=>(b.ctr||0)-(a.ctr||0));
   const topCtr = byCtr[0];
@@ -7731,7 +7847,7 @@ function oneSheetRenderTopTable(title, rows, cols, opts) {
           ${showQBadge ? `<div class="cr-badges"><span class="badge ${esc(r.q.toLowerCase())}">${esc(r.q)}</span></div>` : ''}
           <div class="cr-name">${esc(oneSheetShortenCreativeName(offerLabel(r.creative))||'—')}${r.lowSample ? ' *' : ''}</div>
         </td>
-        <td class="seg-cell">${esc(oneSheetStageLabel(r.stage))}</td>
+        <td class="seg-cell">${esc(stageLabel(r.stage))}</td>
         ${cols.map(c=>`<td class="val">${c.fmt(r[c.key])}</td>`).join('')}${blankTd}
       </tr>`).join('')}</tbody></table>
     ${rows.some(r=>r.lowSample) ? `<div class="no-data">* fewer than ${FMT.abbr(ONESHEET_LOW_SAMPLE_IMPS)} impressions this period — small sample</div>` : ''}
@@ -8708,6 +8824,7 @@ const PV_METRICS = [
   { key:'gmTdor', label:'GM TDOR',     stageOnly:true,  fmt:v=>(v*100).toFixed(4)+'%' },
   { key:'spend',  label:'Total Cost',  stageOnly:false, fmt:v=>v>0?FMT.dollar(v):'—' },
   { key:'cpc',    label:'CPC',         stageOnly:false, fmt:v=>v>0?'$'+v.toFixed(2):'—' },
+  { key:'cpo',    label:'CPO',         stageOnly:false, fmt:v=>v>0?'$'+v.toFixed(2):'—' },
   { key:'freq',   label:'Frequency',   stageOnly:true,  fmt:v=>v.toFixed(2)+'×' },
 ];
 
@@ -8754,6 +8871,7 @@ function pvAggregate(rows, metric) {
     case 'gmCvr':  return clicks ? gmOrd/clicks : 0;
     case 'hmCvr':  return clicks ? hmOrd/clicks : 0;
     case 'cpc':    return clicks ? spend/clicks : 0;
+    case 'cpo':    return gmOrd  ? spend/gmOrd  : 0;
     case 'gmLpvr': return imps   ? wGmLp/imps  : 0;
     case 'hmLpvr': return imps   ? wHmLp/imps  : 0;
     case 'lpvr':   return imps   ? (wGmLp+wHmLp)/imps : 0;
@@ -8867,7 +8985,7 @@ function pvBuildMetricTableHTML(metric, pool, rowKey, colKey, colVals, rowVals) 
 
 /* Lower is better for these, so they're excluded from the "top" ranking and
    from the in-group heat shading — a big bar would read as good. */
-const PV_INVERSE_METRICS = ['cpc', 'freq'];
+const PV_INVERSE_METRICS = ['cpc', 'cpo', 'freq'];
 
 function pvBuildGroupedTableHTML(pool) {
   const metrics = pvState.metrics;
@@ -8945,6 +9063,41 @@ function pvBuildGroupedTableHTML(pool) {
   </div>`;
 }
 
+/* Drag-to-resize column headers. Appends a resize handle to every header
+   cell (idempotent — skips ones that already have one, though tables are
+   fully rebuilt on every render anyway). Widths are set inline on the <th>
+   itself; with the table's default auto layout, that's enough to size the
+   whole column, since every cell in the column has to be at least as wide
+   as its header. Resets on the next render — same as everything else about
+   pivot state, this is a live view, not a saved layout. */
+function pvAttachColResize(container) {
+  container.querySelectorAll('.pv-table thead th').forEach(th => {
+    const handle = document.createElement('span');
+    handle.className = 'pv-col-resizer';
+    handle.addEventListener('click', e => e.stopPropagation());
+    handle.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = th.offsetWidth;
+      handle.classList.add('resizing');
+      const onMove = mv => {
+        const w = Math.max(60, startWidth + (mv.clientX - startX));
+        th.style.width = w + 'px';
+        th.style.minWidth = w + 'px';
+      };
+      const onUp = () => {
+        handle.classList.remove('resizing');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    th.appendChild(handle);
+  });
+}
+
 function renderPivotGrouped() {
   const pool = pvPool();
   const container = document.getElementById('pvTablesContainer');
@@ -8978,6 +9131,8 @@ function renderPivotGrouped() {
       renderPivot();
     });
   });
+
+  pvAttachColResize(container);
 }
 
 function renderPivot() {
@@ -9022,6 +9177,8 @@ function renderPivot() {
       renderPivot();
     });
   });
+
+  pvAttachColResize(container);
 }
 
 /* ── Wire pivot controls ─────────────────────────────────── */
