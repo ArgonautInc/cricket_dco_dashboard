@@ -1942,6 +1942,9 @@ body.compact .chart-card      { padding: 14px 16px; }
           <button class="btn-ghost btn-sm" id="crUploadBtn" title="Fallback for when Cloudflare previews are unavailable. Upload the ad-screenshot-capturer ZIP, or loose PNG/JPGs. Cloudflare still takes precedence wherever it has an image.">
             <svg-icon name="plus" size="13"></svg-icon> Upload Previews
           </button>
+          <button class="btn-ghost btn-sm" id="crRotationReportBtn" title="Exports whatever Market/Quarter(s)/Stage/Date Range are currently selected above, with one tab per dashboard KPI, each sorted best-to-worst, plus a Rotate/Review flag based on composite performance within its funnel stage.">
+            <svg-icon name="download" size="13"></svg-icon> Export Rotation Report
+          </button>
           <button class="btn-primary btn-sm" id="crAddBtnTop">
             <svg-icon name="plus" size="13"></svg-icon> Add Creative
           </button>
@@ -6667,6 +6670,179 @@ document.getElementById('crUploadClearAll').addEventListener('click', async () =
   document.getElementById('crUploadSummary').textContent = 'All manual previews removed.';
   mpRenderUnmatched([]);
 });
+
+/* ── Rotation Report export ───────────────────────────────
+   Exports whatever the Creatives tab's current filters resolve to —
+   Market, Quarter(s), Stage, Search, and Date Range all included via
+   crFilter(crGetAll()), the exact same pool + filtering the Creative
+   Library cards render. Pick just Q3 and you get just Q3; pick Q1+Q2 and
+   you get both (each creative's Q1 row and Q2 row are separate line items,
+   same as the cards). Every metric (imps/clicks/ctr/gmOrd/gmLpvr/gmCvr/
+   spend/cpc) comes straight off those rows, plus a derived CPO
+   (spend÷gmOrd, GM-only, matching the CPO convention used everywhere else
+   in this file). Nothing here is fabricated: if the live BigQuery
+   connection hasn't loaded, this exports whatever AN_CREATIVES currently
+   holds (the static fallback), same as every other export in the app.
+
+   Rotate/Review flag methodology (documented on its own sheet in the
+   workbook, not just here):
+   - Peer group = funnel Stage (across whichever quarters are included in
+     the export). A creative is only ever compared against other creatives
+     running in the same stage — comparing a Homepage creative's CVR
+     against an Order/Checkout creative's would be meaningless.
+   - Composite score reuses the exact weighting already established for
+     Performance Scoring elsewhere in this file (psComposite): 35% TDOR +
+     30% CVR + 20% LPVR + 15% CTR, each as a percentile rank within the
+     stage peer group. TDOR isn't a stored field on creative-level rows
+     (only stage-level rows carry it), so it's derived here as
+     gmOrd/imps — the same ratio, just computed at creative grain.
+   - Creatives below CR_ROTATE_MIN_IMPS impressions, or whose peer group
+     has fewer than CR_ROTATE_MIN_PEER_GROUP members, are marked
+     "Insufficient Data" rather than scored — too little signal to judge.
+   - Everything else: bottom-quartile composite score within its stage
+     (percentile <= 0.25) is flagged "Rotate/Review"; everything above
+     that line is "Keep".
+   This is a data-driven starting point for a creative review, not an
+   automatic decision — final call is a judgment call, same as the rest of
+   this dashboard's recommendations. */
+const CR_ROTATE_MIN_IMPS = 1000;
+const CR_ROTATE_MIN_PEER_GROUP = 3;
+
+function crRotationScoreRows(rows) {
+  // rows: crFilter(crGetAll()) — already scoped to whatever Market/
+  // Quarter(s)/Stage/Search/Date Range are currently selected
+  const withDerived = rows.map(r => ({
+    ...r,
+    gmTdor: r.imps ? r.gmOrd / r.imps : 0,
+    cpo: r.gmOrd ? r.spend / r.gmOrd : 0,
+  }));
+
+  const byStage = new Map();
+  withDerived.forEach(r => {
+    if (!byStage.has(r.stage)) byStage.set(r.stage, []);
+    byStage.get(r.stage).push(r);
+  });
+
+  const metricKeys = ['ctr', 'gmLpvr', 'gmCvr', 'gmTdor'];
+  const weights = { gmTdor: 0.35, gmCvr: 0.30, gmLpvr: 0.20, ctr: 0.15 };
+
+  byStage.forEach(members => {
+    const eligible = members.filter(r => r.imps >= CR_ROTATE_MIN_IMPS);
+    if (eligible.length < CR_ROTATE_MIN_PEER_GROUP) {
+      members.forEach(r => { r.rotateFlag = 'Insufficient Data'; r.composite = null; r.stagePercentile = null; });
+      return;
+    }
+    const valuesByMetric = {};
+    metricKeys.forEach(k => { valuesByMetric[k] = eligible.map(r => r[k]); });
+    eligible.forEach(r => {
+      const composite = metricKeys.reduce((sum, k) => {
+        const pct = psPercentileRank(valuesByMetric[k], r[k]);
+        return sum + weights[k] * (pct == null ? 0 : pct);
+      }, 0) * 100;
+      r.composite = composite;
+    });
+    const ranked = eligible.slice().sort((a, b) => a.composite - b.composite);
+    ranked.forEach((r, i) => {
+      r.stagePercentile = (i + 1) / ranked.length;
+      r.rotateFlag = r.stagePercentile <= 0.25 ? 'Rotate/Review' : 'Keep';
+    });
+    members.filter(r => r.imps < CR_ROTATE_MIN_IMPS).forEach(r => {
+      r.rotateFlag = 'Insufficient Data'; r.composite = null; r.stagePercentile = null;
+    });
+  });
+
+  return withDerived;
+}
+
+const CR_ROTATE_KPI_SHEETS = [
+  { key:'imps',   label:'Impressions', dir:-1 },
+  { key:'clicks', label:'Clicks',      dir:-1 },
+  { key:'ctr',    label:'CTR',         dir:-1 },
+  { key:'gmOrd',  label:'GM Orders',   dir:-1 },
+  { key:'gmLpvr', label:'GM LPVR',     dir:-1 },
+  { key:'gmCvr',  label:'GM CVR',      dir:-1 },
+  { key:'spend',  label:'Spend',       dir:-1 },
+  { key:'cpc',    label:'CPC',         dir: 1 }, // lower = better/more efficient
+  { key:'cpo',    label:'CPO',         dir: 1 }, // lower = better/more efficient
+];
+
+function crExportRotationReport() {
+  const rows = crRotationScoreRows(crFilter(crGetAll()));
+  if (!rows.length) { alert('No creatives match the current filters to export.'); return; }
+
+  const summaryCols = [
+    { key:'q',              label:'Quarter' },
+    { key:'mkt',            label:'Market' },
+    { key:'stage',          label:'Stage' },
+    { key:'creative',       label:'Creative Offer Name', v:r=>offerLabel(r.creative) },
+    { key:'imps',           label:'Impressions' },
+    { key:'clicks',         label:'Clicks' },
+    { key:'ctr',            label:'CTR',      v:r=>r.ctr },
+    { key:'gmOrd',          label:'GM Orders' },
+    { key:'gmLpvr',         label:'GM LPVR' },
+    { key:'gmCvr',          label:'GM CVR' },
+    { key:'spend',          label:'Spend' },
+    { key:'cpc',            label:'CPC' },
+    { key:'cpo',            label:'CPO' },
+    { key:'composite',      label:'Composite Score (0-100)' },
+    { key:'stagePercentile',label:'Percentile in Stage' },
+    { key:'rotateFlag',     label:'Rotate/Review Flag' },
+  ];
+  function toRow(cols, r) { return cols.map(c => (c.v ? c.v(r) : r[c.key]) ?? ''); }
+
+  const wb = XLSX.utils.book_new();
+
+  const summarySorted = rows.slice().sort((a,b) => (b.composite ?? -1) - (a.composite ?? -1));
+  XLSX.utils.book_append_sheet(wb,
+    XLSX.utils.aoa_to_sheet([summaryCols.map(c=>c.label)].concat(summarySorted.map(r=>toRow(summaryCols, r)))),
+    'All Creatives');
+
+  CR_ROTATE_KPI_SHEETS.forEach(sheet => {
+    const cols = [
+      { key:'q',         label:'Quarter' },
+      { key:'creative',  label:'Creative Offer Name', v:r=>offerLabel(r.creative) },
+      { key:'mkt',       label:'Market' },
+      { key:'stage',     label:'Stage' },
+      { key: sheet.key,  label: sheet.label },
+      { key:'rotateFlag',label:'Rotate/Review Flag' },
+    ];
+    const sorted = rows.slice().sort((a,b) => sheet.dir * ((a[sheet.key]||0) - (b[sheet.key]||0)));
+    XLSX.utils.book_append_sheet(wb,
+      XLSX.utils.aoa_to_sheet([cols.map(c=>c.label)].concat(sorted.map(r=>toRow(cols, r)))),
+      sheet.label.slice(0, 31));
+  });
+
+  // Filter-summary strings reused in both the filename and the Methodology
+  // sheet, so the workbook is self-documenting about what's in it.
+  const qLabel   = crState.qs.length === ALL_QS.length ? 'AllQtrs' : crState.qs.slice().sort().join('-');
+  const mktLabel = crState.mkt   === 'all' ? 'All' : crState.mkt;
+  const stageLabel = crState.stage === 'all' ? 'All Stages' : crState.stage;
+  const dateLabel = (crState.dateFrom || crState.dateTo)
+    ? `${crState.dateFrom || '…'} to ${crState.dateTo || '…'}`
+    : 'Full quarter(s), no date range applied';
+
+  const methodology = [
+    ['Creative Rotation Report — Methodology'],
+    [''],
+    ['Filters applied at export time', `Quarter(s): ${crState.qs.join(', ')} | Market: ${mktLabel} | Stage: ${stageLabel} | Date range: ${dateLabel}${crState.search ? ' | Search: "'+crState.search+'"' : ''}`],
+    ['Data source', 'Creatives tab data pool (crFilter(crGetAll())) — exactly what the Creative Library cards show for the filters above.'],
+    ['CPO', 'Spend ÷ GM Orders (GM-only, matches the CPO convention used elsewhere in the dashboard).'],
+    ['Peer group', 'Funnel Stage, across whichever quarters are included above — a creative is only compared against other creatives running in the same stage.'],
+    ['Composite score', '0-100 scale. 35% TDOR (GM Orders ÷ Impressions) + 30% GM CVR + 20% GM LPVR + 15% CTR, each as a percentile rank within the stage peer group. Same weighting as this dashboard\'s Performance Scoring composite.'],
+    ['Insufficient Data', `Creatives under ${CR_ROTATE_MIN_IMPS.toLocaleString()} impressions, or in a stage with fewer than ${CR_ROTATE_MIN_PEER_GROUP} creatives at that impression level, are not scored.`],
+    ['Rotate/Review', 'Bottom 25% by composite score within its stage peer group.'],
+    ['Keep', 'Everything scored above the bottom 25%.'],
+    [''],
+    ['This is a data-driven starting point for a creative review, not an automatic decision — confirm against creative age, upcoming flight changes, and qualitative context before rotating anything out.'],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(methodology), 'Methodology');
+
+  const dateSuffix = (crState.dateFrom || crState.dateTo)
+    ? `_${(crState.dateFrom||'start').replace(/-/g,'')}-${(crState.dateTo||'end').replace(/-/g,'')}`
+    : '';
+  XLSX.writeFile(wb, `CRKT_${qLabel}_${mktLabel}_Creative_Rotation_Report${dateSuffix}_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.xlsx`);
+}
+document.getElementById('crRotationReportBtn').addEventListener('click', crExportRotationReport);
 
 /* ── Wire modal & top-level controls ────────────────────── */
 document.getElementById('crAddBtnTop').addEventListener('click', () => crOpenModal(null));
