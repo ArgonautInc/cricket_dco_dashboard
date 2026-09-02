@@ -389,97 +389,108 @@ svg { display: block; }
 /* ─── Module 2: App Shell ────────────────────────────────── */
 #appLayout {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   overflow: hidden;
 }
 
-/* ── Sidebar ─────────────────────────────────────────────── */
-.sidebar {
-  width: 224px;
+/* ── Top header bar ──────────────────────────────────────── */
+.top-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 22px;
+  background: #0D1117;
+  color: #F4F7FA;
   flex-shrink: 0;
-  background: var(--card);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  padding: 20px 14px;
-  gap: 2px;
-  overflow-y: auto;
+  flex-wrap: wrap;
 }
-.sidebar-logo {
-  padding: 4px 8px 20px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.sidebar-logo img {
-  height: 24px;
-  width: auto;
-  display: block;
-}
-.sidebar-logo-fallback {
-  display: none;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-d);
-  font-weight: 800;
-  font-size: 15px;
-  color: var(--accent);
-  letter-spacing: -.3px;
-}
-.sidebar-logo-fallback .dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
+.top-header-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.top-header-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 7px;
+  background: var(--accent); color: #06210A;
+  font-family: var(--font-d); font-weight: 800; font-size: 11px;
   flex-shrink: 0;
 }
-[data-theme="dark"] .sidebar-logo img {
-  filter: brightness(0) invert(1);
-}
+.top-header-title { font-family: var(--font-d); font-size: 14px; font-weight: 700; white-space: nowrap; }
+.top-header-title-sep { color: #8b96a3; font-weight: 500; }
+.top-header-sub { font-size: 11px; color: #9AA5B1; white-space: nowrap; margin-top: 1px; }
+.top-header-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-.nav-section-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .8px;
-  text-transform: uppercase;
-  color: var(--muted);
-  padding: 14px 10px 6px;
+.header-search {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 999px; padding: 6px 12px;
+  max-width: 220px;
 }
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  font-size: 13.5px;
-  color: var(--fg2);
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  background: transparent;
-  width: 100%;
-  text-align: left;
+.header-search input {
+  border: none; background: transparent; outline: none; color: #F4F7FA; font-size: 12px; width: 100%;
   font-family: var(--font-b);
-  transition: background .12s, color .12s;
 }
-.nav-item:hover { background: var(--recess); color: var(--fg); }
-.nav-item.active {
-  background: var(--accent-soft);
-  color: var(--accent-dark);
-  font-weight: 600;
-}
-[data-theme="dark"] .nav-item.active { color: var(--accent); }
-.nav-icon {
-  width: 20px; height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  opacity: .75;
-}
-.nav-item.active .nav-icon { opacity: 1; }
+.header-search input::placeholder { color: #8B96A3; }
 
-.sidebar-spacer { flex: 1; min-height: 16px; }
+.header-user { position: relative; }
+.header-user-btn {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 999px; padding: 4px 10px 4px 4px;
+  cursor: pointer; color: #F4F7FA;
+}
+.header-user-btn .user-avatar { width: 26px; height: 26px; font-size: 11px; }
+.header-user-name { font-size: 12px; font-weight: 600; }
+.header-user-menu {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  background: var(--card); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.24);
+  min-width: 190px; padding: 6px;
+  display: none; z-index: 50;
+}
+.header-user-menu.open { display: block; }
+.header-user-menu-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; text-align: left; padding: 9px 10px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; color: var(--fg2);
+  background: none; border: none; cursor: pointer; font-family: var(--font-b);
+}
+.header-user-menu-item:hover { background: var(--recess); color: var(--fg); }
+.header-user-menu-divider { height: 1px; background: var(--border); margin: 6px 2px; }
+
+.user-avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: linear-gradient(135deg,#5BC500,#1E8AFF);
+  display: grid; place-items: center;
+  color: #fff; font-weight: 700; font-size: 12px;
+  font-family: var(--font-d); flex-shrink: 0;
+}
+
+/* ── Top tab bar (replaces sidebar nav) ──────────────────── */
+.top-tabs {
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 22px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.top-tab {
+  display: inline-flex; align-items: center;
+  padding: 13px 14px;
+  font-size: 13px; font-weight: 600;
+  color: var(--muted);
+  background: none; border: none; cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  font-family: var(--font-b);
+  margin-bottom: -1px;
+  transition: color .12s, border-color .12s;
+}
+.top-tab:hover { color: var(--fg); }
+.top-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
 
 /* ── Main column ─────────────────────────────────────────── */
 .main {
@@ -490,74 +501,14 @@ svg { display: block; }
   min-width: 0;
 }
 
-/* ── Topbar ──────────────────────────────────────────────── */
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 12px 26px;
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.topbar-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-  min-width: 0;
-}
-.topbar-page-title {
-  font-family: var(--font-d);
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--fg);
-  white-space: nowrap;
-}
-.topbar-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--recess);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 8px 16px;
-  max-width: 340px;
-  width: 100%;
-}
-.topbar-search input {
-  border: none; background: transparent; outline: none;
-  color: var(--fg); font-size: 13px; flex: 1;
-  font-family: var(--font-b);
-}
-.topbar-search input::placeholder { color: var(--muted); }
-.topbar-actions {
-  display: flex; gap: 8px; align-items: center;
-}
 .icon-btn {
-  background: var(--card); color: var(--fg2);
-  border: 1px solid var(--border);
-  width: 36px; height: 36px; border-radius: 999px;
+  background: rgba(255,255,255,.08); color: #F4F7FA;
+  border: 1px solid rgba(255,255,255,.12);
+  width: 34px; height: 34px; border-radius: 999px;
   cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.icon-btn:hover { background: var(--recess); }
-.user-chip {
-  display: flex; align-items: center; gap: 9px;
-  padding: 4px 14px 4px 4px;
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 999px; cursor: default;
-}
-.user-avatar {
-  width: 30px; height: 30px; border-radius: 50%;
-  background: linear-gradient(135deg,#5BC500,#1E8AFF);
-  display: grid; place-items: center;
-  color: #fff; font-weight: 700; font-size: 12px;
-  font-family: var(--font-d); flex-shrink: 0;
-}
-.user-name { font-size: 13px; font-weight: 600; color: var(--fg); font-family: var(--font-d); }
-.user-sub  { font-size: 10.5px; color: var(--muted); }
+.icon-btn:hover { background: rgba(255,255,255,.14); }
 
 /* ── Tab panels ──────────────────────────────────────────── */
 .tab-panel {
@@ -1573,13 +1524,9 @@ body.compact .chart-card      { padding: 14px 16px; }
 
 /* ── Responsive collapse ─────────────────────────────────── */
 @media (max-width: 960px) {
-  .sidebar { width: 60px; padding: 16px 8px; }
-  .sidebar-logo img,
-  .sidebar-logo-fallback,
-  .nav-section-label,
-  .nav-item span:not(.nav-icon) { display: none; }
-  .nav-item { justify-content: center; padding: 10px; }
-  .nav-icon { opacity: 1; }
+  .top-header-sub, .header-search { display: none; }
+  .top-header { padding: 10px 14px; }
+  .top-tabs { padding-left: 14px; padding-right: 14px; }
   .settings-grid { grid-template-columns: 1fr; }
   .mini-kpi-row  { grid-template-columns: repeat(2, 1fr); }
 }
@@ -1621,89 +1568,55 @@ body.compact .chart-card      { padding: 14px 16px; }
      ═══════════════════════════════════════════════════════════ -->
 <div id="appLayout">
 
-  <!-- ── Sidebar ── -->
-  <aside class="sidebar">
-    <div class="sidebar-logo">
-      <img src="cricket-logo.png" alt="Cricket"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
-      <div class="sidebar-logo-fallback">
-        <div class="dot"></div>Cricket
+  <!-- ── Top header bar ── -->
+  <div class="top-header">
+    <div class="top-header-left">
+      <span class="top-header-badge">DCO</span>
+      <div>
+        <div class="top-header-title">Cricket DCO Dashboard<span class="top-header-title-sep"> · Cricket × Argonaut</span></div>
+        <div class="top-header-sub" id="topbarTitle">Overview</div>
       </div>
     </div>
+    <div class="top-header-right">
+      <div class="header-search">
+        <svg-icon name="search" size="13" color="#9AA5B1"></svg-icon>
+        <input type="text" id="globalSearch" placeholder="Search creatives, segments…"/>
+      </div>
+      <div class="refresh-chip" id="refreshChip" role="status" aria-live="polite"></div>
+      <button class="icon-btn" id="themeBtn" title="Toggle theme">
+        <svg-icon name="sun" size="15"></svg-icon>
+      </button>
+      <div class="header-user">
+        <button class="header-user-btn" id="headerUserBtn">
+          <div class="user-avatar" id="userAvatarEl">EM</div>
+          <div class="header-user-name" id="userNameEl">—</div>
+          <svg-icon name="dots" size="12"></svg-icon>
+        </button>
+        <div class="header-user-menu" id="headerUserMenu">
+          <button class="header-user-menu-item" id="headerSettingsBtn">
+            <svg-icon name="gear" size="15"></svg-icon> Settings
+          </button>
+          <div class="header-user-menu-divider"></div>
+          <button class="header-user-menu-item" id="signOutBtn">
+            <svg-icon name="out" size="15"></svg-icon> Sign Out
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <div class="nav-section-label">Main</div>
-
-    <button class="nav-item active" data-tab="overview">
-      <span class="nav-icon"><svg-icon name="grid" size="17"></svg-icon></span>
-      <span>Overview</span>
-    </button>
-
-    <button class="nav-item" data-tab="analytics">
-      <span class="nav-icon"><svg-icon name="chart" size="17"></svg-icon></span>
-      <span>Analytics</span>
-    </button>
-
-    <button class="nav-item" data-tab="pivot">
-      <span class="nav-icon"><svg-icon name="table" size="17"></svg-icon></span>
-      <span>Pivot</span>
-    </button>
-
-    <button class="nav-item" data-tab="trends">
-      <span class="nav-icon"><svg-icon name="trending" size="17"></svg-icon></span>
-      <span>Trends</span>
-    </button>
-
-    <button class="nav-item" data-tab="creatives">
-      <span class="nav-icon"><svg-icon name="img" size="17"></svg-icon></span>
-      <span>Creatives</span>
-    </button>
-
-    <button class="nav-item" data-tab="glossary">
-      <span class="nav-icon"><svg-icon name="book" size="17"></svg-icon></span>
-      <span>Glossary</span>
-    </button>
-
-    <div class="sidebar-spacer"></div>
-
-    <div class="nav-section-label">Account</div>
-
-    <button class="nav-item" data-tab="settings">
-      <span class="nav-icon"><svg-icon name="gear" size="17"></svg-icon></span>
-      <span>Settings</span>
-    </button>
-
-    <button class="nav-item" id="signOutBtn" style="margin-top:4px">
-      <span class="nav-icon"><svg-icon name="out" size="17"></svg-icon></span>
-      <span>Sign Out</span>
-    </button>
-  </aside>
+  <!-- ── Top tab bar (replaces sidebar nav) ── -->
+  <div class="top-tabs">
+    <button class="top-tab active" data-tab="overview">Overview</button>
+    <button class="top-tab" data-tab="analytics">Analytics</button>
+    <button class="top-tab" data-tab="pivot">Pivot</button>
+    <button class="top-tab" data-tab="trends">Trends</button>
+    <button class="top-tab" data-tab="creatives">Creatives</button>
+    <button class="top-tab" data-tab="glossary">Glossary</button>
+  </div>
 
   <!-- ── Main column ── -->
   <div class="main">
-
-    <!-- Topbar -->
-    <div class="topbar">
-      <div class="topbar-left">
-        <div class="topbar-page-title" id="topbarTitle">Overview</div>
-        <div class="topbar-search">
-          <svg-icon name="search" size="14" color="var(--muted)"></svg-icon>
-          <input type="text" id="globalSearch" placeholder="Search creatives, segments…"/>
-        </div>
-      </div>
-      <div class="topbar-actions">
-        <div class="refresh-chip" id="refreshChip" role="status" aria-live="polite"></div>
-        <button class="icon-btn" id="themeBtn" title="Toggle theme">
-          <svg-icon name="sun" size="15"></svg-icon>
-        </button>
-        <div class="user-chip">
-          <div class="user-avatar" id="userAvatarEl">EM</div>
-          <div>
-            <div class="user-name" id="userNameEl">—</div>
-            <div class="user-sub" id="userRoleEl">—</div>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <!-- Fires whenever a filter changes the data underneath -->
     <div class="refresh-bar" id="refreshBar" aria-hidden="true"><span></span></div>
@@ -3596,6 +3509,35 @@ async function bootDataLoad(onDataReady) {
    mid-session) rather than the normal path — there is no interactive login
    here any more, just identity resolution. */
 async function loadIdentity() {
+  /* Local-dev-only override: lets you test this file directly (file://
+     or localhost) without the real crk_access cookie / api/whoami backend.
+     Has no effect on the real deployment, where this page is only ever
+     reached through Vercel Edge Middleware after real sign-in. */
+  const isLocalDev = location.protocol === 'file:' ||
+                      ['localhost', '127.0.0.1'].includes(location.hostname);
+  if (isLocalDev) {
+    try {
+      const dev = JSON.parse(sessionStorage.getItem('crkt_session') || 'null');
+      if (dev && dev.email) {
+        const user = {
+          email:    dev.email,
+          name:     dev.name || dev.email,
+          initials: dev.initials || computeInitials(dev.name, dev.email),
+          role:     dev.role || ((dev.email || '').toLowerCase().endsWith('@argonautinc.com') ? 'admin' : 'viewer'),
+        };
+        CURRENT_USER = user;
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded',
+            () => bootDataLoad(() => onAuthSuccess(user)), { once: true });
+        } else {
+          bootDataLoad(() => onAuthSuccess(user));
+        }
+        autoLoadCloudOfferMap();
+        return;
+      }
+    } catch (e) { /* fall through to normal flow below */ }
+  }
+
   let res, data;
   try {
     res = await fetch('api/whoami');
@@ -3679,7 +3621,7 @@ function isoLocal(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-/** Switch visible tab and update sidebar highlight */
+/** Switch visible tab and update top tab bar highlight */
 function switchTab(name) {
   if (!TAB_TITLES[name]) return;
   activeTab = name;
@@ -3688,12 +3630,12 @@ function switchTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
 
-  // Sidebar highlight
-  document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
+  // Tab bar highlight
+  document.querySelectorAll('.top-tab[data-tab]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === name);
   });
 
-  // Topbar title
+  // Header subtitle
   document.getElementById('topbarTitle').textContent = TAB_TITLES[name];
 
   // Notify modules that care about activation
@@ -3720,8 +3662,6 @@ window.__onAuth = function(user) {
   document.getElementById('userAvatarEl').textContent =
     (user.initials && user.initials !== '?') ? user.initials : computeInitials(user.name, user.email);
   document.getElementById('userNameEl').textContent   = user.name;
-  document.getElementById('userRoleEl').textContent   =
-    '';
 
   if (__shellWired) return;
   __shellWired = true;
@@ -3750,9 +3690,26 @@ window.__onAuth = function(user) {
     });
   }
 
-  /* Wire sidebar nav */
-  document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
+  /* Wire top tab bar */
+  document.querySelectorAll('.top-tab[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  /* Header user menu (open/close + Settings/Sign out items) */
+  const headerUserBtn  = document.getElementById('headerUserBtn');
+  const headerUserMenu = document.getElementById('headerUserMenu');
+  headerUserBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    headerUserMenu.classList.toggle('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!headerUserMenu.contains(e.target) && e.target !== headerUserBtn) {
+      headerUserMenu.classList.remove('open');
+    }
+  });
+  document.getElementById('headerSettingsBtn').addEventListener('click', () => {
+    headerUserMenu.classList.remove('open');
+    switchTab('settings');
   });
 
   /* Sign out */
@@ -6915,7 +6872,7 @@ if (_globalSearch) {
     const crBox = document.getElementById('crSearch');
     if (crBox) crBox.value = q;
     const onCreatives = document
-      .querySelector('.nav-item[data-tab="creatives"]')
+      .querySelector('.top-tab[data-tab="creatives"]')
       ?.classList.contains('active');
     if (q && !onCreatives) switchTab('creatives');
     renderCreatives();
