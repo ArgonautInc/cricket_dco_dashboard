@@ -1855,7 +1855,7 @@ body.compact .chart-card      { padding: 14px 16px; }
           <button class="btn-ghost btn-sm" id="crUploadBtn" title="Fallback for when Cloudflare previews are unavailable. Upload the ad-screenshot-capturer ZIP, or loose PNG/JPGs. Cloudflare still takes precedence wherever it has an image.">
             <svg-icon name="plus" size="13"></svg-icon> Upload Previews
           </button>
-          <button class="btn-ghost btn-sm" id="crRotationReportBtn" title="Exports whatever Market/Quarter(s)/Stage/Date Range are currently selected above, with one tab per dashboard KPI, each sorted best-to-worst, plus a Rotate/Review flag based on composite performance within its funnel stage.">
+          <button class="btn-ghost btn-sm" id="crRotationReportBtn" title="Exports whatever Market/Quarter(s)/Stage/Date Range are currently selected above, with one tab per dashboard KPI, each sorted best-to-worst, a Rotate/Review flag based on composite performance within its funnel stage, and a Penetration Index sheet (adapted from the CRKT DCO Penetration Index Calculator — see that sheet's notes for what's approximated).">
             <svg-icon name="download" size="13"></svg-icon> Export Rotation Report
           </button>
           <button class="btn-primary btn-sm" id="crAddBtnTop">
@@ -6711,6 +6711,82 @@ function crRotationScoreRows(rows) {
   return withDerived;
 }
 
+/* ── Penetration Index (adapted from CRKT_DCO_Penetration_Index_Calculator_v3.xlsx) ──
+   ADAPTATION NOTE — READ BEFORE TRUSTING THESE NUMBERS AGAINST THE REAL CALCULATOR:
+   The source calculator splits landing-page spotlight hits into S1 (the
+   creative's INTENDED landing page) and S2 (other expected landing pages in
+   the same bucket) — the intent bonus (+1 x S1) and Intent Precision
+   (S1/(S1+S2)) both depend on that split. This dashboard's BigQuery pipeline
+   only exposes a single COMBINED landing-page-view rate (gmLpvr, from
+   `CKT_bNON_HISPANIC_GLOBAL_RT Count`) — S1 and S2 are not separable here.
+   S3/S4/S5 (next-step/cart/checkout) are also 0 in both the source
+   calculator's current inputs and this dashboard, so that part is unaffected.
+
+   REMINDER: pull a Flashtalking report with the intended-landing-page
+   spotlight broken out per creative (S1 vs S2), and next-step/cart/checkout
+   spotlights (S3/S4/S5) once available, so the intent bonus and Intent
+   Precision can be added back and this can match the real calculator exactly.
+
+   Until then, this adapted version:
+   - Treats the combined LPV count as the base landing-page tier only (no
+     intent bonus term, since S1 isn't separable) — equivalent to the source
+     calculator's own documented "equation collapse" case with S1 forced to 0.
+   - Does NOT report Intent Precision (requires S1/S2 split).
+   - Otherwise follows the source methodology exactly: Step 1 double-count
+     stripping, Step 2 depth points (weights per the Weights tab), Step 3
+     depth rate per 1k impressions, Step 4 index against the bucket median
+     (peer group = funnel Stage, same convention as the Rotate/Review flag
+     above), Step 5 banding with the same cut points and volume floors. */
+const PI_MIN_IMPS = 5000;      // 'Minimum impressions to band a version' — Weights tab
+const PI_MIN_EVENTS = 30;      // 'Minimum events (S1+S2+O) to band a version' — Weights tab
+const PI_TOP_CUTOFF = 120;     // 'Top performer at or above' — Weights tab
+const PI_UNDER_CUTOFF = 80;    // 'Underperforming below' — Weights tab
+
+function crPenetrationScoreRows(rows) {
+  const withDepth = rows.map(r => {
+    // lpvCount approximates the source calculator's (S1 + S2) — the combined
+    // landing-page-view count, back-derived from the stored rate since only
+    // the rate (gmLpvr) is exposed at creative grain, not the raw count.
+    const lpvCount = Math.round((r.gmLpvr || 0) * (r.imps || 0));
+    const nOrder = r.gmOrd || 0;
+    const nClick = Math.max(0, (r.clicks || 0) - lpvCount);   // residual clicks
+    const nLpv   = Math.max(0, lpvCount - nOrder);             // landing-page tier, order tier stripped out
+    const d  = 1 * nLpv + 10 * nOrder + 0.5 * nClick;          // Depth Points (Weights tab)
+    const dr = r.imps ? 1000 * d / r.imps : 0;                 // Depth Rate per 1k impressions
+    return { ...r, lpvCount, nOrder, nClick, nLpv, d, dr };
+  });
+
+  const byStage = new Map();
+  withDepth.forEach(r => {
+    if (!byStage.has(r.stage)) byStage.set(r.stage, []);
+    byStage.get(r.stage).push(r);
+  });
+
+  byStage.forEach(members => {
+    const drsSorted = members.map(r => r.dr).slice().sort((a, b) => a - b);
+    const mid = Math.floor(drsSorted.length / 2);
+    const median = drsSorted.length === 0 ? 0
+      : (drsSorted.length % 2 ? drsSorted[mid] : (drsSorted[mid - 1] + drsSorted[mid]) / 2);
+
+    members.forEach(r => {
+      r.bucketMedianDr = median;
+      r.pi = median > 0 ? 100 * r.dr / median : null;
+      const lowVolume = r.imps < PI_MIN_IMPS || (r.lpvCount + r.nOrder) < PI_MIN_EVENTS;
+      if (r.pi == null)             r.piBand = 'N/A';
+      else if (lowVolume)           r.piBand = 'Low volume';
+      else if (r.pi >= PI_TOP_CUTOFF)   r.piBand = 'Top performer';
+      else if (r.pi < PI_UNDER_CUTOFF)  r.piBand = 'Underperforming';
+      else                          r.piBand = 'On-par';
+    });
+
+    members.slice()
+      .sort((a, b) => (b.pi ?? -1) - (a.pi ?? -1))
+      .forEach((r, i) => { r.piRankInStage = i + 1; });
+  });
+
+  return withDepth;
+}
+
 const CR_ROTATE_KPI_SHEETS = [
   { key:'imps',   label:'Impressions', dir:-1 },
   { key:'clicks', label:'Clicks',      dir:-1 },
@@ -6769,6 +6845,30 @@ function crExportRotationReport() {
       sheet.label.slice(0, 31));
   });
 
+  const piRows = crPenetrationScoreRows(rows);
+  const piCols = [
+    { key:'q',              label:'Quarter' },
+    { key:'mkt',            label:'Market' },
+    { key:'stage',          label:'Stage (Bucket)' },
+    { key:'creative',       label:'Creative Offer Name', v:r=>offerLabel(r.creative) },
+    { key:'imps',           label:'Impressions' },
+    { key:'clicks',         label:'Clicks' },
+    { key:'lpvCount',       label:'LPV Count (approx., combined — see Methodology)' },
+    { key:'nOrder',         label:'Orders' },
+    { key:'nLpv',           label:'n_lpv' },
+    { key:'nClick',         label:'n_click' },
+    { key:'d',              label:'D — Depth Points (internal, do not report externally)' },
+    { key:'dr',             label:'DR — Depth Rate /1k imps (internal, do not report externally)' },
+    { key:'bucketMedianDr', label:'Bucket Median DR' },
+    { key:'pi',             label:'PI Index' },
+    { key:'piBand',         label:'Band' },
+    { key:'piRankInStage',  label:'Rank in Stage' },
+  ];
+  const piSorted = piRows.slice().sort((a,b) => a.stage.localeCompare(b.stage) || (a.piRankInStage||99) - (b.piRankInStage||99));
+  XLSX.utils.book_append_sheet(wb,
+    XLSX.utils.aoa_to_sheet([piCols.map(c=>c.label)].concat(piSorted.map(r=>toRow(piCols, r)))),
+    'Penetration Index');
+
   // Filter-summary strings reused in both the filename and the Methodology
   // sheet, so the workbook is self-documenting about what's in it.
   const qLabel   = crState.qs.length === ALL_QS.length ? 'AllQtrs' : crState.qs.slice().sort().join('-');
@@ -6791,6 +6891,15 @@ function crExportRotationReport() {
     ['Keep', 'Everything scored above the bottom 25%.'],
     [''],
     ['This is a data-driven starting point for a creative review, not an automatic decision — confirm against creative age, upcoming flight changes, and qualitative context before rotating anything out.'],
+    [''],
+    ['Penetration Index sheet — adapted from CRKT_DCO_Penetration_Index_Calculator_v3.xlsx'],
+    ['⚠ REMINDER', 'Pull a Flashtalking report with the intended-landing-page spotlight split (S1 vs S2) and next-step/cart/checkout spotlights (S3/S4/S5) per creative. Until then this sheet is an ADAPTED approximation, not the full calculator.'],
+    ['What\'s different from the real calculator', 'This dashboard only exposes a single COMBINED landing-page-view rate per creative (no S1-vs-S2 split), so the intent bonus (+1 x S1) and Intent Precision (S1/(S1+S2)) cannot be computed and are omitted here. S3/S4/S5 (next-step/cart/checkout) are 0 in the source calculator today too, so that part is unaffected.'],
+    ['Formula used here', 'n_click = MAX(0, Clicks − LPV Count); n_lpv = MAX(0, LPV Count − Orders); D = 1×n_lpv + 10×Orders + 0.5×n_click; DR = 1,000×D/Impressions; PI = 100×DR ÷ (median DR within the same Stage peer group).'],
+    ['LPV Count', 'Approximated as GM LPVR × Impressions (rounded) — back-derived from the stored rate since only the rate, not the raw spotlight count, is exposed at creative grain.'],
+    ['Band cut points', `PI ≥ ${PI_TOP_CUTOFF} = Top performer · PI < ${PI_UNDER_CUTOFF} = Underperforming · otherwise On-par · under ${PI_MIN_IMPS.toLocaleString()} impressions or under ${PI_MIN_EVENTS} events (LPV Count + Orders) = Low volume (not banded).`],
+    ['Never publish', 'D and DR are working numbers only, per the source calculator\'s own rule — report PI and Band, not D/DR, outside the team.'],
+    ['Never compare across buckets', 'PI is only meaningful within its own Stage — a Mid Funnel PI of 150 and a Cart Abandoner PI of 150 are not the same thing.'],
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(methodology), 'Methodology');
 
@@ -7750,7 +7859,7 @@ function oneSheetBuildFunnelRows(qSel, mktSel, dateFrom, dateTo) {
   }
 
   return curSeg
-    .sort((a, b) => oneSheetStageSortKey(a.stage) - oneSheetStageSortKey(b.stage))
+    .sort((a, b) => b.imps - a.imps)
     .map(s => {
       const prev = prevByStage.get(stageCanonicalKey(s.stage));
       return {
