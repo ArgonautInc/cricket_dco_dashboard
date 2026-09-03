@@ -730,9 +730,15 @@ svg { display: block; }
 .pv-tr-totals .pv-td-val   { font-weight: 600; color: var(--fg); }
 .pv-td-grand { font-weight: 800 !important; }
 .pv-table tr:last-child td { border-bottom: none; }
-.pv-table tbody tr:not(.pv-tr-totals):hover .pv-td-val  { background: var(--recess) !important; }
-.pv-table tbody tr:not(.pv-tr-totals):hover .pv-td-total { background: var(--recess); }
-.pv-table tbody tr:not(.pv-tr-totals):hover .pv-td-label { background: var(--recess); }
+/* Zebra striping — odd rows get a faint tint so long tables are easier to scan */
+.pv-table tbody tr:nth-child(odd):not(.pv-tr-totals):not(.pv-tr-group) .pv-td-val,
+.pv-table tbody tr:nth-child(odd):not(.pv-tr-totals):not(.pv-tr-group) .pv-td-total,
+.pv-table tbody tr:nth-child(odd):not(.pv-tr-totals):not(.pv-tr-group) .pv-td-label {
+  background: var(--pv-zebra, rgba(127,140,155,.055));
+}
+.pv-table tbody tr:not(.pv-tr-totals):hover .pv-td-val  { background: var(--pv-hover, rgba(91,197,0,.14)) !important; }
+.pv-table tbody tr:not(.pv-tr-totals):hover .pv-td-total { background: var(--pv-hover, rgba(91,197,0,.14)); }
+.pv-table tbody tr:not(.pv-tr-totals):hover .pv-td-label { background: var(--pv-hover, rgba(91,197,0,.14)); }
 .pv-empty { padding: 48px; text-align: center; color: var(--muted); font-size: 13px; }
 .pv-table-block { margin-bottom: 20px; }
 .pv-table-block:last-child { margin-bottom: 0; }
@@ -2396,12 +2402,14 @@ body.compact .chart-card      { padding: 14px 16px; }
             <button class="active" data-q="Q3">Q3</button>
           </div>
         </div>
-        <div class="pv-control-group" id="pvDateRangeGroup" style="display:none;align-items:center;gap:6px">
+        <div class="pv-control-group" id="pvDateRangeGroup" style="display:none">
           <span class="pv-label">Date Range</span>
-          <input type="date" id="pvDateFrom" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px">
-          <span style="color:var(--muted);font-size:12px">to</span>
-          <input type="date" id="pvDateTo" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px">
-          <button class="btn-ghost btn-sm" id="pvDateRangeClear" style="padding:4px 10px">Reset</button>
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="date" id="pvDateFrom" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px">
+            <span style="color:var(--muted);font-size:12px">to</span>
+            <input type="date" id="pvDateTo" class="cr-form-input" style="width:auto;padding:6px 10px;font-size:12px">
+            <button class="btn-ghost btn-sm" id="pvDateRangeClear" style="padding:4px 10px">Reset</button>
+          </div>
         </div>
         <div class="pv-control-group">
           <span class="pv-label">Data</span>
@@ -2816,7 +2824,7 @@ async function loadBigQueryData() {
       AN_CREATIVES = anCreativeRows.map(r => ({
         q:        r.q,
         mkt:      r.mkt,
-        stage:    stageCanonicalKey(r.stage),
+        stage:    stageCanonicalKey(r.stage, r.creative),
         creative:   r.creative   || '',
         versionIds:  r.versionIds  || '',
         creativeIds: r.creativeIds || '',
@@ -2912,7 +2920,7 @@ async function tryLoadStageCreativeDailyData() {
           reach:  Number(r.reach)  || 0,
         }));
         AN_DAILY_CREATIVE_RAW = creativeRows.map(r => ({
-          day: r.day, q: r.q, mkt: r.mkt, stage: stageCanonicalKey(r.stage), creative: r.creative || '',
+          day: r.day, q: r.q, mkt: r.mkt, stage: stageCanonicalKey(r.stage, r.creative), creative: r.creative || '',
           imps:   Number(r.imps)   || 0,
           clicks: Number(r.clicks) || 0,
           gmOrdCount: Number(r.gmOrdCount) || 0,
@@ -3821,7 +3829,6 @@ const STAGE_ALIAS_GROUPS = [
   ['Plans Selection', 'Plans Research', 'Plan Research'],
   ['MultiMonth Plans', 'Multi-Month Visitor', 'Multi Month Plan Research'],
   ['Mid Funnel', 'Mid Funnel Entry'],
-  ['Deals', 'Deals Browser'],
   ['BYOD Visitor', 'BYOD Engager'],
   ['Device Page Visitor', 'Device PDP'],
 ];
@@ -3838,11 +3845,33 @@ function stageLabel(stage) {
   return String(stage || '').replace(/^\d+\s*-\s*/, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
 }
 
+/* Splits the "Plans Selection" funnel stage by which rate-plan tactic a
+   creative promotes, so 1-line/2-line/4-line offers can be compared
+   separately instead of blended into one bucket. Matched on wording that
+   shows up in every quarter's Creative Offer Name — confirmed against the
+   Q3 trafficking matrix's Content Codes (single_line / 2_for_65_line /
+   4_for_25_line). Creatives that don't mention a line count (e.g. Supreme
+   Unlimited) stay under the plain "Plans Selection" bucket. */
+function planLineTactic(creative) {
+  const s = String(creative || '');
+  if (/\b4\s*lines?\b/i.test(s)) return '4 Lines';
+  if (/\b2\s*lines?\b/i.test(s)) return '2 Lines';
+  if (/\bsingle\s*line\b|\b1\s*line\b/i.test(s)) return '1 Line';
+  return null;
+}
+
 /* Canonical lookup/grouping key: stageLabel() plus alias resolution,
-   so e.g. "Homepage" and "Homepage Visitor" collapse to one bucket. */
-function stageCanonicalKey(stage) {
+   so e.g. "Homepage" and "Homepage Visitor" collapse to one bucket.
+   Pass the creative name too where available so Plans Selection can be
+   split by line-count tactic (see planLineTactic above). */
+function stageCanonicalKey(stage, creative) {
   const label = stageLabel(stage);
-  return STAGE_ALIAS_MAP.get(label) || label;
+  const canon = STAGE_ALIAS_MAP.get(label) || label;
+  if (canon === 'Plans Selection' && creative) {
+    const line = planLineTactic(creative);
+    if (line) return `Plans Selection – ${line}`;
+  }
+  return canon;
 }
 
 /* ── Pivot data (real Q1/Q2 from CRKT_Q226 Excel) ────────── */
@@ -3901,8 +3930,12 @@ const STAGE_COLORS = {
   'Homepage':            '#1E8AFF',
   'BYOD Visitor':        '#00C2E0',
   'Deals':               '#FF8200',
+  'Deals Browser':       '#C96A00',
   'Deals Research':      '#D96C00',
   'Plans Selection':     '#A050BE',
+  'Plans Selection – 1 Line':  '#8A3FA0',
+  'Plans Selection – 2 Lines': '#A050BE',
+  'Plans Selection – 4 Lines': '#C070DC',
   'MultiMonth Plans':    '#E5202E',
   'Device Page Visitor': '#FF6B35',
   'Cart Abandoner':      '#FFB800',
@@ -4528,7 +4561,7 @@ let AN_CREATIVES = [
   {q:'Q2',mkt:'USH',stage:'1 - Mid Funnel',creative:'Template-PremiumDevice',                                             imps:3541780, clicks:2822,gmOrd:4, ctr:0.000797,gmLpvr:0.00797,gmCvr:0.00142},
   {q:'Q2',mkt:'USH',stage:'1 - Mid Funnel',creative:'Template-Transparency-Simplicity',                                   imps:3651320, clicks:2636,gmOrd:7, ctr:0.000722,gmLpvr:0.00764,gmCvr:0.00266},
 ];
-AN_CREATIVES = AN_CREATIVES.map(r => ({ ...r, stage: stageCanonicalKey(r.stage) }));
+AN_CREATIVES = AN_CREATIVES.map(r => ({ ...r, stage: stageCanonicalKey(r.stage, r.creative) }));
 
 /* ── Offer name lookup map ───────────────────────────────── */
 const OFFER_MAP_KEY         = 'crkt_offer_map_v1';
@@ -7829,11 +7862,12 @@ function oneSheetAggregateSegments(rows) {
    segment doesn't silently vanish, just add it here once its place in
    the funnel is known. */
 const ONESHEET_SEGMENT_ORDER = [
-  'Mid Funnel', 'Prospecting', 'Homepage', 'Deals',
+  'Mid Funnel', 'Prospecting', 'Homepage', 'Deals', 'Deals Browser',
   'Cricket Research', 'Device Browser', 'Device Page Visitor', 'Plans Browser',
   'Tablet Plan', 'Smartwatch Plan', 'Smartphones', 'Product Page Visitor',
   'BYOD Visitor', 'MultiMonth Plans', 'CompatibilityCheck',
-  'Plans Selection', 'Device Cart Plan Select', 'Cart Abandoner', 'Checkout',
+  'Plans Selection', 'Plans Selection – 1 Line', 'Plans Selection – 2 Lines', 'Plans Selection – 4 Lines',
+  'Device Cart Plan Select', 'Cart Abandoner', 'Checkout',
   'Order', 'D-TREE Default',
 ];
 
@@ -9118,7 +9152,8 @@ function pvBuildMetricTableHTML(metric, pool, rowKey, colKey, colVals, rowVals) 
 
   const allVals = rowVals.flatMap(rv => colVals.map(cv => matrix[rv][cv])).filter(v => v > 0);
   const maxVal  = Math.max(...allVals, 1);
-  const heat    = v => v > 0 ? ` style="background:rgba(91,197,0,${(Math.min(v/maxVal,1)*0.2).toFixed(3)})"` : '';
+  const minVal  = allVals.length ? Math.min(...allVals) : 0;
+  const heat    = v => pvHeatStyle(metric, v, minVal, maxVal);
 
   const si = col => (pvState.sortMetric===metric && pvState.sortCol===col) ? (pvState.sortDir===-1?' ▾':' ▴') : '';
 
@@ -9156,9 +9191,20 @@ function pvBuildMetricTableHTML(metric, pool, rowKey, colKey, colVals, rowVals) 
    best performer inside each stage is the first row of its group. Metrics run
    across the columns instead of getting a table each. */
 
-/* Lower is better for these, so they're excluded from the "top" ranking and
-   from the in-group heat shading — a big bar would read as good. */
+/* Lower is better for these, so a low value should shade green, not red. */
 const PV_INVERSE_METRICS = ['cpc', 'cpo', 'freq'];
+
+/* Diverging red → amber → green heat scale, scaled from the min/max actually
+   present in the table (not from zero) so top and bottom performers are
+   clearly distinguishable. Inverse metrics (CPC/CPO/freq — lower is better)
+   flip the scale so a low value still reads as green. */
+function pvHeatStyle(metric, v, min, max) {
+  if (!(v > 0) || max <= min) return '';
+  let t = (v - min) / (max - min);
+  if (PV_INVERSE_METRICS.includes(metric)) t = 1 - t;
+  const hue = Math.round(t * 120); // 0 = red (worst), 60 = amber (mid), 120 = green (best)
+  return ` style="background:hsla(${hue},72%,45%,0.24)"`;
+}
 
 function pvBuildGroupedTableHTML(pool) {
   const metrics = pvState.metrics;
@@ -9187,16 +9233,14 @@ function pvBuildGroupedTableHTML(pool) {
     creatives.sort((a, b) =>
       (pvAggregate(a.rows, rankBy) - pvAggregate(b.rows, rankBy)) * pvState.sortDir);
 
-    // Shade each metric column against the strongest creative in this stage
-    const stageMax = {};
+    // Shade each metric column against the range of values in this stage,
+    // min-to-max, so the best and worst creatives are clearly distinguishable.
+    const stageStats = {};
     metrics.forEach(k => {
-      stageMax[k] = Math.max(...creatives.map(c => pvAggregate(c.rows, k)), 0);
+      const vals = creatives.map(c => pvAggregate(c.rows, k)).filter(v => v > 0);
+      stageStats[k] = { min: vals.length ? Math.min(...vals) : 0, max: vals.length ? Math.max(...vals) : 0 };
     });
-    const heat = (k, v) => {
-      if (PV_INVERSE_METRICS.includes(k) || !stageMax[k] || v <= 0) return '';
-      const a = (Math.min(v / stageMax[k], 1) * 0.22).toFixed(3);
-      return ` style="background:rgba(91,197,0,${a})"`;
-    };
+    const heat = (k, v) => pvHeatStyle(k, v, stageStats[k].min, stageStats[k].max);
 
     const groupRow = `<tr class="pv-tr-group${collapsed?' collapsed':''}" data-stage="${esc(stage)}">
       <td class="pv-td-label pv-td-group">
