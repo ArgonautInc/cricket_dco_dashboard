@@ -866,6 +866,13 @@ svg { display: block; }
   color: var(--fg2);
 }
 [data-theme="dark"] .tr-daily-notice { border-color: rgba(30,138,255,.2); }
+.tr-result-bar {
+  margin-top: 8px;
+  text-align: right;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
 
 /* ── Glossary ────────────────────────────────────────────── */
 .gloss-cats {
@@ -2290,6 +2297,14 @@ body.compact .chart-card      { padding: 14px 16px; }
 
       <div class="pv-controls">
         <div class="pv-control-group">
+          <span class="pv-label">View</span>
+          <div class="seg-tabs green" id="trViewToggle" title="Compare KPIs on one chart, or split a single KPI into one line per Stage/Offer">
+            <button class="active" data-view="metric">By Metric</button>
+            <button data-view="stage">By Stage</button>
+            <button data-view="offer">By Offer</button>
+          </div>
+        </div>
+        <div class="pv-control-group">
           <span class="pv-label">Quarter</span>
           <div class="seg-tabs green" id="trQuarterFilter">
             <button class="active" data-q="Q1">Q1</button>
@@ -2305,7 +2320,7 @@ body.compact .chart-card      { padding: 14px 16px; }
             <button data-mkt="USH">USH</button>
           </div>
         </div>
-        <div class="pv-control-group">
+        <div class="pv-control-group" id="trStageGroup">
           <span class="pv-label">Stage</span>
           <select class="an-select" id="trStageFilter">
             <option value="all">All Stages</option>
@@ -2325,7 +2340,7 @@ body.compact .chart-card      { padding: 14px 16px; }
           <button class="btn-ghost btn-sm" id="trDateRangeClear" style="padding:4px 10px">Reset</button>
         </div>
         <div class="pv-control-group">
-          <span class="pv-label">Metric</span>
+          <span class="pv-label" id="trMetricLabel">Metric</span>
           <div class="tr-metric-pills" id="trMetricPills"></div>
         </div>
       </div>
@@ -2335,6 +2350,7 @@ body.compact .chart-card      { padding: 14px 16px; }
         <div class="tr-legend" id="trLegend"></div>
       </div>
       <div id="trTooltip" class="tr-tooltip"></div>
+      <div id="trResultBar" class="tr-result-bar"></div>
 
       <div id="trDailyNotice" style="display:none" class="tr-daily-notice"></div>
 
@@ -5874,7 +5890,11 @@ function vfPopulateSelect(id, current, qs, mkt) {
    same graceful-hide pattern the date-range pickers use — and re-renders
    the two tabs that have one. */
 function vfSyncControls() {
-  ['anVersionGroup', 'trOfferGroup'].forEach(id => {
+  /* trOfferGroup's visibility also depends on trState.view (hidden in
+     "By Offer" mode, since Offer is the grouping dimension there rather
+     than a narrowing filter) — trSyncViewControls() owns that logic and
+     re-applies it on every renderTrends() call below. */
+  ['anVersionGroup'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = vfLoaded ? 'flex' : 'none';
   });
@@ -8504,6 +8524,17 @@ function trMetricColor(key) {
   return TR_METRIC_COLORS[i % TR_METRIC_COLORS.length];
 }
 
+/* Group-by-dimension mode ("By Stage" / "By Offer") splits a single metric
+   into one line per Stage or Offer value, rather than one line per metric.
+   A couple extra colors keep Stage (~10 values) from repeating as often as
+   the 8-color metric palette would. */
+const TR_GROUP_COLORS = TR_METRIC_COLORS.concat(['#06B6D4', '#84CC16']);
+function trGroupColor(i) { return TR_GROUP_COLORS[i % TR_GROUP_COLORS.length]; }
+
+/* Offer easily runs into dozens of creatives, so both grouped modes rank
+   by total volume of the selected metric and keep only the top N lines. */
+const TR_GROUP_CAP = { stage: 12, offer: 8 };
+
 /* Generic multi-select toggle, mirroring toggleQuarter() — keeps at least
    one item selected and preserves `order`'s sequence rather than the
    click order, so pills don't reshuffle as they're toggled. */
@@ -8571,7 +8602,7 @@ function trGetValClipped(q, mkt, metric, daysLive) {
   return pvAggregate(rows, metric);
 }
 
-let trState   = { metrics:['imps'], mkt:'all', gran:'quarterly', quarters:['Q1','Q2','Q3'], version:'all', stage:'all', offer:'all', dateFrom:null, dateTo:null };
+let trState   = { view:'metric', metrics:['imps'], mkt:'all', gran:'quarterly', quarters:['Q1','Q2','Q3'], version:'all', stage:'all', offer:'all', dateFrom:null, dateTo:null };
 let trDailyData = [];
 let trDailyLoaded = false;
 let trDailyAttempted = false;
@@ -8641,6 +8672,81 @@ function trPopulateOfferFilter() {
   trState.offer = keep;
 }
 
+/* Quarter-level rows for grouped mode — narrowed by the *other* dimension
+   only, never by the one being grouped on (that would defeat the point of
+   splitting into per-stage/per-offer lines). */
+function trGroupedQuarterRows(groupKey) {
+  if (groupKey === 'stage') {
+    return (trState.offer !== 'all' && vfLoaded)
+      ? aggStageRawRows(VF_STAGES.filter(r => r.creative === trState.offer))
+      : AN_STAGES;
+  }
+  return trState.stage === 'all' ? AN_CREATIVES : AN_CREATIVES.filter(r => r.stage === trState.stage);
+}
+
+/* Day-level rows for grouped mode — same narrowing rule, drawn from the
+   same day-level pools the rest of Trends already loads. */
+function trGroupedDailyRows(groupKey) {
+  if (!anDailyLoaded) return [];
+  if (groupKey === 'stage') {
+    return trState.offer !== 'all'
+      ? AN_DAILY_CREATIVE_RAW.filter(r => r.creative === trState.offer)
+      : AN_DAILY_STAGE_RAW;
+  }
+  return trState.stage !== 'all'
+    ? AN_DAILY_CREATIVE_RAW.filter(r => r.stage === trState.stage)
+    : AN_DAILY_CREATIVE_RAW;
+}
+
+/* Builds one series per Stage or Offer value for a single metric, ranked
+   by total volume and capped at TR_GROUP_CAP so Offer (which can run into
+   dozens of creatives) stays readable. */
+function trBuildGroupedSeries(metric, groupKey, useDailyData) {
+  const md    = TR_METRICS.find(x => x.key === metric);
+  const daily = useDailyData ? trGroupedDailyRows(groupKey) : [];
+  const useDaily = daily.length > 0;
+
+  let rows, labels;
+  if (useDaily) {
+    rows = daily.filter(r => trState.quarters.includes(r.q) && (trState.mkt === 'all' || r.mkt === trState.mkt));
+    if (trState.dateFrom) rows = rows.filter(r => r.day >= trState.dateFrom);
+    if (trState.dateTo)   rows = rows.filter(r => r.day <= trState.dateTo);
+    labels = [...new Set(rows.map(r => r.day))].sort();
+  } else {
+    rows   = trGroupedQuarterRows(groupKey).filter(r => trState.mkt === 'all' || r.mkt === trState.mkt);
+    labels = TR_QS.filter(q => trState.quarters.includes(q));
+  }
+
+  const groupField = groupKey === 'stage' ? 'stage' : 'creative';
+  const groupVals   = [...new Set(rows.map(r => r[groupField]).filter(Boolean))];
+
+  const ranked = groupVals
+    .map(g => ({ g, total: pvAggregate(rows.filter(r => r[groupField] === g), metric) }))
+    .sort((a, b) => b.total - a.total);
+
+  const cap     = TR_GROUP_CAP[groupKey];
+  const shown   = ranked.slice(0, cap);
+  const omitted = ranked.length - shown.length;
+
+  const series = shown.map((entry, i) => {
+    const groupRows = rows.filter(r => r[groupField] === entry.g);
+    const points = labels.map(lb => {
+      const subset = useDaily ? groupRows.filter(r => r.day === lb) : groupRows.filter(r => r.q === lb);
+      return pvAggregate(subset, metric);
+    });
+    return {
+      key:   entry.g,
+      label: groupKey === 'offer' ? offerLabel(entry.g) : entry.g,
+      color: trGroupColor(i),
+      fmt:   md.fmt,
+      labels,
+      points,
+    };
+  });
+
+  return { series, omitted, totalGroups: ranked.length };
+}
+
 function trGetVal(q, mkt, metric) {
   let rows = trStageRows();
   if (q   !== 'all') rows = rows.filter(r => r.q   === q);
@@ -8694,6 +8800,11 @@ function trBuildSvg(series, fmtFn, direction) {
   const yTickVals = [0, .25, .5, .75, 1].map(f => maxV * f);
 
   let svg = `<svg viewBox="0 0 ${VW} ${VH}" width="100%" style="display:block;overflow:visible">`;
+  svg += `<defs>${series.map((s,i) => `
+    <linearGradient id="trGrad${i}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${s.color}" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="${s.color}" stop-opacity="0"/>
+    </linearGradient>`).join('')}</defs>`;
 
   /* Grid */
   yTickVals.forEach(tv => {
@@ -8713,23 +8824,23 @@ function trBuildSvg(series, fmtFn, direction) {
   });
 
   /* Series */
-  series.forEach(s => {
+  series.forEach((s, si) => {
     if (s.points.length < 2) return;
 
     /* Area */
     const ptStr = s.points.map((v,i) => `${xOf(i)},${yOf(v)}`).join(' ');
     const areaD = `M${xOf(0)},${PT+cH} L${s.points.map((v,i)=>`${xOf(i)},${yOf(v)}`).join(' ')} L${xOf(N-1)},${PT+cH} Z`;
-    svg += `<path d="${areaD}" fill="${s.color}" opacity="0.07"/>`;
+    svg += `<path d="${areaD}" fill="url(#trGrad${si})"/>`;
 
     /* Line */
     svg += `<polyline points="${ptStr}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
 
-    /* Visible dots — only render if N <= 30 (avoids overcrowding a full
-       quarter of daily points) */
+    /* Visible dots — hollow rings, only render if N <= 30 (avoids
+       overcrowding a full quarter of daily points) */
     if (N <= 30) {
       s.points.forEach((v, i) => {
         const x = xOf(i), y = yOf(v);
-        svg += `<circle cx="${x}" cy="${y}" r="${N > 10 ? 3 : 5}" fill="${s.color}" stroke="var(--card)" stroke-width="2"/>`;
+        svg += `<circle cx="${x}" cy="${y}" r="${N > 10 ? 3 : 5}" fill="var(--card)" stroke="${s.color}" stroke-width="2.5"/>`;
         if (N <= 6) {
           svg += `<text x="${x}" y="${y-10}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${s.color}">${fmtFn(v)}</text>`;
         }
@@ -8846,14 +8957,22 @@ function renderTrendSummaryTable() {
     <tbody>${rows}</tbody>`;
 }
 
-/* Metric pills are multi-select (like the Quarter filter) so every KPI —
-   including all of them at once — can be plotted together. */
+/* Metric pills are multi-select (like the Quarter filter) in "By Metric"
+   view, so every KPI — including all of them at once — can be plotted
+   together. In "By Stage"/"By Offer" view, only one metric can drive the
+   grouped chart, so pills switch to single-select there instead. */
 function renderMetricPills() {
   document.getElementById('trMetricPills').innerHTML = TR_METRICS.map(m =>
     `<button class="tr-metric-pill${trState.metrics.includes(m.key)?' active':''}" data-metric="${m.key}">${m.label}</button>`
   ).join('');
   document.querySelectorAll('.tr-metric-pill').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (trState.view !== 'metric') {
+        trState.metrics = [btn.dataset.metric];
+        document.querySelectorAll('.tr-metric-pill').forEach(b => b.classList.toggle('active', b === btn));
+        renderTrendChart();
+        return;
+      }
       const next = toggleMulti(trState.metrics, btn.dataset.metric, TR_METRICS.map(x => x.key));
       if (!next) return; // keep at least one metric selected
       trState.metrics = next;
@@ -8908,6 +9027,11 @@ function trBuildMultiSvg(series) {
   const yOf = t => PT + cH - Math.max(0, Math.min(t * cH, cH));
 
   let svg = `<svg viewBox="0 0 ${VW} ${VH}" width="100%" style="display:block;overflow:visible">`;
+  svg += `<defs>${series.map((s,i) => `
+    <linearGradient id="trGradM${i}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${s.color}" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="${s.color}" stop-opacity="0"/>
+    </linearGradient>`).join('')}</defs>`;
   svg += `<text x="${PL}" y="16" font-size="10.5" fill="var(--muted)">Each line indexed to its own min–max range — hover for actual values</text>`;
 
   [0, .25, .5, .75, 1].forEach(t => {
@@ -8924,17 +9048,19 @@ function trBuildMultiSvg(series) {
     svg += `<text x="${x}" y="${VH-6}" text-anchor="middle" font-size="${N > 20 ? 9 : 11.5}" font-weight="600" fill="var(--muted)">${display}</text>`;
   });
 
-  series.forEach(s => {
+  series.forEach((s, si) => {
     if (s.points.length < 2) return;
     const vals = s.points.filter(v => v > 0);
     const min  = vals.length ? Math.min(...vals) : 0;
     const max  = vals.length ? Math.max(...vals) : 1;
     const norm = v => (max > min ? (v - min) / (max - min) : 0.5);
+    const areaD = `M${xOf(0)},${yOf(0)} L${s.points.map((v,i)=>`${xOf(i)},${yOf(norm(v))}`).join(' ')} L${xOf(N-1)},${yOf(0)} Z`;
+    svg += `<path d="${areaD}" fill="url(#trGradM${si})"/>`;
     const ptStr = s.points.map((v,i) => `${xOf(i)},${yOf(norm(v))}`).join(' ');
     svg += `<polyline points="${ptStr}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
     if (N <= 30) {
       s.points.forEach((v, i) => {
-        svg += `<circle cx="${xOf(i)}" cy="${yOf(norm(v))}" r="${N > 10 ? 3 : 5}" fill="${s.color}" stroke="var(--card)" stroke-width="2"/>`;
+        svg += `<circle cx="${xOf(i)}" cy="${yOf(norm(v))}" r="${N > 10 ? 3 : 5}" fill="var(--card)" stroke="${s.color}" stroke-width="2.5"/>`;
       });
     }
   });
@@ -8953,24 +9079,121 @@ function trBuildMultiSvg(series) {
   return svg;
 }
 
+/* Grouped mode ("By Stage" / "By Offer") — one line per Stage/Offer value,
+   all sharing a single real-value Y-axis since (unlike the multi-metric
+   overlay) every line here is the *same* metric, just split by category.
+   No QoQ delta annotations — with N lines those would just add noise. */
+function trBuildGroupedSvg(series, fmtFn) {
+  const VW = 660, VH = 230;
+  const PL = 66, PR = 16, PT = 24, PB = 38;
+  const cW = VW - PL - PR, cH = VH - PT - PB;
+
+  const labels  = series[0]?.labels || TR_QS;
+  const N       = labels.length;
+  const allVals = series.flatMap(s => s.points).filter(v => v > 0);
+  if (!allVals.length) return `<svg viewBox="0 0 ${VW} ${VH}" width="100%"><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="var(--muted)" font-size="13">No data for this selection</text></svg>`;
+
+  const maxV = Math.max(...allVals);
+  const xOf  = i => PL + (N === 1 ? cW/2 : (i / (N-1)) * cW);
+  const yOf  = v => PT + cH - Math.max(0, Math.min((v / maxV) * cH, cH));
+
+  const yTickVals = [0, .25, .5, .75, 1].map(f => maxV * f);
+
+  let svg = `<svg viewBox="0 0 ${VW} ${VH}" width="100%" style="display:block;overflow:visible">`;
+  svg += `<defs>${series.map((s,i) => `
+    <linearGradient id="trGradG${i}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${s.color}" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="${s.color}" stop-opacity="0"/>
+    </linearGradient>`).join('')}</defs>`;
+
+  yTickVals.forEach(tv => {
+    const y = yOf(tv);
+    const dash = tv === 0 ? '' : ' stroke-dasharray="4 3"';
+    svg += `<line x1="${PL}" y1="${y}" x2="${VW-PR}" y2="${y}" stroke="var(--border)" stroke-width="1"${dash}/>`;
+    svg += `<text x="${PL-8}" y="${y+4}" text-anchor="end" font-size="10" fill="var(--muted)">${fmtFn(tv)}</text>`;
+  });
+
+  const step = N <= 12 ? 1 : Math.ceil(N / 12);
+  labels.forEach((lb, i) => {
+    if (i % step !== 0 && i !== N-1) return;
+    const x = xOf(i);
+    const display = N > 20 ? lb.slice(5) : lb;
+    svg += `<text x="${x}" y="${VH-6}" text-anchor="middle" font-size="${N > 20 ? 9 : 11.5}" font-weight="600" fill="var(--muted)">${display}</text>`;
+  });
+
+  series.forEach((s, si) => {
+    if (s.points.length < 2) return;
+    const ptStr = s.points.map((v,i) => `${xOf(i)},${yOf(v)}`).join(' ');
+    const areaD = `M${xOf(0)},${PT+cH} L${s.points.map((v,i)=>`${xOf(i)},${yOf(v)}`).join(' ')} L${xOf(N-1)},${PT+cH} Z`;
+    svg += `<path d="${areaD}" fill="url(#trGradG${si})"/>`;
+    svg += `<polyline points="${ptStr}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+    if (N <= 30) {
+      s.points.forEach((v, i) => {
+        svg += `<circle cx="${xOf(i)}" cy="${yOf(v)}" r="${N > 10 ? 3 : 5}" fill="var(--card)" stroke="${s.color}" stroke-width="2.5"/>`;
+      });
+    }
+  });
+
+  trTooltipPoints = labels.map((lb, i) => ({
+    date: lb,
+    entries: series.map(s => ({ label: s.label, color: s.color, value: fmtFn(s.points[i]) })),
+  }));
+  const colW = N > 1 ? cW / (N - 1) : cW;
+  labels.forEach((lb, i) => {
+    const rectX = xOf(i) - colW / 2;
+    svg += `<rect class="tr-hit" data-idx="${i}" x="${rectX}" y="${PT}" width="${colW}" height="${cH}" fill="transparent"/>`;
+  });
+
+  svg += '</svg>';
+  return svg;
+}
+
+/* Hides whichever filter select is currently acting as the grouping
+   dimension (Stage in "By Stage" view, Offer in "By Offer" view) since
+   showing all of its values *is* the point of the chart — narrowing it
+   would defeat the split. The other select stays visible as a narrowing
+   filter. trOfferGroup also still depends on vfLoaded (version-level rows
+   must be in before Offer options can populate). */
+function trSyncViewControls() {
+  const stageGroup = document.getElementById('trStageGroup');
+  const offerGroup = document.getElementById('trOfferGroup');
+  if (stageGroup) stageGroup.style.display = trState.view === 'stage' ? 'none' : '';
+  if (offerGroup) offerGroup.style.display = (trState.view !== 'offer' && vfLoaded) ? 'flex' : 'none';
+
+  const metricLabel = document.getElementById('trMetricLabel');
+  if (metricLabel) metricLabel.textContent = trState.view === 'metric' ? 'Metric' : 'Metric (single)';
+}
+
 function renderTrendChart() {
   /* Every Trends filter handler calls straight into here, so the Stage/
      Offer dropdowns are rescoped here too — otherwise changing quarter or
      market would leave them showing options those filters exclude. */
   trPopulateStageFilter();
   if (vfLoaded) trPopulateOfferFilter();
+  trSyncViewControls();
 
   const useDaily = trState.gran === 'daily' && trDailyRows().length > 0;
   const metrics  = trState.metrics;
 
-  let series, svg;
-  if (metrics.length === 1) {
+  let series, svg, resultNote = '';
+  if (trState.view === 'stage' || trState.view === 'offer') {
+    const m = TR_METRICS.find(x => x.key === metrics[0]);
+    const built = trBuildGroupedSeries(metrics[0], trState.view, useDaily);
+    series = built.series;
+    svg    = trBuildGroupedSvg(series, m.fmt);
+    const dimLabel = trState.view === 'stage' ? 'stages' : 'offers';
+    resultNote = built.omitted > 0
+      ? `Showing top ${built.series.length} of ${built.totalGroups} ${dimLabel} by ${m.label}`
+      : `Showing all ${built.totalGroups} ${dimLabel} by ${m.label}`;
+  } else if (metrics.length === 1) {
     const m = TR_METRICS.find(x => x.key === metrics[0]);
     series  = trBuildSeries(metrics[0], useDaily);
     svg     = trBuildSvg(series, m.fmt, m.direction);
+    resultNote = `${series.length} ${series.length === 1 ? 'series' : 'series'} · ${(series[0]?.labels || []).length} data points`;
   } else {
     series = trBuildMultiSeries(metrics, useDaily);
     svg    = trBuildMultiSvg(series);
+    resultNote = `${series.length} metrics · ${(series[0]?.labels || []).length} data points`;
   }
 
   document.getElementById('trChartArea').innerHTML = svg;
@@ -8980,6 +9203,9 @@ function renderTrendChart() {
       <div class="tr-legend-dot" style="background:${s.color}"></div>
       ${s.label}
     </div>`).join('');
+
+  const resultBar = document.getElementById('trResultBar');
+  if (resultBar) resultBar.textContent = resultNote;
 
   renderTrendSummaryTable();
 }
@@ -9097,6 +9323,26 @@ trChartAreaEl.addEventListener('mousemove', e => {
 
 trChartAreaEl.addEventListener('mouseleave', () => {
   trTooltipEl.style.display = 'none';
+});
+
+/* View toggle — "By Metric" keeps the existing multi-metric overlay;
+   "By Stage"/"By Offer" split a single metric into one line per Stage or
+   Offer value. Switching into a grouped view resets that dimension's own
+   filter back to "all" (it's now the thing being charted, not narrowed)
+   and collapses the metric selection to one, since grouped mode is
+   necessarily single-metric. */
+document.getElementById('trViewToggle').addEventListener('click', e => {
+  const btn = e.target.closest('[data-view]');
+  if (!btn) return;
+  trState.view = btn.dataset.view;
+  document.querySelectorAll('#trViewToggle button').forEach(b => b.classList.toggle('active', b===btn));
+
+  if (trState.view === 'stage') trState.stage = 'all';
+  if (trState.view === 'offer') trState.offer = 'all';
+  if (trState.view !== 'metric' && trState.metrics.length > 1) trState.metrics = [trState.metrics[0]];
+
+  renderMetricPills();
+  renderTrendChart();
 });
 
 document.getElementById('trMktFilter').addEventListener('click', e => {
