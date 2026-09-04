@@ -442,6 +442,8 @@ svg { display: block; }
 }
 .header-user-btn .user-avatar { width: 26px; height: 26px; font-size: 11px; }
 .header-user-name { font-size: 12px; font-weight: 600; }
+.header-user-chevron { color: rgba(244,247,250,.65); transition: transform .15s; flex-shrink: 0; }
+.header-user-btn.menu-open .header-user-chevron { transform: rotate(180deg); }
 .header-user-menu {
   position: absolute; top: calc(100% + 8px); right: 0;
   background: var(--card); color: var(--fg);
@@ -1450,97 +1452,11 @@ svg { display: block; }
 .cr-thumb-preview img { width:100%; height:100%; object-fit:cover; }
 .cr-thumb-preview-hint { font-size:11px; color:var(--muted); font-weight:500; }
 
-/* ─── Module 7: Settings ─────────────────────────────────── */
-.settings-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  align-items: start;
-}
-.settings-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 22px 24px;
-  margin-bottom: 16px;
-}
-.settings-card-title {
-  font-size: 13px; font-weight: 700; color: var(--fg);
-  text-transform: uppercase; letter-spacing: .06em;
-  margin-bottom: 16px; padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
-}
-.settings-row {
-  display: flex; align-items: center; gap: 16px;
-  padding: 11px 0; border-bottom: 1px solid var(--border);
-}
-.settings-row:last-child { border-bottom: none; padding-bottom: 0; }
-.settings-row-label { flex: 1; min-width: 0; }
-.settings-row-title { font-size: 13px; font-weight: 600; color: var(--fg); }
-.settings-row-desc  { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
-.settings-row-control { flex-shrink: 0; display: flex; align-items: center; }
-
-/* iOS toggle */
-.toggle-switch {
-  width: 46px; height: 26px; border-radius: 13px;
-  background: var(--border); border: none; cursor: pointer;
-  position: relative; transition: background .2s; flex-shrink: 0;
-  outline: none;
-}
-.toggle-switch.on { background: var(--accent); }
-.toggle-switch::after {
-  content: ''; position: absolute;
-  width: 22px; height: 22px; border-radius: 11px;
-  background: #fff; top: 2px; left: 2px;
-  transition: left .18s; box-shadow: 0 1px 4px rgba(0,0,0,.25);
-}
-.toggle-switch.on::after { left: 22px; }
-
-/* Accent color swatches */
-.color-swatch {
-  width: 26px; height: 26px; border-radius: 999px;
-  border: 3px solid transparent; cursor: pointer;
-  transition: border-color .15s, transform .15s; outline: none;
-}
-.color-swatch.active { border-color: var(--fg); transform: scale(1.18); }
-
-/* User rows */
-.st-user-row {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 0; border-bottom: 1px solid var(--border);
-}
-.st-user-row:last-child { border-bottom: none; }
-.st-avatar {
-  width: 38px; height: 38px; border-radius: 50%;
-  display: grid; place-items: center;
-  font-weight: 700; font-size: 13px; flex-shrink: 0; color: #fff;
-}
-.st-role-badge {
-  padding: 3px 10px; border-radius: 999px;
-  font-size: 11px; font-weight: 600; white-space: nowrap;
-}
-.st-role-admin  { background: var(--accent-soft); color: var(--accent-dark); }
-.st-role-viewer { background: var(--blue-soft);   color: var(--blue); }
-[data-theme="dark"] .st-role-admin  { color: var(--accent); }
-[data-theme="dark"] .st-role-viewer { color: var(--blue); }
-.st-status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:4px; }
-.st-status-active  { background: var(--accent); }
-.st-status-invited { background: var(--orange); }
-
-/* Compact mode overrides */
-body.compact .kpi-tile        { padding: 14px 16px; }
-body.compact .settings-card   { padding: 16px 18px; }
-body.compact .settings-row    { padding: 8px 0; }
-body.compact .content-area    { padding: 16px; }
-body.compact h1               { font-size: 20px; }
-body.compact .chart-card      { padding: 14px 16px; }
-
 /* ── Responsive collapse ─────────────────────────────────── */
 @media (max-width: 960px) {
   .top-header-sub, .header-search { display: none; }
   .top-header { padding: 10px 14px; }
   .top-tabs { padding-left: 14px; padding-right: 14px; }
-  .settings-grid { grid-template-columns: 1fr; }
   .mini-kpi-row  { grid-template-columns: repeat(2, 1fr); }
 }
 </style>
@@ -1600,16 +1516,12 @@ body.compact .chart-card      { padding: 14px 16px; }
         <svg-icon name="sun" size="15"></svg-icon>
       </button>
       <div class="header-user">
-        <button class="header-user-btn" id="headerUserBtn">
+        <button class="header-user-btn" id="headerUserBtn" title="Account menu">
           <div class="user-avatar" id="userAvatarEl">EM</div>
           <div class="header-user-name" id="userNameEl">—</div>
-          <svg-icon name="dots" size="12"></svg-icon>
+          <svg-icon name="chevron-down" size="12" class="header-user-chevron"></svg-icon>
         </button>
         <div class="header-user-menu" id="headerUserMenu">
-          <button class="header-user-menu-item" id="headerSettingsBtn">
-            <svg-icon name="gear" size="15"></svg-icon> Settings
-          </button>
-          <div class="header-user-menu-divider"></div>
           <button class="header-user-menu-item" id="signOutBtn">
             <svg-icon name="out" size="15"></svg-icon> Sign Out
           </button>
@@ -2130,160 +2042,6 @@ body.compact .chart-card      { padding: 14px 16px; }
       </div>
     </div>
 
-    <div class="tab-panel" id="tab-settings">
-      <div class="page-header">
-        <div>
-          <h1>Settings</h1>
-        </div>
-      </div>
-
-      <div class="settings-grid">
-
-        <!-- ── Left column ── -->
-        <div>
-
-          <!-- Appearance -->
-          <div class="settings-card">
-            <div class="settings-card-title">Appearance</div>
-
-            <div class="settings-row">
-              <div class="settings-row-label">
-                <div class="settings-row-title">Theme</div>
-                <div class="settings-row-desc">Light, dark, or follow system preference</div>
-              </div>
-              <div class="settings-row-control">
-                <div class="seg-tabs" id="stThemeTabs">
-                  <button data-theme-btn="light">Light</button>
-                  <button data-theme-btn="dark">Dark</button>
-                  <button data-theme-btn="system">System</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="settings-row">
-              <div class="settings-row-label">
-                <div class="settings-row-title">Accent Color</div>
-                <div class="settings-row-desc">Highlights, buttons, and active states</div>
-              </div>
-              <div class="settings-row-control" style="gap:8px;display:flex">
-                <button class="color-swatch" data-accent="#5BC500" style="background:#5BC500" title="Cricket Green"></button>
-                <button class="color-swatch" data-accent="#0094FF" style="background:#0094FF" title="Blue"></button>
-                <button class="color-swatch" data-accent="#8B5CF6" style="background:#8B5CF6" title="Purple"></button>
-                <button class="color-swatch" data-accent="#F59E0B" style="background:#F59E0B" title="Gold"></button>
-              </div>
-            </div>
-
-            <div class="settings-row">
-              <div class="settings-row-label">
-                <div class="settings-row-title">Compact Mode</div>
-                <div class="settings-row-desc">Reduces padding and font sizes throughout</div>
-              </div>
-              <div class="settings-row-control">
-                <button class="toggle-switch" id="stCompactToggle"></button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Dashboard Defaults -->
-          <div class="settings-card">
-            <div class="settings-card-title">Dashboard Defaults</div>
-
-            <div class="settings-row">
-              <div class="settings-row-label">
-                <div class="settings-row-title">Landing Tab</div>
-                <div class="settings-row-desc">Tab shown after login</div>
-              </div>
-              <div class="settings-row-control">
-                <select class="an-select" id="stDefaultTab">
-                  <option value="overview">Overview</option>
-                  <option value="analytics">Analytics</option>
-                  <option value="creatives">Creatives</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="settings-row">
-              <div class="settings-row-label">
-                <div class="settings-row-title">Default Quarter</div>
-              </div>
-              <div class="settings-row-control">
-                <select class="an-select" id="stDefaultQ">
-                  <option value="all">All Quarters</option>
-                  <option value="Q1">Q1</option>
-                  <option value="Q2">Q2</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="settings-row">
-              <div class="settings-row-label">
-                <div class="settings-row-title">Default Market</div>
-              </div>
-              <div class="settings-row-control">
-                <select class="an-select" id="stDefaultMkt">
-                  <option value="all">All Markets</option>
-                  <option value="GM">GM</option>
-                  <option value="USH">USH</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-        </div><!-- /left -->
-
-        <!-- ── Right column ── -->
-        <div>
-
-          <!-- Account -->
-          <div class="settings-card">
-            <div class="settings-card-title">Account</div>
-            <div id="stCurrentUser" style="margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)"></div>
-
-            <div style="font-size:13px;font-weight:600;color:var(--fg);margin-bottom:12px">Change Password</div>
-            <div style="display:flex;flex-direction:column;gap:9px">
-              <input class="cr-form-input" id="stOldPw"  type="password" placeholder="Current password" autocomplete="current-password"/>
-              <input class="cr-form-input" id="stNewPw"  type="password" placeholder="New password (min 6 chars)" autocomplete="new-password"/>
-              <input class="cr-form-input" id="stConfPw" type="password" placeholder="Confirm new password" autocomplete="new-password"/>
-              <div style="display:flex;align-items:center;gap:12px;margin-top:2px">
-                <button class="btn-primary btn-sm" id="stChangePwBtn">Update Password</button>
-                <span id="stPwConfirm" style="font-size:12px;color:var(--accent)"></span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Team & Access -->
-          <div class="settings-card">
-            <div class="settings-card-title">Team &amp; Access</div>
-
-            <div style="background:var(--recess);border-radius:10px;padding:11px 14px;margin-bottom:16px;font-size:12px;color:var(--muted);line-height:1.6">
-              <strong style="color:var(--fg)">@argonautinc.com</strong> addresses are automatically granted
-              <span class="st-role-badge st-role-admin" style="display:inline;padding:1px 7px">Admin</span> access.
-              All other addresses receive
-              <span class="st-role-badge st-role-viewer" style="display:inline;padding:1px 7px">Viewer</span> access by default.
-            </div>
-
-            <!-- Invite row -->
-            <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center">
-              <input class="cr-form-input" id="stInviteEmail" type="email"
-                     placeholder="Invite by email address" style="flex:1;min-width:180px"/>
-              <select class="cr-form-select" id="stInviteRole" style="width:110px;flex-shrink:0">
-                <option value="viewer">Viewer</option>
-                <option value="admin">Admin</option>
-              </select>
-              <button class="btn-primary btn-sm" id="stInviteBtn" style="flex-shrink:0">
-                <svg-icon name="user-plus" size="13"></svg-icon> Invite
-              </button>
-            </div>
-            <div id="stInviteConfirm" style="font-size:12px;color:var(--accent);min-height:18px;margin-bottom:10px"></div>
-
-            <!-- Users list -->
-            <div id="stUserList"></div>
-          </div>
-
-        </div><!-- /right -->
-      </div><!-- /settings-grid -->
-    </div>
-
     <div class="tab-panel" id="tab-trends">
       <div class="page-header">
         <div><h1>Trends</h1></div>
@@ -2493,6 +2251,9 @@ body.compact .chart-card      { padding: 14px 16px; }
     <circle cx="5" cy="12" r="1.5"/>
     <circle cx="12" cy="12" r="1.5"/>
     <circle cx="19" cy="12" r="1.5"/>
+  </symbol>
+  <symbol id="ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <polyline points="6 9 12 15 18 9"/>
   </symbol>
   <symbol id="ico-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
     <path d="M12 4v12M6 12l6 6 6-6M4 20h16" stroke-linecap="round" stroke-linejoin="round"/>
@@ -3592,7 +3353,6 @@ const TAB_TITLES = {
   trends:    'Trends',
   creatives: 'Creatives',
   glossary:  'Glossary',
-  settings:  'Settings',
 };
 
 /* ── Active tab state ────────────────────────────────────── */
@@ -3695,23 +3455,20 @@ window.__onAuth = function(user) {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 
-  /* Header user menu (open/close + Settings/Sign out items) */
+  /* Header user menu (open/close + Sign out) */
   const headerUserBtn  = document.getElementById('headerUserBtn');
   const headerUserMenu = document.getElementById('headerUserMenu');
   headerUserBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     headerUserMenu.classList.toggle('open');
+    headerUserBtn.classList.toggle('menu-open', headerUserMenu.classList.contains('open'));
   });
   document.addEventListener('click', (e) => {
     if (!headerUserMenu.contains(e.target) && e.target !== headerUserBtn) {
       headerUserMenu.classList.remove('open');
+      headerUserBtn.classList.remove('menu-open');
     }
   });
-  document.getElementById('headerSettingsBtn').addEventListener('click', () => {
-    headerUserMenu.classList.remove('open');
-    switchTab('settings');
-  });
-
   /* Sign out */
   document.getElementById('signOutBtn').addEventListener('click', signOut);
 
@@ -5013,241 +4770,6 @@ document.getElementById('anViewToggle').addEventListener('click', e => {
   anState.sortCol = 'imps'; anState.sortDir = -1;
   renderAnalytics();
 });
-
-/* ── Hook into tab activation ────────────────────────────── */
-/* ═══════════════════════════════════════════════════════════
-     MODULE 7 · SETTINGS TAB
-     ═══════════════════════════════════════════════════════ */
-
-/* ── Persistence ─────────────────────────────────────────── */
-const ST_KEY    = 'crkt_settings_v1';
-const USERS_KEY = 'crkt_users_v1';
-
-const ACCENT_MAP = {
-  '#5BC500': { soft:'rgba(91,197,0,.12)',    dark:'#3d8a00' },
-  '#0094FF': { soft:'rgba(0,148,255,.12)',   dark:'#0070cc' },
-  '#8B5CF6': { soft:'rgba(139,92,246,.12)',  dark:'#6d38d9' },
-  '#F59E0B': { soft:'rgba(245,158,11,.12)',  dark:'#c47c00' },
-};
-
-const ST_DEFAULTS = {
-  theme:'dark', accent:'#5BC500', compact:false,
-  defaultTab:'overview', defaultQ:'all', defaultMkt:'all',
-};
-
-let stSettings = (() => {
-  try { return { ...ST_DEFAULTS, ...JSON.parse(localStorage.getItem(ST_KEY)||'{}') }; }
-  catch { return { ...ST_DEFAULTS }; }
-})();
-function stPersist() { localStorage.setItem(ST_KEY, JSON.stringify(stSettings)); }
-
-const ST_DEFAULT_USERS = [
-  { id:'u_emily', email:'emily.mcandrew@argonautinc.com', name:'Emily McAndrew', role:'admin', status:'active', joinedAt:Date.now() },
-];
-let stUsers = (() => {
-  try { return JSON.parse(localStorage.getItem(USERS_KEY)||'null') || ST_DEFAULT_USERS; }
-  catch { return ST_DEFAULT_USERS; }
-})();
-function stSaveUsers() { localStorage.setItem(USERS_KEY, JSON.stringify(stUsers)); }
-
-function stRoleForEmail(email) {
-  return email.toLowerCase().endsWith('@argonautinc.com') ? 'admin' : 'viewer';
-}
-
-/* ── Apply settings to DOM ───────────────────────────────── */
-function applySettings(s) {
-  // Theme
-  const resolved = s.theme === 'system'
-    ? (window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light')
-    : s.theme;
-  document.documentElement.dataset.theme = resolved;
-  localStorage.setItem('crkt_theme', resolved);
-
-  // Accent
-  document.documentElement.style.setProperty('--accent', s.accent);
-  const av = ACCENT_MAP[s.accent] || ACCENT_MAP['#5BC500'];
-  document.documentElement.style.setProperty('--accent-soft', av.soft);
-  document.documentElement.style.setProperty('--accent-dark', av.dark);
-
-  // Compact
-  document.body.classList.toggle('compact', !!s.compact);
-}
-
-/* ── Avatar helpers ──────────────────────────────────────── */
-const AV_COLORS = ['#5BC500','#0094FF','#8B5CF6','#F59E0B','#E91E63','#00BCD4','#FF5722'];
-function avatarColor(str) {
-  let h = 0; for (const c of str) h = (h*31 + c.charCodeAt(0)) % AV_COLORS.length;
-  return AV_COLORS[h];
-}
-function avatarInitials(name) {
-  const p = name.trim().split(/\s+/);
-  return (p[0][0] + (p[1]?.[0]||'')).toUpperCase();
-}
-
-/* ── Render ──────────────────────────────────────────────── */
-function renderSettings() {
-  const s = stSettings;
-
-  // Theme tabs
-  document.querySelectorAll('[data-theme-btn]').forEach(b =>
-    b.classList.toggle('active', b.dataset.themeBtn === s.theme));
-
-  // Accent swatches
-  document.querySelectorAll('.color-swatch').forEach(sw =>
-    sw.classList.toggle('active', sw.dataset.accent === s.accent));
-
-  // Compact toggle
-  document.getElementById('stCompactToggle')?.classList.toggle('on', !!s.compact);
-
-  // Selects
-  const dt = document.getElementById('stDefaultTab');  if (dt) dt.value = s.defaultTab;
-  const dq = document.getElementById('stDefaultQ');    if (dq) dq.value = s.defaultQ;
-  const dm = document.getElementById('stDefaultMkt');  if (dm) dm.value = s.defaultMkt;
-
-  renderCurrentUser();
-  renderUsersTable();
-}
-
-function renderCurrentUser() {
-  const el = document.getElementById('stCurrentUser');
-  if (!el) return;
-  const session = (() => { try { return JSON.parse(sessionStorage.getItem('crkt_session')||'{}'); } catch { return {}; } })();
-  const email = session.email || stUsers[0]?.email || '';
-  const user  = stUsers.find(u => u.email === email) || stUsers[0] || {};
-  const roleLabel = user.role === 'admin' ? 'Admin' : 'Viewer';
-  const roleClass = user.role === 'admin' ? 'st-role-admin' : 'st-role-viewer';
-  el.innerHTML = `
-    <div style="display:flex;align-items:center;gap:14px">
-      <div class="st-avatar" style="background:${avatarColor(user.email||'x')}">
-        ${avatarInitials(user.name || user.email || '?')}
-      </div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:14px;font-weight:700">${esc(user.name||user.email||'Unknown')}</div>
-        <div style="font-size:12px;color:var(--muted)">${esc(user.email||'')}</div>
-      </div>
-      <span class="st-role-badge ${roleClass}">${roleLabel}</span>
-    </div>`;
-}
-
-function renderUsersTable() {
-  const el = document.getElementById('stUserList');
-  if (!el) return;
-  if (!stUsers.length) {
-    el.innerHTML = '<div style="padding:12px 0;color:var(--muted);font-size:13px">No users yet.</div>';
-    return;
-  }
-  el.innerHTML = stUsers.map(u => {
-    const rc = u.role === 'admin' ? 'st-role-admin' : 'st-role-viewer';
-    const rl = u.role === 'admin' ? 'Admin' : 'Viewer';
-    const dc = u.status === 'active' ? 'st-status-active' : 'st-status-invited';
-    const sl = u.status === 'active' ? 'Active' : 'Invited';
-    const removeBtn = u.id !== 'u_emily'
-      ? `<button class="rp-action-btn danger st-remove-btn" data-uid="${u.id}" title="Remove">
-           <svg-icon name="trash-2" size="14"></svg-icon></button>`
-      : `<div style="width:32px"></div>`;
-    return `
-    <div class="st-user-row">
-      <div class="st-avatar" style="background:${avatarColor(u.email)}">${avatarInitials(u.name||u.email)}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.name||u.email)}</div>
-        ${u.name ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.email)}</div>` : ''}
-      </div>
-      <span class="st-role-badge ${rc}">${rl}</span>
-      <span style="font-size:11px;color:var(--muted);white-space:nowrap">
-        <span class="st-status-dot ${dc}"></span>${sl}
-      </span>
-      ${removeBtn}
-    </div>`;
-  }).join('');
-
-  el.querySelectorAll('.st-remove-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (!confirm('Remove this user?')) return;
-      stUsers = stUsers.filter(u => u.id !== btn.dataset.uid);
-      stSaveUsers(); renderUsersTable();
-    });
-  });
-}
-
-/* ── Wire controls ───────────────────────────────────────── */
-document.querySelectorAll('[data-theme-btn]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    stSettings.theme = btn.dataset.themeBtn;
-    stPersist(); applySettings(stSettings); renderSettings();
-  });
-});
-
-document.querySelectorAll('.color-swatch').forEach(sw => {
-  sw.addEventListener('click', () => {
-    stSettings.accent = sw.dataset.accent;
-    stPersist(); applySettings(stSettings); renderSettings();
-  });
-});
-
-document.getElementById('stCompactToggle')?.addEventListener('click', () => {
-  stSettings.compact = !stSettings.compact;
-  stPersist(); applySettings(stSettings); renderSettings();
-});
-
-document.getElementById('stDefaultTab')?.addEventListener('change', e => {
-  stSettings.defaultTab = e.target.value; stPersist();
-});
-document.getElementById('stDefaultQ')?.addEventListener('change', e => {
-  stSettings.defaultQ = e.target.value; stPersist();
-});
-document.getElementById('stDefaultMkt')?.addEventListener('change', e => {
-  stSettings.defaultMkt = e.target.value; stPersist();
-});
-
-// Invite — auto-detect role on email input
-document.getElementById('stInviteEmail')?.addEventListener('input', e => {
-  const email = e.target.value.toLowerCase();
-  const sel   = document.getElementById('stInviteRole');
-  if (sel && email.includes('@')) sel.value = stRoleForEmail(email);
-});
-
-document.getElementById('stInviteBtn')?.addEventListener('click', () => {
-  const emailEl = document.getElementById('stInviteEmail');
-  const roleEl  = document.getElementById('stInviteRole');
-  const email   = emailEl.value.trim().toLowerCase();
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { emailEl.focus(); return; }
-  if (stUsers.find(u => u.email === email)) { alert('This user is already in your team.'); return; }
-  const role = roleEl.value || stRoleForEmail(email);
-  const name = email.split('@')[0].replace(/[._-]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-  stUsers.push({ id:'u_'+Date.now(), email, name, role, status:'invited', joinedAt:Date.now() });
-  stSaveUsers(); emailEl.value = ''; renderUsersTable();
-  const conf = document.getElementById('stInviteConfirm');
-  if (conf) { conf.textContent = `Invite sent to ${email}`; setTimeout(()=>conf.textContent='', 3500); }
-});
-
-// Change password
-document.getElementById('stChangePwBtn')?.addEventListener('click', async () => {
-  const oldPw  = document.getElementById('stOldPw').value;
-  const newPw  = document.getElementById('stNewPw').value;
-  const confPw = document.getElementById('stConfPw').value;
-  if (!oldPw || !newPw || !confPw) return;
-  if (newPw !== confPw) { alert('New passwords do not match.'); return; }
-  if (newPw.length < 6) { alert('Password must be at least 6 characters.'); return; }
-  const storedHash = localStorage.getItem('crkt_pw_hash');
-  const oldHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(oldPw)).then(b => btoa(String.fromCharCode(...new Uint8Array(b))));
-  if (storedHash && storedHash !== oldHash) { alert('Current password is incorrect.'); return; }
-  const newHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(newPw)).then(b => btoa(String.fromCharCode(...new Uint8Array(b))));
-  localStorage.setItem('crkt_pw_hash', newHash);
-  ['stOldPw','stNewPw','stConfPw'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
-  const conf = document.getElementById('stPwConfirm');
-  if (conf) { conf.textContent = 'Password updated.'; setTimeout(()=>conf.textContent='', 3500); }
-});
-
-// Tab activation
-const _prevTabSwitch7 = window.__onTabSwitch;
-window.__onTabSwitch = tab => {
-  if (tab === 'settings') renderSettings();
-  if (typeof _prevTabSwitch7 === 'function') _prevTabSwitch7(tab);
-};
-
-// Apply settings on load (handles saved theme + accent + compact)
-applySettings(stSettings);
-
 
 /* ═══════════════════════════════════════════════════════════
      MODULE 5 · CREATIVES TAB
