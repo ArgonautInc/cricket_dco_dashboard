@@ -1794,48 +1794,10 @@ body.compact .chart-card      { padding: 14px 16px; }
         </div>
         <span id="anRowCount" style="font-size:12px;color:var(--muted)"></span>
         <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
-          <button class="btn-primary btn-sm" id="offerMapUploadBtn" title="Upload the DCO trafficker export (.xlsx/.csv). Maps FT Version Name to &quot;Tactic | Segment — Creative Offer Name&quot;">
-            <svg-icon name="upload" size="13"></svg-icon> Offer Map
+          <span class="cr-refresh-status" id="anRefreshStatus"></span>
+          <button class="btn-ghost btn-sm" id="anRefreshDataBtn" title="Re-pull the latest delivery data from BigQuery">
+            <svg-icon name="refresh" size="13"></svg-icon> Refresh Data
           </button>
-          <button class="btn-ghost btn-sm" id="offerMapCloudBtn" title="Load the offer map from Cloud Storage (crk-dco-bucket-daily-performance)">
-            <svg-icon name="download" size="13"></svg-icon> From Cloud
-          </button>
-          <div class="offer-map-chip" id="offerMapChip" style="display:none">
-            <span id="offerMapChipLabel"></span>
-            <button class="offer-map-chip-clear" id="offerMapClearBtn" title="Remove offer map">✕</button>
-          </div>
-          <button class="btn-primary btn-sm" id="perfDataUploadBtn" title="Upload a delivery report with named Spotlight columns (Flight, Segment, Strategy, Creative Offer Name, Total Ads Requested, Clicks, Total Cost, order & LPVR pixel counts) to fill in quarters BigQuery is missing — including orders and LPVR, which the automatic Cloud Storage reports don't have. Include an Activity Date (or Date) column to also populate the daily trend chart.">
-            <svg-icon name="upload" size="13"></svg-icon> Performance Data
-          </button>
-          <div class="offer-map-chip" id="perfDataChip" style="display:none">
-            <span id="perfDataChipLabel"></span>
-            <button class="offer-map-chip-clear" id="perfDataClearBtn" title="Remove manual performance data">✕</button>
-          </div>
-        </div>
-        <input type="file" id="offerMapFileInput" accept=".csv,.xlsx,.xls" style="display:none">
-        <input type="file" id="perfDataFileInput" accept=".csv,.xlsx,.xls" style="display:none">
-      </div>
-
-      <!-- Offer Map: Cloud Storage picker modal -->
-      <div class="cr-modal-overlay" id="offerMapCloudOverlay">
-        <div class="cr-modal" style="width:min(560px,92vw)">
-          <div class="cr-modal-title">Load Offer Map from Cloud Storage</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
-            Bucket: <code>crk-dco-bucket-daily-performance</code>. Check the file(s) that map FT Version Name to Creative Offer Name — selecting more than one merges them into a single offer map (most recently updated file wins on overlapping keys). Your selection is remembered and refreshed automatically on future sign-ins.
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;cursor:pointer">
-              <input type="checkbox" id="offerMapCloudSelectAll"> Select all
-            </label>
-            <span id="offerMapCloudSelCount" style="font-size:11px;color:var(--muted)"></span>
-          </div>
-          <div id="offerMapCloudList" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto"></div>
-          <div id="offerMapCloudEmpty" style="display:none;font-size:12px;color:var(--muted);padding:16px 0;text-align:center">No CSV/XLSX files found in this bucket.</div>
-          <div id="offerMapCloudError" style="display:none;font-size:12px;color:#d33;padding:8px 0"></div>
-          <div class="cr-modal-actions">
-            <button class="btn-ghost btn-sm" id="offerMapCloudCancel">Cancel</button>
-            <button class="btn-primary btn-sm" id="offerMapCloudLoadBtn" disabled>Load Selected</button>
-          </div>
         </div>
       </div>
 
@@ -2343,10 +2305,16 @@ body.compact .chart-card      { padding: 14px 16px; }
             <button data-mkt="USH">USH</button>
           </div>
         </div>
-        <div class="pv-control-group" id="trVersionGroup" style="display:none">
-          <span class="pv-label">Version</span>
-          <select class="an-select" id="trVersionFilter" title="Filter every series to a single Flashtalking Version Name. Grouped by Creative Offer Name — one offer covers many versions.">
-            <option value="all">All Versions</option>
+        <div class="pv-control-group">
+          <span class="pv-label">Stage</span>
+          <select class="an-select" id="trStageFilter">
+            <option value="all">All Stages</option>
+          </select>
+        </div>
+        <div class="pv-control-group" id="trOfferGroup" style="display:none">
+          <span class="pv-label">Offer</span>
+          <select class="an-select" id="trOfferFilter" title="Filter every series to a single Creative Offer Name. Narrowed by the Stage filter above.">
+            <option value="all">All Offers</option>
           </select>
         </div>
         <div class="pv-control-group" id="trDateRangeGroup" style="display:none;align-items:center;gap:6px">
@@ -2747,7 +2715,8 @@ async function loadBigQueryData() {
           SAFE_DIVIDE(SUM(\`CKT_bNON_HISPANIC_GLOBAL_RT Count\`), SUM(\`Total Ads Requested\`)) as gmLpvr,
           SAFE_DIVIDE(SUM(\`CKT_bNON_HISPANIC_ORDER Count\`), NULLIF(SUM(\`Clicks\`), 0)) as gmCvr,
           SUM(\`Total Cost\`) as spend,
-          SAFE_DIVIDE(SUM(\`Total Cost\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc
+          SAFE_DIVIDE(SUM(\`Total Cost\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc,
+          SAFE_DIVIDE(SUM(\`Total Ads Requested\`), NULLIF(SUM(\`Cookie ID Reach: Total Ad Reach\`), 0)) as freq
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
         WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
           AND \`Creative Offer Name\` IS NOT NULL
@@ -2837,6 +2806,7 @@ async function loadBigQueryData() {
         gmCvr:    Number(r.gmCvr)  || 0,
         spend:    Number(r.spend)  || 0,
         cpc:      Number(r.cpc)    || 0,
+        freq:     Number(r.freq)   || 1,
       }));
     }
 
@@ -2899,7 +2869,8 @@ async function tryLoadStageCreativeDailyData() {
             SUM(\`Clicks\`) as clicks,
             SUM(\`CKT_bNON_HISPANIC_ORDER Count\`) as gmOrdCount,
             SUM(\`CKT_bNON_HISPANIC_GLOBAL_RT Count\`) as gmLpvCount,
-            SUM(\`Total Cost\`) as spend
+            SUM(\`Total Cost\`) as spend,
+            SUM(\`Cookie ID Reach: Total Ad Reach\`) as reach
           FROM \`crk-dco-dash.reporting_data.deliveries_view\`
           WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
             AND \`Creative Offer Name\` IS NOT NULL
@@ -2918,6 +2889,7 @@ async function tryLoadStageCreativeDailyData() {
           hmLpvCount: Number(r.hmLpvCount) || 0,
           spend:  Number(r.spend)  || 0,
           reach:  Number(r.reach)  || 0,
+          freq:   Number(r.reach) ? Number(r.imps)/Number(r.reach) : 1,
         }));
         AN_DAILY_CREATIVE_RAW = creativeRows.map(r => ({
           day: r.day, q: r.q, mkt: r.mkt, stage: stageCanonicalKey(r.stage, r.creative), creative: r.creative || '',
@@ -2926,6 +2898,8 @@ async function tryLoadStageCreativeDailyData() {
           gmOrdCount: Number(r.gmOrdCount) || 0,
           gmLpvCount: Number(r.gmLpvCount) || 0,
           spend:  Number(r.spend)  || 0,
+          reach:  Number(r.reach)  || 0,
+          freq:   Number(r.reach) ? Number(r.imps)/Number(r.reach) : 1,
         }));
         anDailyLoaded = true;
         if (typeof onStageCreativeDailyLoaded === 'function') onStageCreativeDailyLoaded();
@@ -2976,10 +2950,11 @@ function aggCreativeRawRows(rows) {
   rows.forEach(r => {
     const key = `${r.q}|${r.mkt}|${r.stage}|${r.creative}`;
     if (!groups.has(key)) groups.set(key, { q:r.q, mkt:r.mkt, stage:r.stage, creative:r.creative,
-      imps:0, clicks:0, gmOrdCount:0, gmLpvCount:0, spend:0 });
+      imps:0, clicks:0, gmOrdCount:0, gmLpvCount:0, spend:0, reach:0 });
     const g = groups.get(key);
     g.imps += r.imps; g.clicks += r.clicks;
     g.gmOrdCount += r.gmOrdCount; g.gmLpvCount += r.gmLpvCount; g.spend += r.spend;
+    g.reach += r.reach;
   });
   return [...groups.values()].map(g => ({
     q: g.q, mkt: g.mkt, stage: g.stage, creative: g.creative,
@@ -2990,6 +2965,7 @@ function aggCreativeRawRows(rows) {
     gmCvr:  g.clicks ? g.gmOrdCount/g.clicks : 0,
     spend:  g.spend,
     cpc:    g.clicks ? g.spend/g.clicks      : 0,
+    freq:   g.reach  ? g.imps/g.reach        : 1,
   }));
 }
 
@@ -3017,7 +2993,7 @@ function effectiveCreativeRows(dateFrom, dateTo) {
   if (dateFrom) rows = rows.filter(r => r.day >= dateFrom);
   if (dateTo)   rows = rows.filter(r => r.day <= dateTo);
   const byKey = new Map(aggCreativeRawRows(rows).map(g => [`${g.q}|${g.mkt}|${g.stage}|${g.creative}`, g]));
-  const zero  = { imps:0, clicks:0, ctr:0, gmOrd:0, gmLpvr:0, gmCvr:0, spend:0, cpc:0 };
+  const zero  = { imps:0, clicks:0, ctr:0, gmOrd:0, gmLpvr:0, gmCvr:0, spend:0, cpc:0, freq:1 };
   return AN_CREATIVES.map(c => ({ ...c, ...(byKey.get(`${c.q}|${c.mkt}|${c.stage}|${c.creative}`) || zero) }));
 }
 
@@ -5898,7 +5874,7 @@ function vfPopulateSelect(id, current, qs, mkt) {
    same graceful-hide pattern the date-range pickers use — and re-renders
    the two tabs that have one. */
 function vfSyncControls() {
-  ['anVersionGroup', 'trVersionGroup'].forEach(id => {
+  ['anVersionGroup', 'trOfferGroup'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = vfLoaded ? 'flex' : 'none';
   });
@@ -8516,7 +8492,27 @@ const TR_METRICS = [
   { key:'gmCvr',  label:'GM CVR',      fmt: v => (v*100).toFixed(3)+'%',          direction:'up' },
   { key:'spend',  label:'Total Cost',  fmt: v => v > 0 ? FMT.dollar(v) : '—',     direction:'neutral' },
   { key:'cpc',    label:'CPC',         fmt: v => v > 0 ? '$'+v.toFixed(2) : '—',  direction:'down' },
+  { key:'freq',   label:'Frequency',   fmt: v => v.toFixed(2)+'×',                direction:'down' },
 ];
+
+/* Distinct line color per metric, used only in multi-metric overlay mode
+   (single-metric mode keeps the existing GM/USH accent/blue split). Cycles
+   if more metrics are ever added than colors defined. */
+const TR_METRIC_COLORS = ['#5BC500', '#3B82F6', '#F59E0B', '#EC4899', '#8B5CF6', '#14B8A6', '#EF4444', '#F97316'];
+function trMetricColor(key) {
+  const i = TR_METRICS.findIndex(m => m.key === key);
+  return TR_METRIC_COLORS[i % TR_METRIC_COLORS.length];
+}
+
+/* Generic multi-select toggle, mirroring toggleQuarter() — keeps at least
+   one item selected and preserves `order`'s sequence rather than the
+   click order, so pills don't reshuffle as they're toggled. */
+function toggleMulti(current, key, order) {
+  const isActive = current.includes(key);
+  if (isActive && current.length === 1) return null;
+  return isActive ? current.filter(x => x !== key)
+                  : order.filter(x => current.includes(x) || x === key);
+}
 
 /* null = no good/bad judgment (neutral); otherwise true/false */
 function trIsGoodDirection(direction, pct) {
@@ -8575,27 +8571,74 @@ function trGetValClipped(q, mkt, metric, daysLive) {
   return pvAggregate(rows, metric);
 }
 
-let trState   = { metric:'imps', mkt:'all', gran:'quarterly', quarters:['Q1','Q2','Q3'], version:'all', dateFrom:null, dateTo:null };
+let trState   = { metrics:['imps'], mkt:'all', gran:'quarterly', quarters:['Q1','Q2','Q3'], version:'all', stage:'all', offer:'all', dateFrom:null, dateTo:null };
 let trDailyData = [];
 let trDailyLoaded = false;
 let trDailyAttempted = false;
 let trTooltipPoints  = []; // set fresh by trBuildSvg on every render
 
-/* Quarter-level pool, AN_STAGES-shaped. With a version selected it's that
-   version's rows rolled up by the same helper the BigQuery loader uses, so
-   trGetVal/trGetValClipped and the summary table stay shape-agnostic. */
+/* Quarter-level pool, AN_STAGES-shaped. Cascades through Offer (rolls up
+   VF_STAGES by Creative Offer Name, same as Analytics' anPools()) and then
+   Stage, so trGetVal/trGetValClipped and the summary table stay
+   shape-agnostic regardless of which filters are active. */
 function trStageRows() {
-  return (trState.version !== 'all' && vfLoaded)
-    ? aggStageRawRows(VF_STAGES.filter(r => r.version === trState.version))
+  const rows = (trState.offer !== 'all' && vfLoaded)
+    ? aggStageRawRows(VF_STAGES.filter(r => r.creative === trState.offer))
     : AN_STAGES;
+  return trState.stage === 'all' ? rows : rows.filter(r => r.stage === trState.stage);
 }
 
-/* Day-level pool, trDailyData-shaped. Returns an empty series while the
-   selected version's day-level rows are still in flight — vfEnsureDaily()
-   re-renders when they land. */
+/* Day-level pool, trDailyData-shaped. Offer/Stage filtering both draw from
+   the day-level pools the Pivot tab already loads (AN_DAILY_CREATIVE_RAW /
+   AN_DAILY_STAGE_RAW) since those carry per-row stage/creative — falls
+   back to the plain day×quarter×market pool when neither filter is set. */
 function trDailyRows() {
-  if (trState.version === 'all' || !vfLoaded) return trDailyData;
-  return vfDailyByDay(trState.version);
+  let rows;
+  if (trState.offer !== 'all' && anDailyLoaded) {
+    rows = AN_DAILY_CREATIVE_RAW.filter(r => r.creative === trState.offer);
+  } else if (trState.stage !== 'all' && anDailyLoaded) {
+    rows = AN_DAILY_STAGE_RAW;
+  } else {
+    return trDailyData;
+  }
+  return trState.stage === 'all' ? rows : rows.filter(r => r.stage === trState.stage);
+}
+
+/* Cascades from Market/Quarter — mirrors anPopulateStageFilter(). */
+function trPopulateStageFilter() {
+  const sel = document.getElementById('trStageFilter');
+  if (!sel) return;
+  const scoped = AN_STAGES.filter(r =>
+    trState.quarters.includes(r.q) && (trState.mkt === 'all' || r.mkt === trState.mkt)
+  );
+  const stages = [...new Set(scoped.map(r => r.stage).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+  const keep = stages.includes(trState.stage) ? trState.stage : 'all';
+  sel.innerHTML = '<option value="all">All Stages</option>'
+    + stages.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+  sel.value = keep;
+  trState.stage = keep;
+}
+
+/* Cascades from Market/Quarter/Stage — mirrors anPopulateOfferFilter(). */
+function trPopulateOfferFilter() {
+  const sel = document.getElementById('trOfferFilter');
+  if (!sel || !vfLoaded) return;
+  const offers = new Set();
+  VF_STAGES.forEach(r => {
+    if (!trState.quarters.includes(r.q)) return;
+    if (trState.mkt   !== 'all' && r.mkt   !== trState.mkt)   return;
+    if (trState.stage !== 'all' && r.stage !== trState.stage) return;
+    if (r.creative) offers.add(r.creative);
+  });
+  const sorted = [...offers].sort((a, b) => offerLabel(a).localeCompare(offerLabel(b)));
+  const sig = ['trOffer', trState.quarters.join('+'), trState.mkt, trState.stage, trState.offer, sorted.length].join('|');
+  if (trPopulateOfferFilter._sig === sig) return;
+  trPopulateOfferFilter._sig = sig;
+  const keep = sorted.includes(trState.offer) ? trState.offer : 'all';
+  sel.innerHTML = '<option value="all">All Offers</option>'
+    + sorted.map(o => `<option value="${esc(o)}"${o===keep?' selected':''}>${esc(offerLabel(o))}</option>`).join('');
+  trState.offer = keep;
 }
 
 function trGetVal(q, mkt, metric) {
@@ -8803,31 +8846,134 @@ function renderTrendSummaryTable() {
     <tbody>${rows}</tbody>`;
 }
 
+/* Metric pills are multi-select (like the Quarter filter) so every KPI —
+   including all of them at once — can be plotted together. */
 function renderMetricPills() {
   document.getElementById('trMetricPills').innerHTML = TR_METRICS.map(m =>
-    `<button class="tr-metric-pill${m.key===trState.metric?' active':''}" data-metric="${m.key}">${m.label}</button>`
+    `<button class="tr-metric-pill${trState.metrics.includes(m.key)?' active':''}" data-metric="${m.key}">${m.label}</button>`
   ).join('');
   document.querySelectorAll('.tr-metric-pill').forEach(btn => {
     btn.addEventListener('click', () => {
-      trState.metric = btn.dataset.metric;
-      document.querySelectorAll('.tr-metric-pill').forEach(b => b.classList.toggle('active', b===btn));
+      const next = toggleMulti(trState.metrics, btn.dataset.metric, TR_METRICS.map(x => x.key));
+      if (!next) return; // keep at least one metric selected
+      trState.metrics = next;
+      btn.classList.toggle('active', trState.metrics.includes(btn.dataset.metric));
       renderTrendChart();
     });
   });
 }
 
-function renderTrendChart() {
-  const m       = TR_METRICS.find(x => x.key === trState.metric);
-  /* Every Trends filter handler calls straight into here, so the version
-     dropdown is rescoped and the on-demand day-level fetch kicked off here
-     rather than in renderTrends() — otherwise changing quarter or market
-     would leave the version list showing versions those filters exclude. */
-  vfEnsureDaily(trState.version, true, renderTrendChart);
-  if (vfLoaded) vfPopulateSelect('trVersionFilter', trState.version, trState.quarters, trState.mkt);
-  const useDaily = trState.gran === 'daily' && trDailyRows().length > 0;
-  const series  = trBuildSeries(trState.metric, useDaily);
+/* Multi-metric overlay pool — one line per selected metric, markets
+   combined per the Market filter (rather than split GM/USH) so the chart
+   doesn't multiply into metric×market lines. */
+function trBuildMultiSeries(metrics, useDailyData) {
+  const daily = trDailyRows();
+  const useDaily = useDailyData && daily.length > 0;
+  let rows, labels;
+  if (useDaily) {
+    rows = daily.filter(r => trState.quarters.includes(r.q) && (trState.mkt === 'all' || r.mkt === trState.mkt));
+    if (trState.dateFrom) rows = rows.filter(r => r.day >= trState.dateFrom);
+    if (trState.dateTo)   rows = rows.filter(r => r.day <= trState.dateTo);
+    labels = [...new Set(rows.map(r => r.day))].sort();
+  } else {
+    rows = trStageRows().filter(r => trState.mkt === 'all' || r.mkt === trState.mkt);
+    labels = TR_QS.filter(q => trState.quarters.includes(q));
+  }
+  return metrics.map(key => {
+    const md     = TR_METRICS.find(x => x.key === key);
+    const points = labels.map(lb => {
+      const subset = useDaily ? rows.filter(r => r.day === lb) : rows.filter(r => r.q === lb);
+      return pvAggregate(subset, key);
+    });
+    return { key, label: md.label, color: trMetricColor(key), fmt: md.fmt, labels, points };
+  });
+}
 
-  document.getElementById('trChartArea').innerHTML = trBuildSvg(series, m.fmt, m.direction);
+/* Renders 2+ metrics on one chart. Absolute units differ wildly between
+   metrics (impressions in the millions vs. CTR as a fraction of 1), so
+   each series is indexed to its own min–max range (0–100%) purely to make
+   trend *shape* comparable — actual values are shown on hover and in the
+   legend/summary table below, never inferred from line height alone. */
+function trBuildMultiSvg(series) {
+  const VW = 660, VH = 230;
+  const PL = 20, PR = 16, PT = 30, PB = 38;
+  const cW = VW - PL - PR, cH = VH - PT - PB;
+
+  const labels = series[0]?.labels || TR_QS;
+  const N      = labels.length;
+  const hasData = series.some(s => s.points.some(v => v > 0));
+  if (!hasData) return `<svg viewBox="0 0 ${VW} ${VH}" width="100%"><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="var(--muted)" font-size="13">No data for this selection</text></svg>`;
+
+  const xOf = i => PL + (N === 1 ? cW/2 : (i / (N-1)) * cW);
+  const yOf = t => PT + cH - Math.max(0, Math.min(t * cH, cH));
+
+  let svg = `<svg viewBox="0 0 ${VW} ${VH}" width="100%" style="display:block;overflow:visible">`;
+  svg += `<text x="${PL}" y="16" font-size="10.5" fill="var(--muted)">Each line indexed to its own min–max range — hover for actual values</text>`;
+
+  [0, .25, .5, .75, 1].forEach(t => {
+    const y = yOf(t);
+    const dash = t === 0 ? '' : ' stroke-dasharray="4 3"';
+    svg += `<line x1="${PL}" y1="${y}" x2="${VW-PR}" y2="${y}" stroke="var(--border)" stroke-width="1"${dash}/>`;
+  });
+
+  const step = N <= 12 ? 1 : Math.ceil(N / 12);
+  labels.forEach((lb, i) => {
+    if (i % step !== 0 && i !== N-1) return;
+    const x = xOf(i);
+    const display = N > 20 ? lb.slice(5) : lb;
+    svg += `<text x="${x}" y="${VH-6}" text-anchor="middle" font-size="${N > 20 ? 9 : 11.5}" font-weight="600" fill="var(--muted)">${display}</text>`;
+  });
+
+  series.forEach(s => {
+    if (s.points.length < 2) return;
+    const vals = s.points.filter(v => v > 0);
+    const min  = vals.length ? Math.min(...vals) : 0;
+    const max  = vals.length ? Math.max(...vals) : 1;
+    const norm = v => (max > min ? (v - min) / (max - min) : 0.5);
+    const ptStr = s.points.map((v,i) => `${xOf(i)},${yOf(norm(v))}`).join(' ');
+    svg += `<polyline points="${ptStr}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+    if (N <= 30) {
+      s.points.forEach((v, i) => {
+        svg += `<circle cx="${xOf(i)}" cy="${yOf(norm(v))}" r="${N > 10 ? 3 : 5}" fill="${s.color}" stroke="var(--card)" stroke-width="2"/>`;
+      });
+    }
+  });
+
+  trTooltipPoints = labels.map((lb, i) => ({
+    date: lb,
+    entries: series.map(s => ({ label: s.label, color: s.color, value: s.fmt(s.points[i]) })),
+  }));
+  const colW = N > 1 ? cW / (N - 1) : cW;
+  labels.forEach((lb, i) => {
+    const rectX = xOf(i) - colW / 2;
+    svg += `<rect class="tr-hit" data-idx="${i}" x="${rectX}" y="${PT}" width="${colW}" height="${cH}" fill="transparent"/>`;
+  });
+
+  svg += '</svg>';
+  return svg;
+}
+
+function renderTrendChart() {
+  /* Every Trends filter handler calls straight into here, so the Stage/
+     Offer dropdowns are rescoped here too — otherwise changing quarter or
+     market would leave them showing options those filters exclude. */
+  trPopulateStageFilter();
+  if (vfLoaded) trPopulateOfferFilter();
+
+  const useDaily = trState.gran === 'daily' && trDailyRows().length > 0;
+  const metrics  = trState.metrics;
+
+  let series, svg;
+  if (metrics.length === 1) {
+    const m = TR_METRICS.find(x => x.key === metrics[0]);
+    series  = trBuildSeries(metrics[0], useDaily);
+    svg     = trBuildSvg(series, m.fmt, m.direction);
+  } else {
+    series = trBuildMultiSeries(metrics, useDaily);
+    svg    = trBuildMultiSvg(series);
+  }
+
+  document.getElementById('trChartArea').innerHTML = svg;
 
   document.getElementById('trLegend').innerHTML = series.map(s =>
     `<div class="tr-legend-item">
@@ -8983,8 +9129,12 @@ document.getElementById('trGranToggle').addEventListener('click', e => {
   renderTrendChart();
 });
 
-document.getElementById('trVersionFilter').addEventListener('change', e => {
-  trState.version = e.target.value;
+document.getElementById('trStageFilter').addEventListener('change', e => {
+  trState.stage = e.target.value;
+  renderTrendChart();
+});
+document.getElementById('trOfferFilter').addEventListener('change', e => {
+  trState.offer = e.target.value;
   renderTrendChart();
 });
 
@@ -9032,7 +9182,7 @@ const PV_METRICS = [
   { key:'spend',  label:'Total Cost',  stageOnly:false, fmt:v=>v>0?FMT.dollar(v):'—' },
   { key:'cpc',    label:'CPC',         stageOnly:false, fmt:v=>v>0?'$'+v.toFixed(2):'—' },
   { key:'cpo',    label:'CPO',         stageOnly:false, fmt:v=>v>0?'$'+v.toFixed(2):'—' },
-  { key:'freq',   label:'Frequency',   stageOnly:true,  fmt:v=>v.toFixed(2)+'×' },
+  { key:'freq',   label:'Frequency',   fmt:v=>v.toFixed(2)+'×' },
 ];
 
 const PV_DIMS = {
@@ -9856,230 +10006,49 @@ window.__onTabSwitch = function(tab) {
   if (typeof _prevTabSwitchGloss === 'function') _prevTabSwitchGloss(tab);
 };
 
-/* ── Offer Map: manual upload handlers ───────────────────── */
-function applyOfferMap(map, source, cloudObjectNames) {
-  OFFER_MAP        = map;
-  OFFER_MAP_SOURCE = source;
-  localStorage.setItem(OFFER_MAP_KEY, JSON.stringify(OFFER_MAP));
-  localStorage.setItem(OFFER_MAP_SOURCE_KEY, source);
-  if (source === 'cloud') {
-    OFFER_MAP_CLOUD_OBJECTS = cloudObjectNames;
-    localStorage.setItem(OFFER_MAP_CLOUD_OBJS_KEY, JSON.stringify(OFFER_MAP_CLOUD_OBJECTS));
-  }
-  updateOfferMapChip();
-  renderAnalytics();
+/* ── Refresh Data: re-pull everything from BigQuery ──────── */
+function anSetRefreshStatus(msg) {
+  const el = document.getElementById('anRefreshStatus');
+  if (el) el.textContent = msg;
 }
 
-document.getElementById('offerMapUploadBtn').addEventListener('click', () => {
-  document.getElementById('offerMapFileInput').click();
-});
+async function refreshAllData() {
+  const btn = document.getElementById('anRefreshDataBtn');
+  if (btn) btn.disabled = true;
+  showLoading('Refreshing from BigQuery…', 10);
 
-document.getElementById('offerMapClearBtn').addEventListener('click', () => {
-  OFFER_MAP = {};
-  OFFER_MAP_SOURCE = null;
-  OFFER_MAP_CLOUD_OBJECTS = [];
-  localStorage.removeItem(OFFER_MAP_KEY);
-  localStorage.removeItem(OFFER_MAP_SOURCE_KEY);
-  localStorage.removeItem(OFFER_MAP_CLOUD_OBJS_KEY);
-  updateOfferMapChip();
-  renderAnalytics();
-});
+  try {
+    await loadBigQueryData();
+    setLoadingProgress(55, 'Applying uploaded reports…');
+    applyManualPerformanceData();
+    setLoadingProgress(70, 'Checking Cloud Storage for newer reports…');
+    await loadCloudDeliveryFallback();
 
-document.getElementById('offerMapFileInput').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  e.target.value = '';
-  const ext = file.name.split('.').pop().toLowerCase();
+    setLoadingProgress(85, 'Refreshing daily & version data…');
+    anDailyAttempted = false; anDailyLoaded = false;
+    vfAttempted      = false; vfLoaded      = false;
+    trDailyAttempted = false;
+    await Promise.all([
+      tryLoadStageCreativeDailyData(),
+      vfLoadVersionData(),
+    ]);
 
-  const readAs = ext === 'csv'
-    ? file.text()
-    : file.arrayBuffer();
-
-  readAs
-    .then(data => parseOfferMapByExt(data, ext))
-    .then(({ map, matchedColumns, rowCount }) => {
-      if (!matchedColumns) {
-        console.warn(`Offer map: couldn't find "FT Version Name"/"Creative Offer Name" columns in ${file.name} — used a positional guess, got ${rowCount} entries.`);
-      }
-      applyOfferMap(map, 'manual');
-    });
-});
-
-/* ── Offer Map: load from Cloud Storage (multi-select) ───── */
-const offerMapCloudOverlay    = document.getElementById('offerMapCloudOverlay');
-const offerMapCloudList       = document.getElementById('offerMapCloudList');
-const offerMapCloudEmpty      = document.getElementById('offerMapCloudEmpty');
-const offerMapCloudError      = document.getElementById('offerMapCloudError');
-const offerMapCloudSelectAll  = document.getElementById('offerMapCloudSelectAll');
-const offerMapCloudSelCount   = document.getElementById('offerMapCloudSelCount');
-const offerMapCloudLoadBtn    = document.getElementById('offerMapCloudLoadBtn');
-
-function offerMapCloudCheckboxes() {
-  return Array.from(offerMapCloudList.querySelectorAll('.gcs-file-checkbox'));
-}
-
-function updateOfferMapCloudSelectionUI() {
-  const boxes    = offerMapCloudCheckboxes();
-  const selected = boxes.filter(b => b.checked);
-  offerMapCloudSelCount.textContent = selected.length
-    ? `${selected.length} selected`
-    : '';
-  offerMapCloudLoadBtn.disabled = selected.length === 0;
-  offerMapCloudSelectAll.checked   = boxes.length > 0 && selected.length === boxes.length;
-  offerMapCloudSelectAll.indeterminate = selected.length > 0 && selected.length < boxes.length;
-}
-
-function openOfferMapCloudPicker() {
-  offerMapCloudOverlay.classList.add('open');
-  offerMapCloudList.innerHTML  = `<div style="font-size:12px;color:var(--muted);padding:16px 0;text-align:center">Loading bucket contents…</div>`;
-  offerMapCloudEmpty.style.display = 'none';
-  offerMapCloudError.style.display = 'none';
-  offerMapCloudSelectAll.checked = false;
-  offerMapCloudSelectAll.indeterminate = false;
-  offerMapCloudSelCount.textContent = '';
-  offerMapCloudLoadBtn.disabled = true;
-
-  gcsListObjects().then(items => {
-    if (!items.length) {
-      offerMapCloudList.innerHTML = '';
-      offerMapCloudEmpty.style.display = '';
-      return;
-    }
-    const previouslySelected = new Set(OFFER_MAP_SOURCE === 'cloud' ? OFFER_MAP_CLOUD_OBJECTS : []);
-    offerMapCloudList.innerHTML = items.map(o => `
-      <label class="gcs-file-row">
-        <span style="display:flex;align-items:center;gap:10px;overflow:hidden">
-          <input type="checkbox" class="gcs-file-checkbox" data-name="${esc(o.name)}" ${previouslySelected.has(o.name) ? 'checked' : ''}>
-          <span class="gcs-file-name">${esc(o.name)}</span>
-        </span>
-        <span class="gcs-file-meta">${new Date(o.updated).toLocaleDateString()}</span>
-      </label>`).join('');
-    updateOfferMapCloudSelectionUI();
-  }).catch(err => {
-    offerMapCloudList.innerHTML = '';
-    offerMapCloudError.textContent = `Couldn't list bucket contents: ${err.message}`;
-    offerMapCloudError.style.display = '';
-  });
-}
-
-function closeOfferMapCloudPicker() {
-  offerMapCloudOverlay.classList.remove('open');
-}
-
-document.getElementById('offerMapCloudBtn').addEventListener('click', openOfferMapCloudPicker);
-document.getElementById('offerMapCloudCancel').addEventListener('click', closeOfferMapCloudPicker);
-
-offerMapCloudList.addEventListener('change', e => {
-  if (e.target.classList.contains('gcs-file-checkbox')) updateOfferMapCloudSelectionUI();
-});
-
-offerMapCloudSelectAll.addEventListener('change', () => {
-  offerMapCloudCheckboxes().forEach(b => { b.checked = offerMapCloudSelectAll.checked; });
-  updateOfferMapCloudSelectionUI();
-});
-
-offerMapCloudLoadBtn.addEventListener('click', () => {
-  const names = offerMapCloudCheckboxes().filter(b => b.checked).map(b => b.dataset.name);
-  if (!names.length) return;
-
-  offerMapCloudError.style.display = 'none';
-  offerMapCloudLoadBtn.disabled = true;
-  offerMapCloudLoadBtn.textContent = 'Loading…';
-
-  fetchAndMergeOfferMapObjects(names)
-    .then(({ map, perFile }) => {
-      applyOfferMap(map, 'cloud', names);
-      const unmatched = perFile.filter(f => !f.matchedColumns);
-      if (unmatched.length) {
-        // Keep the modal open and explain which file(s) didn't have the expected
-        // columns, instead of silently merging a low/garbage count from a guess.
-        offerMapCloudError.textContent =
-          `Loaded ${perFile.length} file(s), ${Object.keys(map).length} total offers. ` +
-          `Couldn't find "FT Version Name"/"Creative Offer Name" columns in: ` +
-          `${unmatched.map(f => `${f.name} (${f.rowCount} guessed)`).join(', ')} — check those column headers.`;
-        offerMapCloudError.style.display = '';
-      } else {
-        closeOfferMapCloudPicker();
-      }
-    })
-    .catch(err => {
-      offerMapCloudError.textContent = `Couldn't load selected file(s): ${err.message}`;
-      offerMapCloudError.style.display = '';
-    })
-    .finally(() => {
-      offerMapCloudLoadBtn.disabled = false;
-      offerMapCloudLoadBtn.textContent = 'Load Selected';
-    });
-});
-
-updateOfferMapChip();
-
-/* ── Manual performance data: upload handlers ────────────── */
-function updatePerfDataChip() {
-  const chip  = document.getElementById('perfDataChip');
-  const label = document.getElementById('perfDataChipLabel');
-  if (!chip) return;
-  const flights = MANUAL_PERF_DATA ? Object.keys(MANUAL_PERF_DATA.quartersByFlight || {}) : [];
-  if (flights.length) {
-    chip.style.display = '';
-    label.textContent  = `Manual data: ${flights.join(', ')}`;
-  } else {
-    chip.style.display = 'none';
-  }
-}
-
-document.getElementById('perfDataUploadBtn').addEventListener('click', () => {
-  document.getElementById('perfDataFileInput').click();
-});
-
-document.getElementById('perfDataClearBtn').addEventListener('click', () => {
-  MANUAL_PERF_DATA = null;
-  localStorage.removeItem(PERF_DATA_KEY);
-  clearManualPerformanceFlights();
-  updatePerfDataChip();
-  /* Dropping the manual data re-opens the gaps it was filling, so the GCS
-     reports have to be re-read before the tabs can be re-rendered. */
-  showLoading('Reloading Cloud Storage reports…');
-  loadCloudDeliveryFallback().finally(() => {
-    hideLoading();
     if (typeof renderOverview  === 'function') renderOverview();
     if (typeof renderAnalytics === 'function') renderAnalytics();
-  });
-});
+    if (typeof renderPivot     === 'function') renderPivot();
+    if (typeof renderTrends    === 'function') renderTrends();
 
-document.getElementById('perfDataFileInput').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  e.target.value = '';
-  const ext = file.name.split('.').pop().toLowerCase();
+    anSetRefreshStatus(`Last updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+    hideLoading();
+  } catch (e) {
+    console.error('[refresh] data reload failed:', e);
+    showLoadingError('Could not refresh data — ' + (e.message || 'connection failed'), refreshAllData);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 
-  const readAs = ext === 'csv' ? file.text() : file.arrayBuffer();
-
-  /* Parsing a full delivery export is seconds of blocking work, so the veil
-     both explains the freeze and stops a second upload landing mid-parse. */
-  showLoading(`Reading ${file.name}…`, 20);
-
-  readAs
-    .then(data => parsePerformanceRowsByExt(data, ext))
-    .then(rows => {
-      setLoadingProgress(70, 'Aggregating delivery rows…');
-      const incoming = aggregateManualPerformanceRows(rows);
-      MANUAL_PERF_DATA = mergePerfAggregates(MANUAL_PERF_DATA, incoming);
-      localStorage.setItem(PERF_DATA_KEY, JSON.stringify(MANUAL_PERF_DATA));
-      applyManualPerformanceData();
-      updatePerfDataChip();
-      hideLoading();
-    })
-    .catch(err => {
-      console.warn('Manual performance data upload failed:', err);
-      /* The input was cleared before parsing, so "try again" means re-picking
-         a file rather than replaying the same bad one. */
-      showLoadingError(`Couldn't read ${file.name} — ${err.message || 'unsupported or malformed file'}`,
-        () => document.getElementById('perfDataFileInput').click());
-    });
-});
-
-updatePerfDataChip();
+document.getElementById('anRefreshDataBtn').addEventListener('click', refreshAllData);
 </script>
 
 <!-- Loading overlay — see MODULE · LOADING OVERLAY below -->
