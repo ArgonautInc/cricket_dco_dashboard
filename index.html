@@ -4941,14 +4941,30 @@ function buildOfferMapFromRows(headerRow, dataRows) {
   const kIdx = keyCol   >= 0 ? keyCol   : 0;
   const oIdx = offerCol >= 0 ? offerCol : 1;
   const map = {};
+  const labelsSeen = {};   // FT Version Name -> Set of distinct labels seen for it
   dataRows.forEach(row => {
     const key   = String(row[kIdx] || '').trim();
     const offer = String(row[oIdx] || '').trim();
     if (!key || !offer) return; // skips blank/legend rows (e.g. the RESOURCES row)
     const tactic = tacticCol >= 0 ? String(row[tacticCol] || '').trim() : '';
-    map[key] = tactic ? `${tactic} — ${offer}` : offer;
+    const label  = tactic ? `${tactic} — ${offer}` : offer;
+    (labelsSeen[key] = labelsSeen[key] || new Set()).add(label);
+    map[key] = label;
   });
-  return { map, matchedColumns, rowCount: Object.keys(map).length };
+  /* A hand-maintained matrix can carry the same FT Version Name on two rows
+     with different Creative Offer Names (a copy-pasted row whose version
+     column didn't get updated is the usual way this happens) — the loop
+     above just keeps the last one, silently routing that version's
+     creative to the wrong offer. Surface it instead of guessing. */
+  const dupeKeys = Object.keys(labelsSeen).filter(k => labelsSeen[k].size > 1);
+  dupeKeys.forEach(k => { delete map[k]; });   // ambiguous — raw name is a safer fallback than a guess
+  if (dupeKeys.length) {
+    console.warn(`[Offer map] ${dupeKeys.length} FT Version Name(s) appear on rows with different ` +
+                 `Creative Offer Names — excluded rather than guessing which one is right (likely ` +
+                 `cause of a creative mapping to the wrong card):`,
+                 dupeKeys.map(k => `${k}: ${[...labelsSeen[k]].join(' / ')}`));
+  }
+  return { map, matchedColumns, rowCount: Object.keys(map).length, dupeKeys };
 }
 
 function parseOfferMapCsvText(text) {
@@ -5661,11 +5677,41 @@ async function cfFetchVersionOfferMap() {
     } catch (e) {
       continue;                               // column doesn't exist — try the next name
     }
-    const map = {};
+
+    /* Version Name is assumed 1:1 with segment+offer (see the file-level
+       comment above) — but if Flashtalking ever reuses a Version Name across
+       two different creative concepts (e.g. a Text-Led execution and a
+       Creative-Led execution sharing one version, or a recycled version
+       name), SELECT DISTINCT returns more than one (segment, offer) row for
+       it. Silently keeping whichever row came back last — the old
+       `map[v] = {...}` here — routed every Cloudflare asset for that version
+       to one concept's card and starved the other, with nothing in the
+       console to say so. Collect every pair seen per version instead, and
+       drop any version with more than one: cfPreviewCandidates then reports
+       it as unmatched (gradient fallback) rather than confidently showing
+       the wrong creative on either card. */
+    const pairsSeen = {};   // version -> Set of "segment|offer" combos seen
+    const lastPair  = {};   // version -> most recent {segment, offer}
     (rows || []).forEach(r => {
       const v = String(r.version || '').trim();
-      if (v) map[v] = { segment: String(r.segment || '').trim(), offer: String(r.offer || '').trim() };
+      if (!v) return;
+      const segment = String(r.segment || '').trim();
+      const offer   = String(r.offer   || '').trim();
+      (pairsSeen[v] = pairsSeen[v] || new Set()).add(segment + '|' + offer);
+      lastPair[v] = { segment, offer };
     });
+    const map = {};
+    const ambiguous = [];
+    Object.keys(lastPair).forEach(v => {
+      if (pairsSeen[v].size > 1) { ambiguous.push(v); return; }
+      map[v] = lastPair[v];
+    });
+    if (ambiguous.length) {
+      console.warn(`[CF] ${ambiguous.length} Version Name(s) in "${field}" map to more than one ` +
+                   `Segment/Creative Offer Name combo — excluded from preview matching rather than ` +
+                   `guessing which one wins (this is a likely cause of a creative landing on the ` +
+                   `wrong card):`, ambiguous);
+    }
     if (Object.keys(map).length) return { map, field };
   }
   return { map: {}, field: null };
