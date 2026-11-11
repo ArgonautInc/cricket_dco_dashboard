@@ -4101,10 +4101,15 @@ function creativeTypeOf(s) {
    offer's rows wins over a one-off. */
 function buildLookupAttrs(headerRow, dataRows) {
   const headers = headerRow.map(h => String(h || '').trim());
-  const col = name => findHeaderIndex(headers, name);
-  const offerCol = col('Creative Offer Name'), segCol = col('Tactic | Segment');
+  const col = (...names) => names.map(n => findHeaderIndex(headers, n)).find(i => i >= 0) ?? -1;
+  /* Column names differ between the full trafficker and the trimmed
+     creative_lookup.csv kept in the bucket (SEGMENT + Sub-Segment, and
+     Version Name instead of a Creative ID column). */
+  const offerCol = col('Creative Offer Name'), segCol = col('Tactic | Segment', 'Segment');
+  const subCol   = col('Sub-Segment');
   const initCol  = col('Initiative'),          nameCol = col('Creative Name');
   const idCol    = col('Creative ID');
+  const verCol   = col('FT Version Name', 'Version Name');
   if (offerCol < 0 || (initCol < 0 && nameCol < 0)) return null;
 
   const votes = { byStageOffer:{}, byOffer:{}, byCreativeId:{} };
@@ -4117,12 +4122,15 @@ function buildLookupAttrs(headerRow, dataRows) {
 
   dataRows.forEach(row => {
     const offer = clean(row[offerCol]);
-    const id    = idCol >= 0 ? clean(row[idCol]) : '';
+    const id    = idCol >= 0 ? clean(row[idCol])
+                : verCol >= 0 ? (String(row[verCol] || '').match(/ARG[A-Z]{3}\d+/) || [''])[0] : '';
     if (!offer && !id) return;
     const initiative   = initCol >= 0 ? clean(row[initCol]) : '';
     const creativeType = (nameCol >= 0 && creativeTypeOf(row[nameCol])) || creativeTypeOf(offer) || '';
     const offerKey = attrNorm(offer);
-    const stageKey = segCol >= 0 && clean(row[segCol]) ? attrNorm(stageCanonicalKey(row[segCol], offer)) : '';
+    const sub      = subCol >= 0 ? clean(row[subCol]) : '';
+    const segment  = segCol >= 0 ? clean(row[segCol]) + (sub ? ' - ' + sub : '') : '';
+    const stageKey = segment ? attrNorm(stageCanonicalKey(segment, offer)) : '';
     [['initiative', initiative], ['creativeType', creativeType]].forEach(([field, val]) => {
       if (offerKey) vote('byOffer', offerKey, field, val);
       if (offerKey && stageKey) vote('byStageOffer', stageKey + '|' + offerKey, field, val);
@@ -4136,11 +4144,19 @@ function buildLookupAttrs(headerRow, dataRows) {
    a newer matrix overrides an older one key by key instead of being
    outvoted by it. */
 function resolveLookupVotes(votes) {
-  const top = counts => Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  /* A segment+offer pair can carry two values across its rows (e.g. one
+     partner's row tagged differently); ties go to the offer's overall
+     majority so a single odd row can't flip the whole segment. */
+  const rank = (counts, tieBreak) => Object.entries(counts)
+    .sort((a, b) => b[1] - a[1] || ((tieBreak && tieBreak[b[0]]) || 0) - ((tieBreak && tieBreak[a[0]]) || 0))[0]?.[0] || null;
   const out = { byStageOffer:{}, byOffer:{}, byCreativeId:{} };
-  ['byStageOffer', 'byOffer', 'byCreativeId'].forEach(bucket => {
+  ['byOffer', 'byCreativeId', 'byStageOffer'].forEach(bucket => {
     Object.entries(votes[bucket]).forEach(([key, e]) => {
-      out[bucket][key] = { initiative: top(e.initiative), creativeType: top(e.creativeType) };
+      const offerVotes = bucket === 'byStageOffer' ? votes.byOffer[key.slice(key.indexOf('|') + 1)] : null;
+      out[bucket][key] = {
+        initiative:   rank(e.initiative,   offerVotes && offerVotes.initiative),
+        creativeType: rank(e.creativeType, offerVotes && offerVotes.creativeType),
+      };
     });
   });
   return out;
