@@ -755,6 +755,7 @@ svg { display: block; }
 .pv-tr-group > td { background: var(--recess); border-top: 1px solid var(--border-s); }
 .pv-tr-group:hover .pv-caret { color: var(--fg); }
 .pv-td-group {
+  padding-left: var(--pv-indent, 16px) !important;
   font-weight: 700 !important;
   font-size: 12px !important;
   background: var(--recess) !important;
@@ -768,7 +769,9 @@ svg { display: block; }
 }
 .pv-tr-group.collapsed .pv-caret { transform: rotate(-90deg); }
 .pv-group-count { color: var(--muted); font-weight: 500; font-size: 11px; margin-left: 6px; }
-.pv-td-child { padding-left: 40px !important; font-weight: 400 !important; }
+.pv-td-child { padding-left: calc(var(--pv-indent, 16px) + 24px) !important; font-weight: 400 !important; }
+.pv-tr-group.pv-depth-1 > td { background: var(--card) !important; }
+.pv-tr-group.pv-depth-2 > td { background: var(--card) !important; font-weight: 600 !important; }
 .pv-rank {
   display: inline-block;
   min-width: 16px;
@@ -2414,6 +2417,17 @@ svg { display: block; }
             <select class="an-select" data-attr-scope="pv" data-attr-kind="creativeType"></select>
           </div>
         </div>
+        <div class="pv-control-group" id="pvGroupByGroup">
+          <span class="pv-label">Group By</span>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <select class="an-select" id="pvGroup0" data-level="0"></select>
+            <span style="color:var(--muted)">▸</span>
+            <select class="an-select" id="pvGroup1" data-level="1"></select>
+            <span style="color:var(--muted)">▸</span>
+            <select class="an-select" id="pvGroup2" data-level="2"></select>
+            <button class="btn-ghost btn-sm" id="pvPresetSite" title="Site ▸ Initiative ▸ Creative with Global Count, GM Orders, Media Cost and Impressions — the delivery pivot workbook view">Site ▸ Initiative ▸ Creative</button>
+          </div>
+        </div>
         <div class="pv-control-group" id="pvLayoutGroup">
           <span class="pv-label">Layout</span>
           <div class="seg-tabs" id="pvLayoutToggle">
@@ -2884,6 +2898,7 @@ async function loadBigQueryData() {
           SAFE_DIVIDE(SUM(\`CKT_bNON_HISPANIC_ORDER Count\`), NULLIF(SUM(\`Clicks\`), 0)) as gmCvr,
           SAFE_DIVIDE(SUM(\`CKT_bHISPANIC_ORDER Count\`), NULLIF(SUM(\`Clicks\`), 0)) as hmCvr,
           SUM(\`Total Cost\`) as spend,
+          SUM(\`Media Cost\`) as mediaCost,
           SAFE_DIVIDE(SUM(\`Total Cost\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
         WHERE \`Flight\` IN ('Q1','Q2','Q3','Q4') AND \`Segment\` IS NOT NULL
@@ -2906,6 +2921,7 @@ async function loadBigQueryData() {
           SAFE_DIVIDE(SUM(\`CKT_bNON_HISPANIC_GLOBAL_RT Count\`), SUM(\`Total Ads Requested\`)) as gmLpvr,
           SAFE_DIVIDE(SUM(\`CKT_bNON_HISPANIC_ORDER Count\`), NULLIF(SUM(\`Clicks\`), 0)) as gmCvr,
           SUM(\`Total Cost\`) as spend,
+          SUM(\`Media Cost\`) as mediaCost,
           SAFE_DIVIDE(SUM(\`Total Cost\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc,
           SAFE_DIVIDE(SUM(\`Total Ads Requested\`), NULLIF(SUM(\`Cookie ID Reach: Total Ad Reach\`), 0)) as freq
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
@@ -2975,6 +2991,7 @@ async function loadBigQueryData() {
         gmCvr:  Number(r.gmCvr)  || 0,
         hmCvr:  Number(r.hmCvr)  || 0,
         spend:  Number(r.spend)  || 0,
+        mediaCost: Number(r.mediaCost) || 0,
         cpc:    Number(r.cpc)    || 0,
       }));
     }
@@ -2996,6 +3013,7 @@ async function loadBigQueryData() {
         gmLpvr:   Number(r.gmLpvr) || 0,
         gmCvr:    Number(r.gmCvr)  || 0,
         spend:    Number(r.spend)  || 0,
+        mediaCost: Number(r.mediaCost) || 0,
         cpc:      Number(r.cpc)    || 0,
         freq:     Number(r.freq)   || 1,
       }));
@@ -3045,6 +3063,7 @@ async function tryLoadStageCreativeDailyData() {
             SUM(\`CKT_bNON_HISPANIC_GLOBAL_RT Count\`) as gmLpvCount,
             SUM(\`CKT_bHISPANIC_GLOBAL_RT Count\`) as hmLpvCount,
             SUM(\`Total Cost\`) as spend,
+            SUM(\`Media Cost\`) as mediaCost,
             SUM(\`Cookie ID Reach: Total Ad Reach\`) as reach
           FROM \`crk-dco-dash.reporting_data.deliveries_view\`
           WHERE \`Flight\` IN ('Q1','Q2','Q3','Q4') AND \`Segment\` IS NOT NULL
@@ -3057,16 +3076,18 @@ async function tryLoadStageCreativeDailyData() {
             CASE WHEN \`Strategy\` LIKE '%USH%' THEN 'USH' ELSE 'GM' END as mkt,
             TRIM(\`Segment\`) as stage,
             \`Creative Offer Name\` as creative,
+            TRIM(\`Site\`) as site,
             SUM(\`Total Ads Requested\`) as imps,
             SUM(\`Clicks\`) as clicks,
             SUM(\`CKT_bNON_HISPANIC_ORDER Count\`) as gmOrdCount,
             SUM(\`CKT_bNON_HISPANIC_GLOBAL_RT Count\`) as gmLpvCount,
             SUM(\`Total Cost\`) as spend,
+            SUM(\`Media Cost\`) as mediaCost,
             SUM(\`Cookie ID Reach: Total Ad Reach\`) as reach
           FROM \`crk-dco-dash.reporting_data.deliveries_view\`
           WHERE \`Flight\` IN ('Q1','Q2','Q3','Q4') AND \`Segment\` IS NOT NULL
             AND \`Creative Offer Name\` IS NOT NULL
-          GROUP BY day, q, mkt, stage, creative
+          GROUP BY day, q, mkt, stage, creative, site
         `),
       ]);
 
@@ -3080,16 +3101,19 @@ async function tryLoadStageCreativeDailyData() {
           gmLpvCount: Number(r.gmLpvCount) || 0,
           hmLpvCount: Number(r.hmLpvCount) || 0,
           spend:  Number(r.spend)  || 0,
+          mediaCost: Number(r.mediaCost) || 0,
           reach:  Number(r.reach)  || 0,
           freq:   Number(r.reach) ? Number(r.imps)/Number(r.reach) : 1,
         }));
         AN_DAILY_CREATIVE_RAW = creativeRows.map(r => ({
           day: r.day, q: r.q, mkt: r.mkt, stage: stageCanonicalKey(r.stage, r.creative), creative: r.creative || '',
+          site: r.site || '',
           imps:   Number(r.imps)   || 0,
           clicks: Number(r.clicks) || 0,
           gmOrdCount: Number(r.gmOrdCount) || 0,
           gmLpvCount: Number(r.gmLpvCount) || 0,
           spend:  Number(r.spend)  || 0,
+          mediaCost: Number(r.mediaCost) || 0,
           reach:  Number(r.reach)  || 0,
           freq:   Number(r.reach) ? Number(r.imps)/Number(r.reach) : 1,
         }));
@@ -3115,12 +3139,12 @@ function aggStageRawRows(rows) {
   rows.forEach(r => {
     const key = `${r.q}|${r.mkt}|${r.stage}`;
     if (!groups.has(key)) groups.set(key, { q:r.q, mkt:r.mkt, stage:r.stage,
-      imps:0, clicks:0, gmOrdCount:0, hmOrdCount:0, gmLpvCount:0, hmLpvCount:0, spend:0, reach:0 });
+      imps:0, clicks:0, gmOrdCount:0, hmOrdCount:0, gmLpvCount:0, hmLpvCount:0, spend:0, mediaCost:0, reach:0 });
     const g = groups.get(key);
     g.imps += r.imps; g.clicks += r.clicks;
     g.gmOrdCount += r.gmOrdCount; g.hmOrdCount += r.hmOrdCount;
     g.gmLpvCount += r.gmLpvCount; g.hmLpvCount += r.hmLpvCount;
-    g.spend += r.spend; g.reach += r.reach;
+    g.spend += r.spend; g.mediaCost += r.mediaCost || 0; g.reach += r.reach;
   });
   return [...groups.values()].map(g => ({
     q: g.q, mkt: g.mkt, stage: g.stage,
@@ -3134,30 +3158,35 @@ function aggStageRawRows(rows) {
     gmCvr:  g.clicks ? g.gmOrdCount/g.clicks : 0,
     hmCvr:  g.clicks ? g.hmOrdCount/g.clicks : 0,
     spend:  g.spend,
+    mediaCost: g.mediaCost,
     cpc:    g.clicks ? g.spend/g.clicks      : 0,
     freq:   g.reach  ? g.imps/g.reach        : 1,
   }));
 }
 
-function aggCreativeRawRows(rows) {
+/* bySite keeps Site as a grouping key (Pivot's Site dimension); everyone
+   else rolls sites together. */
+function aggCreativeRawRows(rows, bySite) {
   const groups = new Map();
   rows.forEach(r => {
-    const key = `${r.q}|${r.mkt}|${r.stage}|${r.creative}`;
-    if (!groups.has(key)) groups.set(key, { q:r.q, mkt:r.mkt, stage:r.stage, creative:r.creative,
-      imps:0, clicks:0, gmOrdCount:0, gmLpvCount:0, spend:0, reach:0 });
+    const key = `${r.q}|${r.mkt}|${r.stage}|${r.creative}` + (bySite ? `|${r.site}` : '');
+    if (!groups.has(key)) groups.set(key, { q:r.q, mkt:r.mkt, stage:r.stage, creative:r.creative, site: bySite ? r.site : undefined,
+      imps:0, clicks:0, gmOrdCount:0, gmLpvCount:0, spend:0, mediaCost:0, reach:0 });
     const g = groups.get(key);
     g.imps += r.imps; g.clicks += r.clicks;
     g.gmOrdCount += r.gmOrdCount; g.gmLpvCount += r.gmLpvCount; g.spend += r.spend;
+    g.mediaCost += r.mediaCost || 0;
     g.reach += r.reach;
   });
   return [...groups.values()].map(g => ({
-    q: g.q, mkt: g.mkt, stage: g.stage, creative: g.creative,
+    q: g.q, mkt: g.mkt, stage: g.stage, creative: g.creative, ...(bySite ? { site: g.site || '(no site)' } : {}),
     imps: g.imps, clicks: g.clicks,
     ctr:    g.imps   ? g.clicks/g.imps       : 0,
     gmOrd:  g.gmOrdCount,
     gmLpvr: g.imps   ? g.gmLpvCount/g.imps   : 0,
     gmCvr:  g.clicks ? g.gmOrdCount/g.clicks : 0,
     spend:  g.spend,
+    mediaCost: g.mediaCost,
     cpc:    g.clicks ? g.spend/g.clicks      : 0,
     freq:   g.reach  ? g.imps/g.reach        : 1,
   }));
@@ -3177,7 +3206,7 @@ function effectiveStageRows(dateFrom, dateTo) {
   if (dateFrom) rows = rows.filter(r => r.day >= dateFrom);
   if (dateTo)   rows = rows.filter(r => r.day <= dateTo);
   const byKey = new Map(aggStageRawRows(rows).map(g => [`${g.q}|${g.mkt}|${g.stage}`, g]));
-  const zero  = { imps:0, clicks:0, ctr:0, gmOrd:0, hmOrd:0, gmLpvr:0, hmLpvr:0, gmTdor:0, hmTdor:0, gmCvr:0, hmCvr:0, spend:0, cpc:0, freq:1 };
+  const zero  = { imps:0, clicks:0, ctr:0, gmOrd:0, hmOrd:0, gmLpvr:0, hmLpvr:0, gmTdor:0, hmTdor:0, gmCvr:0, hmCvr:0, spend:0, mediaCost:0, cpc:0, freq:1 };
   return AN_STAGES.map(s => ({ ...s, ...(byKey.get(`${s.q}|${s.mkt}|${s.stage}`) || zero) }));
 }
 
@@ -3187,7 +3216,7 @@ function effectiveCreativeRows(dateFrom, dateTo) {
   if (dateFrom) rows = rows.filter(r => r.day >= dateFrom);
   if (dateTo)   rows = rows.filter(r => r.day <= dateTo);
   const byKey = new Map(aggCreativeRawRows(rows).map(g => [`${g.q}|${g.mkt}|${g.stage}|${g.creative}`, g]));
-  const zero  = { imps:0, clicks:0, ctr:0, gmOrd:0, gmLpvr:0, gmCvr:0, spend:0, cpc:0, freq:1 };
+  const zero  = { imps:0, clicks:0, ctr:0, gmOrd:0, gmLpvr:0, gmCvr:0, spend:0, mediaCost:0, cpc:0, freq:1 };
   return AN_CREATIVES.map(c => ({ ...c, ...(byKey.get(`${c.q}|${c.mkt}|${c.stage}|${c.creative}`) || zero) }));
 }
 
@@ -8959,6 +8988,104 @@ function oneSheetRenderTopTable(title, rows, cols, opts) {
   </div>`;
 }
 
+/* Top creatives within each Initiative (from the Lookup Table), ranked by
+   GM Orders then impressions. Initiatives are ordered by their own order
+   volume, with Unassigned last. */
+const ONESHEET_TOP_PER_INITIATIVE = 3;
+function oneSheetBuildInitiativeTop(creatives) {
+  const byInit = new Map();
+  creatives.forEach(r => {
+    const { initiative } = creativeAttrs(r.stage, r.creative);
+    if (!byInit.has(initiative)) byInit.set(initiative, []);
+    byInit.get(initiative).push(r);
+  });
+  const sum = (rows, k) => rows.reduce((s, r) => s + (r[k] || 0), 0);
+  return [...byInit.entries()]
+    .map(([initiative, rows]) => {
+      const imps = sum(rows, 'imps'), clicks = sum(rows, 'clicks'), gmOrd = sum(rows, 'gmOrd');
+      return {
+        initiative, imps, gmOrd,
+        ctr: imps ? clicks / imps : 0, gmCvr: clicks ? gmOrd / clicks : 0,
+        top: [...rows].sort((a, b) => (b.gmOrd || 0) - (a.gmOrd || 0) || b.imps - a.imps).slice(0, ONESHEET_TOP_PER_INITIATIVE),
+      };
+    })
+    .filter(g => g.imps > 0)
+    .sort((a, b) => (a.initiative === INITIATIVE_UNASSIGNED) - (b.initiative === INITIATIVE_UNASSIGNED) || b.gmOrd - a.gmOrd || b.imps - a.imps);
+}
+
+function oneSheetRenderInitiativeTable(groups) {
+  if (!groups.length) return '';
+  const cols = [
+    { key:'gmOrd', label:'Orders', fmt:v => FMT.num(v) },
+    { key:'imps',  label:'Imps',   fmt:v => FMT.abbr(v) },
+    { key:'ctr',   label:'CTR',    fmt:v => FMT.pct(v) },
+    { key:'gmCvr', label:'CVR',    fmt:v => FMT.pct2(v) },
+  ];
+  return `<div class="tbl-wrap">
+    <div class="tbl-head">Top ${ONESHEET_TOP_PER_INITIATIVE} Creatives by Initiative (ranked by Orders)</div>
+    <table class="os-table">
+      <colgroup><col style="width:3%"><col style="width:39%"><col style="width:14%">${cols.map(() => '<col style="width:11%">').join('')}</colgroup>
+      <thead><tr><th>#</th><th>Creative / Offer</th><th>Segment</th>${cols.map(c => `<th>${c.label}</th>`).join('')}</tr></thead>
+      <tbody>${groups.map(g => `
+        <tr class="init-row"><td></td><td colspan="2">${esc(g.initiative)}</td>${cols.map(c => `<td class="val">${c.fmt(g[c.key])}</td>`).join('')}</tr>
+        ${g.top.map((r, i) => `<tr class="${i % 2 ? '' : 'even'}">
+          <td class="rank">${i + 1}</td>
+          <td class="cr-cell"><div class="cr-name">${esc(oneSheetShortenCreativeName(offerLabel(r.creative)) || '—')}</div></td>
+          <td class="seg-cell">${esc(stageLabel(r.stage))}</td>
+          ${cols.map(c => `<td class="val">${c.fmt(r[c.key] || 0)}</td>`).join('')}
+        </tr>`).join('')}`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+/* Page 2: the delivery pivot workbook layout — Site ▸ Initiative ▸
+   Creative Offer Name with Global Count, Order Count, Media Cost and
+   Impressions — built from day-level rows (the only ones carrying Site),
+   scoped to the Overview's quarters / market / date range. */
+const ONESHEET_PIVOT_LEVELS = ['site', 'initiative', 'creative'];
+const ONESHEET_PIVOT_COLS = [
+  { key:'gmLpv',     label:'Global Count', fmt:v => FMT.num(v) },
+  { key:'gmOrd',     label:'Order Count',  fmt:v => FMT.num(v) },
+  { key:'mediaCost', label:'Media Cost',   fmt:v => '$' + v.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }) },
+  { key:'imps',      label:'Impressions',  fmt:v => FMT.num(v) },
+];
+function oneSheetBuildSitePivot(qSel, mktSel, dateFrom, dateTo) {
+  if (!anDailyLoaded) return null;
+  const qKeys = normQs(qSel);
+  const rows = aggCreativeRawRows(AN_DAILY_CREATIVE_RAW.filter(r =>
+    qKeys.includes(r.q) && (mktSel === 'all' || r.mkt === mktSel) &&
+    (!dateFrom || r.day >= dateFrom) && (!dateTo || r.day <= dateTo)), true)
+    .map(r => ({ ...r, ...creativeAttrs(r.stage, r.creative) }));
+  return { rows, tree: pvBuildTree(rows, ONESHEET_PIVOT_LEVELS, 'imps', -1) };
+}
+
+function oneSheetRenderSitePivotPage(model, headerHtml) {
+  const p = model.sitePivot;
+  const body = !p
+    ? '<p class="no-data">Day-level delivery data hasn’t loaded, so the Site breakdown isn’t available. Reopen the One-Sheeter once the dashboard’s date range controls appear.</p>'
+    : `<table class="pivot-table">
+      <thead><tr><th>Site ▸ Initiative ▸ Creative Offer Name</th>${ONESHEET_PIVOT_COLS.map(c => `<th class="num">${c.label}</th>`).join('')}</tr></thead>
+      <tbody>${(function walk(nodes, depth) {
+        return nodes.map(n => `<tr class="lvl-${depth}">
+            <td style="padding-left:${8 + depth * 16}px">${esc(pvDimValueLabel(n.key, n.value))}</td>
+            ${ONESHEET_PIVOT_COLS.map(c => `<td class="num">${c.fmt(pvAggregate(n.rows, c.key))}</td>`).join('')}
+          </tr>${n.children ? walk(n.children, depth + 1) : ''}`).join('');
+      })(p.tree, 0)}
+        <tr class="grand"><td>Grand Total</td>${ONESHEET_PIVOT_COLS.map(c => `<td class="num">${c.fmt(pvAggregate(p.rows, c.key))}</td>`).join('')}</tr>
+      </tbody>
+    </table>`;
+  return `<div class="page os-page-2" contenteditable="${model.editable}">
+  <div class="os-header">${headerHtml}</div>
+  <div class="section-label">Delivery Pivot: Site ▸ Initiative ▸ Creative</div>
+  ${body}
+  <div class="os-footer">
+    <span>Global Count = GM global landing-page visits · Order Count = GM orders · Media Cost = Flashtalking media cost</span>
+    <span>Argonaut</span>
+  </div>
+</div>`;
+}
+
 function oneSheetRenderFunnelTable(funnelRows) {
   if (!funnelRows.length) return '<p class="no-data">No data available</p>';
   const totals = funnelRows.reduce((t,s) => {
@@ -9129,6 +9256,7 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
   const topLpvr   = oneSheetTopN(model.creatives.filter(r=>r.gmLpvr>0), 'gmLpvr');
   const topCtr    = oneSheetTopN(model.creatives.filter(r=>r.ctr>0), 'ctr');
   const editable  = opts.autoPrint ? 'false' : 'true';
+  model.editable  = editable;
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
@@ -9185,6 +9313,17 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
   .badge.q1{background:#e8f5e9;color:#2e7d32}
   .badge.q2{background:#e3f2fd;color:#1565c0}
   .badge.q3{background:#fff3e0;color:#e65100}
+  .badge.q4{background:#f3e5f5;color:#6a1b9a}
+  .os-table tr.init-row td{background:#f0fbea;font-weight:800;font-size:9.5px;color:#2a5c07;border-top:1px solid #cde8ae}
+  .pivot-table{width:100%;border-collapse:collapse;font-size:9px;margin-bottom:12px}
+  .pivot-table th{background:#1a1a1a;color:#fff;padding:6px 8px;text-align:left;font-size:7.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase}
+  .pivot-table th.num,.pivot-table td.num{text-align:right;white-space:nowrap}
+  .pivot-table td{padding:4px 8px;border-bottom:1px solid #f0f0f0}
+  .pivot-table tr.lvl-0 td{background:#e9eef3;font-weight:800;font-size:9.5px;border-top:2px solid #cfd8e2}
+  .pivot-table tr.lvl-1 td{background:#f7f7f7;font-weight:700}
+  .pivot-table tr.lvl-2 td{color:#444;word-break:break-word}
+  .pivot-table tr.grand td{background:#f0fbea;font-weight:800;border-top:2px solid #cde8ae}
+  .os-page-2{margin-top:28px}
   .no-data{color:#bbb;font-size:9px;padding:10px 8px}
 
   .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:12px}
@@ -9212,6 +9351,7 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
     body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     @page{size:letter landscape;margin:8mm}
     .page{width:100%;padding:0}
+    .os-page-2{margin-top:0;break-before:page}
   }
 </style>
 </head>
@@ -9248,6 +9388,7 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
     {key:'imps', label:'Imps', fmt:v=>FMT.abbr(v)},
     {key:'ctr',  label:'CTR',  fmt:v=>FMT.pct(v)},
   ], {showQBadge: multiQ})}
+  ${oneSheetRenderInitiativeTable(oneSheetBuildInitiativeTop(model.creatives))}
 
   <div class="two-col">
     <div class="insights-box">
@@ -9266,6 +9407,7 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
   </div>
 
 </div>
+${oneSheetRenderSitePivotPage(model, headerHtml)}
 ${opts.autoPrint ? '<script>window.onload = function(){ window.print(); }<\/script>' : ''}
 </body></html>`;
 }
@@ -9295,6 +9437,7 @@ function _generateOneSheet() {
     comparison: oneSheetResolveComparison(qSel, mktSel, dateFrom, dateTo),
     funnelRows: oneSheetBuildFunnelRows(qSel, mktSel, dateFrom, dateTo),
     creatives: oneSheetBuildCreativeRows(qSel, mktSel, dateFrom, dateTo),
+    sitePivot: oneSheetBuildSitePivot(qSel, mktSel, dateFrom, dateTo),
     generatedAt: new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}),
   };
 
@@ -9367,8 +9510,7 @@ function _showOneSheeter(model, previewHtml) {
       return buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, { autoPrint: true });
     }
     const clone = doc.documentElement.cloneNode(true);
-    const page = clone.querySelector('#oneSheetPage');
-    if (page) page.removeAttribute('contenteditable');
+    clone.querySelectorAll('.page[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
     clone.querySelectorAll('script').forEach(el => el.remove());
     const printScript = doc.createElement('script');
     printScript.textContent = 'window.onload = function(){ window.print(); };';
@@ -10338,6 +10480,9 @@ const PV_METRICS = [
   { key:'clicks', label:'Clicks',      stageOnly:false, fmt:v=>FMT.abbr(v) },
   { key:'ctr',    label:'CTR',         stageOnly:false, fmt:v=>(v*100).toFixed(3)+'%' },
   { key:'gmOrd',  label:'GM Orders',   stageOnly:false, fmt:v=>FMT.num(v) },
+  /* GM global landing-page visits (CKT_bNON_HISPANIC_GLOBAL_RT) — the
+     "Global Count" column of the delivery pivot workbook. */
+  { key:'gmLpv',  label:'Global Count', stageOnly:false, fmt:v=>FMT.num(v) },
   { key:'hmOrd',  label:'HM Orders',   stageOnly:true,  fmt:v=>FMT.num(v) },
   /* lpvr/cvr/tdor combine GM + HM — only computable where HM fields exist
      (AN_STAGES), so they're stageOnly like the HM-specific metrics below. */
@@ -10349,6 +10494,7 @@ const PV_METRICS = [
   { key:'tdor',   label:'TDOR',        stageOnly:true,  fmt:v=>(v*100).toFixed(4)+'%' },
   { key:'gmTdor', label:'GM TDOR',     stageOnly:true,  fmt:v=>(v*100).toFixed(4)+'%' },
   { key:'spend',  label:'Total Cost',  stageOnly:false, fmt:v=>v>0?FMT.dollar(v):'—' },
+  { key:'mediaCost', label:'Media Cost', stageOnly:false, fmt:v=>v>0?FMT.dollar(v):'—' },
   { key:'cpc',    label:'CPC',         stageOnly:false, fmt:v=>v>0?'$'+v.toFixed(2):'—' },
   { key:'cpo',    label:'CPO',         stageOnly:false, fmt:v=>v>0?'$'+v.toFixed(2):'—' },
   { key:'freq',   label:'Frequency',   fmt:v=>v.toFixed(2)+'×' },
@@ -10358,6 +10504,7 @@ const PV_DIMS = {
   stage:      { label:'Stage',      creativeOnly:false },
   q:          { label:'Quarter',    creativeOnly:false },
   mkt:        { label:'Market',     creativeOnly:false },
+  site:         { label:'Site',                creativeOnly:true  },
   creative:     { label:'Creative',            creativeOnly:true  },
   initiative:   { label:'Initiative',          creativeOnly:true  },
   creativeType: { label:'Creative Type',       creativeOnly:true  },
@@ -10447,16 +10594,36 @@ function pvExtractOfferType(creativeOfferName) {
   return hit ? hit.label : PV_OFFER_TYPE_OTHER;
 }
 
-let pvState = { src:'creatives', layout:'grouped', rowDim:'creative', colDim:'stage', metrics:['imps','clicks','ctr'], sortMetric:'imps', sortCol:'__total__', sortDir:-1, mkt:'all', qs:[...ALL_QS], initiative:'all', creativeType:'all', dateFrom:null, dateTo:null, collapsed:new Set() };
+let pvState = { src:'creatives', layout:'grouped', groupBy:['stage','creative'], rowDim:'creative', colDim:'stage', metrics:['imps','clicks','ctr'], sortMetric:'imps', sortCol:'__total__', sortDir:-1, mkt:'all', qs:[...ALL_QS], initiative:'all', creativeType:'all', dateFrom:null, dateTo:null, collapsed:new Set() };
 
 /* Grouped layout nests creatives under their funnel stage, so it only has
    something to nest when the creative-level rows are loaded. */
 const pvGrouped = () => pvState.layout === 'grouped' && pvState.src === 'creatives';
 
+function pvDimsInUse() {
+  return pvGrouped() ? pvState.groupBy : [pvState.rowDim, pvState.colDim];
+}
+/* Site isn't in the quarter-level creative rows (adding it there would
+   split every Performance Data card by site), so any view using it is
+   built from the day-level creative rows instead. */
+const pvNeedsSite = () => pvState.src === 'creatives' && pvDimsInUse().includes('site');
+function pvEmptyMessage() {
+  return pvNeedsSite() && !anDailyLoaded
+    ? 'Site needs the day-level delivery data, which hasn\u2019t loaded yet.'
+    : 'No data available for this combination.';
+}
+
 function pvPool() {
-  const raw = pvState.src === 'creatives'
-    ? effectiveCreativeRows(pvState.dateFrom, pvState.dateTo)
-    : effectiveStageRows(pvState.dateFrom, pvState.dateTo);
+  let raw;
+  if (pvNeedsSite()) {
+    if (!anDailyLoaded) return [];
+    raw = aggCreativeRawRows(AN_DAILY_CREATIVE_RAW.filter(r =>
+      (!pvState.dateFrom || r.day >= pvState.dateFrom) && (!pvState.dateTo || r.day <= pvState.dateTo)), true);
+  } else {
+    raw = pvState.src === 'creatives'
+      ? effectiveCreativeRows(pvState.dateFrom, pvState.dateTo)
+      : effectiveStageRows(pvState.dateFrom, pvState.dateTo);
+  }
   // Stage-level rows have no Creative Offer Name to match or parse, so
   // the creative dimensions (and the Initiative / Creative Type filters)
   // only apply at creative grain — spread into a new object rather than
@@ -10478,6 +10645,7 @@ function pvAggregate(rows, metric) {
   const gmOrd   = rows.reduce((s,r) => s+(r.gmOrd ||0), 0);
   const hmOrd   = rows.reduce((s,r) => s+(r.hmOrd ||0), 0);
   const spend   = rows.reduce((s,r) => s+(r.spend ||0), 0);
+  const mediaCost = rows.reduce((s,r) => s+(r.mediaCost||0), 0);
   const wGmLp   = rows.reduce((s,r) => s+(r.gmLpvr||0)*(r.imps||0), 0);
   const wHmLp   = rows.reduce((s,r) => s+(r.hmLpvr||0)*(r.imps||0), 0);
   const wGmTd   = rows.reduce((s,r) => s+(r.gmTdor||0)*(r.imps||0), 0);
@@ -10488,6 +10656,8 @@ function pvAggregate(rows, metric) {
     case 'gmOrd':  return gmOrd;
     case 'hmOrd':  return hmOrd;
     case 'spend':  return spend;
+    case 'mediaCost': return mediaCost;
+    case 'gmLpv':  return wGmLp;
     case 'ctr':    return imps   ? clicks/imps  : 0;
     case 'gmCvr':  return clicks ? gmOrd/clicks : 0;
     case 'hmCvr':  return clicks ? hmOrd/clicks : 0;
@@ -10517,6 +10687,16 @@ function pvUpdateSelects() {
   document.getElementById('pvAttrGroup').style.display   = isCreative ? '' : 'none';
   const dimDisplay = pvGrouped() ? 'none' : '';
   document.getElementById('pvRowDimGroup').style.display = dimDisplay;
+  document.getElementById('pvGroupByGroup').style.display = pvGrouped() ? '' : 'none';
+  [0, 1, 2].forEach(i => {
+    const sel = document.getElementById('pvGroup' + i);
+    const taken = pvState.groupBy.slice(0, i);
+    const cur = pvState.groupBy[i] || '';
+    sel.innerHTML = (i > 0 ? `<option value=""${cur===''?' selected':''}>—</option>` : '')
+      + Object.entries(PV_DIMS).filter(([k]) => !taken.includes(k))
+          .map(([k, d]) => `<option value="${k}"${k===cur?' selected':''}>${d.label}</option>`).join('');
+    sel.disabled = i > 0 && !pvState.groupBy[i - 1];
+  });
   document.getElementById('pvColDimGroup').style.display = dimDisplay;
   document.querySelectorAll('#pvLayoutToggle button').forEach(b =>
     b.classList.toggle('active', b.dataset.layout === pvState.layout));
@@ -10600,11 +10780,6 @@ function pvBuildMetricTableHTML(metric, pool, rowKey, colKey, colVals, rowVals) 
   </div>`;
 }
 
-/* Grouped layout: one table, funnel stages as collapsible parent rows with
-   their creatives nested underneath and ranked by the sorted metric, so the
-   best performer inside each stage is the first row of its group. Metrics run
-   across the columns instead of getting a table each. */
-
 /* Lower is better for these, so a low value should shade green, not red. */
 const PV_INVERSE_METRICS = ['cpc', 'cpo', 'freq'];
 
@@ -10620,76 +10795,85 @@ function pvHeatStyle(metric, v, min, max) {
   return ` style="background:hsla(${hue},72%,45%,0.24)"`;
 }
 
+/* Grouped layout: rows nested by up to three Group By levels (default
+   Stage ▸ Creative). Every level but the last is a collapsible subtotal
+   row; the last level holds ranked leaf rows shaded against their
+   siblings, so the best performer in each group reads first. Metrics run
+   across the columns. Shared with the One-Sheeter's pivot page. */
+function pvBuildTree(rows, levels, rankBy, sortDir, depth = 0, path = '') {
+  const key = levels[depth];
+  const isLeaf = depth === levels.length - 1;
+  const vals = [...new Set(rows.map(r => r[key]).filter(v => v != null && v !== ''))];
+  const nodes = vals.map(v => {
+    const sub = rows.filter(r => r[key] === v);
+    const p = path + '␟' + v;
+    return { key, value: v, path: p, rows: sub,
+             children: isLeaf ? null : pvBuildTree(sub, levels, rankBy, sortDir, depth + 1, p) };
+  });
+  const val = n => pvAggregate(n.rows, rankBy);
+  const unassignedLast = (a, b) => (a.value === INITIATIVE_UNASSIGNED) - (b.value === INITIATIVE_UNASSIGNED);
+  nodes.sort(isLeaf ? (a, b) => (val(a) - val(b)) * sortDir : (a, b) => unassignedLast(a, b) || val(b) - val(a));
+  return nodes;
+}
+const pvDimValueLabel = (key, v) => key === 'creative' ? (offerLabel(v) || v) : v;
+
 function pvBuildGroupedTableHTML(pool) {
   const metrics = pvState.metrics;
+  const levels  = pvState.groupBy;
   const rankBy  = PV_INVERSE_METRICS.includes(pvState.sortMetric) ? 'imps' : pvState.sortMetric;
-
-  const stages = [...new Set(pool.map(r => r.stage).filter(Boolean))];
-  stages.sort((a, b) =>
-    pvAggregate(pool.filter(r => r.stage === b), 'imps') -
-    pvAggregate(pool.filter(r => r.stage === a), 'imps'));
+  const tree    = pvBuildTree(pool, levels, rankBy, pvState.sortDir);
+  const labels  = levels.map(k => PV_DIMS[k]?.label || k);
 
   const si = key => pvState.sortMetric === key ? (pvState.sortDir === -1 ? ' ▾' : ' ▴') : '';
   const thead = `<thead><tr>
-    <th class="pv-th-row">Stage ▸ Creative</th>
+    <th class="pv-th-row">${labels.map(esc).join(' ▸ ')}</th>
     ${metrics.map(k => {
       const m = PV_METRICS.find(x => x.key === k);
       return `<th class="pv-th-col sortable" data-metric="${k}" data-col="__total__">${m?.label||k}${si(k)}</th>`;
     }).join('')}
   </tr></thead>`;
 
-  const body = stages.map(stage => {
-    const stageRows = pool.filter(r => r.stage === stage);
-    const collapsed = pvState.collapsed.has(stage);
-
-    const creatives = [...new Set(stageRows.map(r => r.creative).filter(Boolean))]
-      .map(cv => ({ cv, rows: stageRows.filter(r => r.creative === cv) }));
-    creatives.sort((a, b) =>
-      (pvAggregate(a.rows, rankBy) - pvAggregate(b.rows, rankBy)) * pvState.sortDir);
-
-    // Shade each metric column against the range of values in this stage,
-    // min-to-max, so the best and worst creatives are clearly distinguishable.
-    const stageStats = {};
-    metrics.forEach(k => {
-      const vals = creatives.map(c => pvAggregate(c.rows, k)).filter(v => v > 0);
-      stageStats[k] = { min: vals.length ? Math.min(...vals) : 0, max: vals.length ? Math.max(...vals) : 0 };
-    });
-    const heat = (k, v) => pvHeatStyle(k, v, stageStats[k].min, stageStats[k].max);
-
-    const groupRow = `<tr class="pv-tr-group${collapsed?' collapsed':''}" data-stage="${esc(stage)}">
-      <td class="pv-td-label pv-td-group">
-        <span class="pv-caret">▾</span>${esc(stage)}
-        <span class="pv-group-count">${creatives.length} creative${creatives.length===1?'':'s'}</span>
-      </td>
-      ${metrics.map(k => `<td class="pv-td-total">${pvFmt(k, pvAggregate(stageRows, k))}</td>`).join('')}
-    </tr>`;
-
-    if (collapsed) return groupRow;
-
-    const childRows = creatives.map((c, i) => {
-      const display = offerLabel(c.cv) || c.cv;
-      return `<tr class="pv-tr-child${i===0?' is-top':''}">
-        <td class="pv-td-label pv-td-child">
-          <span class="pv-rank">${i+1}</span>${i===0?'<span class="pv-top-badge">Top</span>':''}${esc(display)}
+  const indent = d => `style="--pv-indent:${16 + d * 22}px"`;
+  const renderNodes = (nodes, depth) => {
+    if (!nodes[0].children) {
+      // Leaf level: shade each metric column min-to-max within these siblings.
+      const stats = {};
+      metrics.forEach(k => {
+        const vals = nodes.map(n => pvAggregate(n.rows, k)).filter(v => v > 0);
+        stats[k] = { min: vals.length ? Math.min(...vals) : 0, max: vals.length ? Math.max(...vals) : 0 };
+      });
+      return nodes.map((n, i) => `<tr class="pv-tr-child${i===0?' is-top':''}">
+        <td class="pv-td-label pv-td-child" ${indent(depth)}>
+          <span class="pv-rank">${i+1}</span>${i===0 && nodes.length > 1 ?'<span class="pv-top-badge">Top</span>':''}${esc(pvDimValueLabel(n.key, n.value))}
         </td>
         ${metrics.map(k => {
-          const v = pvAggregate(c.rows, k);
-          return `<td class="pv-td-val"${heat(k, v)}>${pvFmt(k, v)}</td>`;
+          const v = pvAggregate(n.rows, k);
+          return `<td class="pv-td-val"${pvHeatStyle(k, v, stats[k].min, stats[k].max)}>${pvFmt(k, v)}</td>`;
         }).join('')}
+      </tr>`).join('');
+    }
+    return nodes.map(n => {
+      const collapsed = pvState.collapsed.has(n.path);
+      const childLabel = PV_DIMS[levels[depth + 1]]?.label.toLowerCase() || 'item';
+      const row = `<tr class="pv-tr-group pv-depth-${depth}${collapsed?' collapsed':''}" data-path="${esc(n.path)}">
+        <td class="pv-td-label pv-td-group" ${indent(depth)}>
+          <span class="pv-caret">▾</span>${esc(pvDimValueLabel(n.key, n.value))}
+          <span class="pv-group-count">${n.children.length} ${esc(childLabel)}${n.children.length===1?'':'s'}</span>
+        </td>
+        ${metrics.map(k => `<td class="pv-td-total">${pvFmt(k, pvAggregate(n.rows, k))}</td>`).join('')}
       </tr>`;
+      return collapsed ? row : row + renderNodes(n.children, depth + 1);
     }).join('');
-
-    return groupRow + childRows;
-  }).join('');
+  };
 
   const grand = `<tr class="pv-tr-totals">
-    <td class="pv-td-label pv-td-grand">All Stages</td>
+    <td class="pv-td-label pv-td-grand">Grand Total</td>
     ${metrics.map(k => `<td class="pv-td-total pv-td-grand">${pvFmt(k, pvAggregate(pool, k))}</td>`).join('')}
   </tr>`;
 
   return `<div class="pv-table-block">
-    <div class="pv-table-heading">Top creatives by funnel stage <span style="font-weight:500;color:var(--muted)">· click a stage to collapse it</span></div>
-    <div class="pv-table-wrap"><table class="pv-table">${thead}<tbody>${body}${grand}</tbody></table></div>
+    <div class="pv-table-heading">${labels.map(esc).join(' ▸ ')}${levels.length > 1 ? ' <span style="font-weight:500;color:var(--muted)">· click a group to collapse it</span>' : ''}</div>
+    <div class="pv-table-wrap"><table class="pv-table">${thead}<tbody>${tree.length ? renderNodes(tree, 0) : ''}${grand}</tbody></table></div>
   </div>`;
 }
 
@@ -10733,7 +10917,7 @@ function renderPivotGrouped() {
   const container = document.getElementById('pvTablesContainer');
 
   if (!pool.length) {
-    container.innerHTML = `<div class="pv-empty">No data available for this combination.</div>`;
+    container.innerHTML = `<div class="pv-empty">${pvEmptyMessage()}</div>`;
     return;
   }
 
@@ -10755,9 +10939,9 @@ function renderPivotGrouped() {
 
   container.querySelectorAll('tr.pv-tr-group').forEach(tr => {
     tr.addEventListener('click', () => {
-      const stage = tr.dataset.stage;
-      if (pvState.collapsed.has(stage)) pvState.collapsed.delete(stage);
-      else pvState.collapsed.add(stage);
+      const path = tr.dataset.path;
+      if (pvState.collapsed.has(path)) pvState.collapsed.delete(path);
+      else pvState.collapsed.add(path);
       renderPivot();
     });
   });
@@ -10779,7 +10963,7 @@ function renderPivot() {
 
   const container = document.getElementById('pvTablesContainer');
   if (!rowVals.length) {
-    container.innerHTML = `<div class="pv-empty">No data available for this combination.</div>`;
+    container.innerHTML = `<div class="pv-empty">${pvEmptyMessage()}</div>`;
     return;
   }
 
@@ -10860,6 +11044,29 @@ document.getElementById('pvSrcToggle').addEventListener('click', e => {
   renderPivot();
 });
 
+/* Group By levels: picking "—" ends the hierarchy there; picking a value
+   already used deeper down drops it from the deeper level. */
+['pvGroup0', 'pvGroup1', 'pvGroup2'].forEach(id => {
+  document.getElementById(id).addEventListener('change', e => {
+    const level = Number(e.target.dataset.level);
+    const next = pvState.groupBy.slice(0, level);
+    if (e.target.value) next.push(e.target.value, ...pvState.groupBy.slice(level + 1).filter(k => k !== e.target.value));
+    pvState.groupBy = next.length ? next : ['stage'];
+    pvState.collapsed = new Set();
+    renderPivot();
+  });
+});
+document.getElementById('pvPresetSite').addEventListener('click', () => {
+  pvState.src = 'creatives';
+  pvState.layout = 'grouped';
+  pvState.groupBy = ['site', 'initiative', 'creative'];
+  pvState.metrics = ['gmLpv', 'gmOrd', 'mediaCost', 'imps'];
+  pvState.sortMetric = 'imps'; pvState.sortCol = '__total__'; pvState.sortDir = -1;
+  pvState.collapsed = new Set();
+  document.querySelectorAll('#pvSrcToggle button').forEach(b => b.classList.toggle('active', b.dataset.src === 'creatives'));
+  renderPivot();
+});
+
 registerAttrFilters('pv', pvState, () => {
   pvState.sortCol = '__total__'; pvState.sortDir = -1;
   renderPivot();
@@ -10904,32 +11111,25 @@ document.getElementById('pvMetricPills').addEventListener('click', e => {
 function pvExportGrouped() {
   const pool    = pvPool();
   const metrics = pvState.metrics;
+  const levels  = pvState.groupBy;
   const rankBy  = PV_INVERSE_METRICS.includes(pvState.sortMetric) ? 'imps' : pvState.sortMetric;
+  const labels  = levels.map(k => PV_DIMS[k]?.label || k);
 
-  const stages = [...new Set(pool.map(r => r.stage).filter(Boolean))];
-  stages.sort((a, b) =>
-    pvAggregate(pool.filter(r => r.stage === b), 'imps') -
-    pvAggregate(pool.filter(r => r.stage === a), 'imps'));
-
-  const aoa = [['Stage', 'Rank', 'Creative', ...metrics.map(k => PV_METRICS.find(m => m.key === k)?.label || k)]];
-  stages.forEach(stage => {
-    const stageRows = pool.filter(r => r.stage === stage);
-    aoa.push([stage, '', 'All creatives', ...metrics.map(k => pvAggregate(stageRows, k))]);
-
-    const creatives = [...new Set(stageRows.map(r => r.creative).filter(Boolean))]
-      .map(cv => ({ cv, rows: stageRows.filter(r => r.creative === cv) }));
-    creatives.sort((a, b) =>
-      (pvAggregate(a.rows, rankBy) - pvAggregate(b.rows, rankBy)) * pvState.sortDir);
-
-    creatives.forEach((c, i) => {
-      aoa.push([stage, i + 1, offerLabel(c.cv) || c.cv, ...metrics.map(k => pvAggregate(c.rows, k))]);
-    });
+  /* One column per level; a subtotal row fills its own level and leaves
+     the deeper ones as "Total", like an Excel pivot's subtotal line. */
+  const aoa = [[...labels, ...metrics.map(k => PV_METRICS.find(m => m.key === k)?.label || k)]];
+  const walk = (nodes, depth, prefix) => nodes.forEach(n => {
+    const here = [...prefix, pvDimValueLabel(n.key, n.value)];
+    const pad  = levels.slice(depth + 1).map(() => n.children ? 'Total' : '');
+    aoa.push([...here, ...pad, ...metrics.map(k => pvAggregate(n.rows, k))]);
+    if (n.children) walk(n.children, depth + 1, here);
   });
-  aoa.push(['All Stages', '', '', ...metrics.map(k => pvAggregate(pool, k))]);
+  walk(pvBuildTree(pool, levels, rankBy, pvState.sortDir), 0, []);
+  aoa.push(['Grand Total', ...levels.slice(1).map(() => ''), ...metrics.map(k => pvAggregate(pool, k))]);
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Stage x Creative');
-  XLSX.writeFile(wb, `CRKT_Pivot_Stage_by_Creative_${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), labels.join(' x ').replace(/[:\\/?*[\]]/g,'').slice(0,31));
+  XLSX.writeFile(wb, `CRKT_Pivot_${levels.join('_')}_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 document.getElementById('pvExportBtn').addEventListener('click', () => {
