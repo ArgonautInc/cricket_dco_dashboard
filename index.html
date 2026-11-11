@@ -9039,48 +9039,41 @@ function oneSheetRenderInitiativeTable(groups) {
   </div>`;
 }
 
-/* Page 2: the delivery pivot workbook layout — Site ▸ Initiative ▸
-   Creative Offer Name with Global Count, Order Count, Media Cost and
-   Impressions — built from day-level rows (the only ones carrying Site),
-   scoped to the Overview's quarters / market / date range. */
-const ONESHEET_PIVOT_LEVELS = ['site', 'initiative', 'creative'];
+/* Page 2: the delivery pivot workbook layout — Initiative ▸ Creative
+   Offer Name with Global Count, Order Count, Media Cost and Impressions —
+   with sites (Amazon / DV360) combined, built from the same creative rows
+   as page 1 so it follows the Overview's quarters / market / date range. */
+const ONESHEET_PIVOT_LEVELS = ['initiative', 'creative'];
 const ONESHEET_PIVOT_COLS = [
   { key:'gmLpv',     label:'Global Count', fmt:v => FMT.num(v) },
   { key:'gmOrd',     label:'Order Count',  fmt:v => FMT.num(v) },
   { key:'mediaCost', label:'Media Cost',   fmt:v => '$' + v.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }) },
   { key:'imps',      label:'Impressions',  fmt:v => FMT.num(v) },
 ];
-function oneSheetBuildSitePivot(qSel, mktSel, dateFrom, dateTo) {
-  if (!anDailyLoaded) return null;
-  const qKeys = normQs(qSel);
-  const rows = aggCreativeRawRows(AN_DAILY_CREATIVE_RAW.filter(r =>
-    qKeys.includes(r.q) && (mktSel === 'all' || r.mkt === mktSel) &&
-    (!dateFrom || r.day >= dateFrom) && (!dateTo || r.day <= dateTo)), true)
-    .map(r => ({ ...r, ...creativeAttrs(r.stage, r.creative) }));
+function oneSheetBuildInitiativePivot(creatives) {
+  const rows = creatives.map(r => ({ ...r, ...creativeAttrs(r.stage, r.creative) }));
   return { rows, tree: pvBuildTree(rows, ONESHEET_PIVOT_LEVELS, 'imps', -1) };
 }
 
-function oneSheetRenderSitePivotPage(model, headerHtml) {
-  const p = model.sitePivot;
-  const body = !p
-    ? '<p class="no-data">Day-level delivery data hasn’t loaded, so the Site breakdown isn’t available. Reopen the One-Sheeter once the dashboard’s date range controls appear.</p>'
-    : `<table class="pivot-table">
-      <thead><tr><th>Site ▸ Initiative ▸ Creative Offer Name</th>${ONESHEET_PIVOT_COLS.map(c => `<th class="num">${c.label}</th>`).join('')}</tr></thead>
-      <tbody>${(function walk(nodes, depth) {
-        return nodes.map(n => `<tr class="lvl-${depth}">
-            <td style="padding-left:${8 + depth * 16}px">${esc(pvDimValueLabel(n.key, n.value))}</td>
-            ${ONESHEET_PIVOT_COLS.map(c => `<td class="num">${c.fmt(pvAggregate(n.rows, c.key))}</td>`).join('')}
-          </tr>${n.children ? walk(n.children, depth + 1) : ''}`).join('');
-      })(p.tree, 0)}
-        <tr class="grand"><td>Grand Total</td>${ONESHEET_PIVOT_COLS.map(c => `<td class="num">${c.fmt(pvAggregate(p.rows, c.key))}</td>`).join('')}</tr>
-      </tbody>
-    </table>`;
+function oneSheetRenderPivotPage(model, headerHtml) {
+  const p = model.pivot;
   return `<div class="page os-page-2" contenteditable="${model.editable}">
   <div class="os-header">${headerHtml}</div>
-  <div class="section-label">Delivery Pivot: Site ▸ Initiative ▸ Creative</div>
-  ${body}
+  <div class="section-label">Delivery Pivot: Initiative ▸ Creative</div>
+  <table class="pivot-table">
+    <thead><tr><th>Initiative ▸ Creative Offer Name</th>${ONESHEET_PIVOT_COLS.map(c => `<th class="num">${c.label}</th>`).join('')}</tr></thead>
+    <tbody>${p.tree.map(n => `<tr class="grp">
+        <td>${esc(n.value)}</td>
+        ${ONESHEET_PIVOT_COLS.map(c => `<td class="num">${c.fmt(pvAggregate(n.rows, c.key))}</td>`).join('')}
+      </tr>${n.children.map(cn => `<tr class="leaf">
+        <td style="padding-left:24px">${esc(pvDimValueLabel(cn.key, cn.value))}</td>
+        ${ONESHEET_PIVOT_COLS.map(c => `<td class="num">${c.fmt(pvAggregate(cn.rows, c.key))}</td>`).join('')}
+      </tr>`).join('')}`).join('')}
+      <tr class="grand"><td>Grand Total</td>${ONESHEET_PIVOT_COLS.map(c => `<td class="num">${c.fmt(pvAggregate(p.rows, c.key))}</td>`).join('')}</tr>
+    </tbody>
+  </table>
   <div class="os-footer">
-    <span>Global Count = GM global landing-page visits · Order Count = GM orders · Media Cost = Flashtalking media cost</span>
+    <span>All sites combined · Global Count = GM global landing-page visits · Order Count = GM orders · Media Cost = Flashtalking media cost</span>
     <span>Argonaut</span>
   </div>
 </div>`;
@@ -9319,9 +9312,8 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
   .pivot-table th{background:#1a1a1a;color:#fff;padding:6px 8px;text-align:left;font-size:7.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase}
   .pivot-table th.num,.pivot-table td.num{text-align:right;white-space:nowrap}
   .pivot-table td{padding:4px 8px;border-bottom:1px solid #f0f0f0}
-  .pivot-table tr.lvl-0 td{background:#e9eef3;font-weight:800;font-size:9.5px;border-top:2px solid #cfd8e2}
-  .pivot-table tr.lvl-1 td{background:#f7f7f7;font-weight:700}
-  .pivot-table tr.lvl-2 td{color:#444;word-break:break-word}
+  .pivot-table tr.grp td{background:#e9eef3;font-weight:800;font-size:9.5px;border-top:2px solid #cfd8e2}
+  .pivot-table tr.leaf td{color:#444;word-break:break-word}
   .pivot-table tr.grand td{background:#f0fbea;font-weight:800;border-top:2px solid #cde8ae}
   .os-page-2{margin-top:28px}
   .no-data{color:#bbb;font-size:9px;padding:10px 8px}
@@ -9407,7 +9399,7 @@ function buildOneSheetHtml(model, headerHtml, insightsHtml, recsHtml, opts) {
   </div>
 
 </div>
-${oneSheetRenderSitePivotPage(model, headerHtml)}
+${oneSheetRenderPivotPage(model, headerHtml)}
 ${opts.autoPrint ? '<script>window.onload = function(){ window.print(); }<\/script>' : ''}
 </body></html>`;
 }
@@ -9437,9 +9429,9 @@ function _generateOneSheet() {
     comparison: oneSheetResolveComparison(qSel, mktSel, dateFrom, dateTo),
     funnelRows: oneSheetBuildFunnelRows(qSel, mktSel, dateFrom, dateTo),
     creatives: oneSheetBuildCreativeRows(qSel, mktSel, dateFrom, dateTo),
-    sitePivot: oneSheetBuildSitePivot(qSel, mktSel, dateFrom, dateTo),
     generatedAt: new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}),
   };
+  model.pivot = oneSheetBuildInitiativePivot(model.creatives);
 
   const headerHtml   = oneSheetRenderHeaderInner(model);
   const insightsHtml = oneSheetDraftInsights(model).map(i => `<li>${i}</li>`).join('');
