@@ -1797,6 +1797,7 @@ svg { display: block; }
             <button class="active" data-q="Q1">Q1</button>
             <button class="active" data-q="Q2">Q2</button>
             <button class="active" data-q="Q3">Q3</button>
+            <button class="active" data-q="Q4">Q4</button>
           </div>
           <select class="an-select" data-attr-scope="ov" data-attr-kind="initiative" title="Initiative, from the Lookup Table"></select>
           <select class="an-select" data-attr-scope="ov" data-attr-kind="creativeType" title="Creative Type, from the Lookup Table's Creative Name"></select>
@@ -1892,6 +1893,7 @@ svg { display: block; }
           <button class="active" data-q="Q1">Q1</button>
           <button class="active" data-q="Q2">Q2</button>
           <button class="active" data-q="Q3">Q3</button>
+          <button class="active" data-q="Q4">Q4</button>
         </div>
         <!-- Date range (hidden until day-level data loads) -->
         <div id="anDateRangeGroup" style="display:none;align-items:center;gap:6px">
@@ -2022,6 +2024,7 @@ svg { display: block; }
             <button class="active" data-q="Q1">Q1</button>
             <button class="active" data-q="Q2">Q2</button>
             <button class="active" data-q="Q3">Q3</button>
+            <button class="active" data-q="Q4">Q4</button>
           </div>
           <!-- Date range (hidden until day-level data loads) -->
           <div id="crDateRangeGroup" style="display:none;align-items:center;gap:6px">
@@ -2299,6 +2302,7 @@ svg { display: block; }
             <button class="active" data-q="Q1">Q1</button>
             <button class="active" data-q="Q2">Q2</button>
             <button class="active" data-q="Q3">Q3</button>
+            <button class="active" data-q="Q4">Q4</button>
           </div>
         </div>
         <div class="pv-control-group">
@@ -2384,6 +2388,7 @@ svg { display: block; }
             <button class="active" data-q="Q1">Q1</button>
             <button class="active" data-q="Q2">Q2</button>
             <button class="active" data-q="Q3">Q3</button>
+            <button class="active" data-q="Q4">Q4</button>
           </div>
         </div>
         <div class="pv-control-group" id="pvDateRangeGroup" style="display:none">
@@ -2481,6 +2486,7 @@ svg { display: block; }
           <option value="Q1">Q1</option>
           <option value="Q2">Q2</option>
           <option value="Q3">Q3</option>
+          <option value="Q4">Q4</option>
         </select>
         <select class="an-select" id="fatStageFilter"><option value="all">All Stages</option></select>
         <select class="an-select" data-attr-scope="fat" data-attr-kind="initiative" title="Initiative, from the Lookup Table"></select>
@@ -2841,7 +2847,7 @@ async function loadBigQueryData() {
           SUM(\`Total Cost\`) as spend,
           SAFE_DIVIDE(SUM(\`Total Cost\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
-        WHERE \`Flight\` IN ('Q1','Q2','Q3')
+        WHERE \`Flight\` IN ('Q1','Q2','Q3','Q4')
         GROUP BY \`Flight\`, mkt
       `),
       bqQuery(`
@@ -2856,7 +2862,7 @@ async function loadBigQueryData() {
             SUM(\`Total Ads Requested\`)
           ) as lpvr
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
-        WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
+        WHERE \`Flight\` IN ('Q1','Q2','Q3','Q4') AND \`Segment\` IS NOT NULL
         GROUP BY \`Flight\`, stage, mkt
         ORDER BY \`Flight\`, imps DESC
       `),
@@ -2880,7 +2886,7 @@ async function loadBigQueryData() {
           SUM(\`Total Cost\`) as spend,
           SAFE_DIVIDE(SUM(\`Total Cost\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
-        WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
+        WHERE \`Flight\` IN ('Q1','Q2','Q3','Q4') AND \`Segment\` IS NOT NULL
         GROUP BY q, mkt, stage
         ORDER BY imps DESC
       `),
@@ -2903,7 +2909,7 @@ async function loadBigQueryData() {
           SAFE_DIVIDE(SUM(\`Total Cost\`), NULLIF(SUM(\`Clicks\`), 0)) as cpc,
           SAFE_DIVIDE(SUM(\`Total Ads Requested\`), NULLIF(SUM(\`Cookie ID Reach: Total Ad Reach\`), 0)) as freq
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
-        WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
+        WHERE \`Flight\` IN ('Q1','Q2','Q3','Q4') AND \`Segment\` IS NOT NULL
           AND \`Creative Offer Name\` IS NOT NULL
         GROUP BY q, mkt, stage, creative
         ORDER BY imps DESC
@@ -3041,7 +3047,7 @@ async function tryLoadStageCreativeDailyData() {
             SUM(\`Total Cost\`) as spend,
             SUM(\`Cookie ID Reach: Total Ad Reach\`) as reach
           FROM \`crk-dco-dash.reporting_data.deliveries_view\`
-          WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
+          WHERE \`Flight\` IN ('Q1','Q2','Q3','Q4') AND \`Segment\` IS NOT NULL
           GROUP BY day, q, mkt, stage
         `),
         bqQuery(`
@@ -3058,7 +3064,7 @@ async function tryLoadStageCreativeDailyData() {
             SUM(\`Total Cost\`) as spend,
             SUM(\`Cookie ID Reach: Total Ad Reach\`) as reach
           FROM \`crk-dco-dash.reporting_data.deliveries_view\`
-          WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
+          WHERE \`Flight\` IN ('Q1','Q2','Q3','Q4') AND \`Segment\` IS NOT NULL
             AND \`Creative Offer Name\` IS NOT NULL
           GROUP BY day, q, mkt, stage, creative
         `),
@@ -3225,6 +3231,7 @@ function quarterFromActivityDate(dateStr) {
   if (month >= 1 && month <= 3) return 'Q1';
   if (month >= 4 && month <= 6) return 'Q2';
   if (month >= 7 && month <= 9) return 'Q3';
+  if (month >= 10 && month <= 12) return 'Q4';
   return null;
 }
 
@@ -3775,9 +3782,9 @@ let activeTab = 'overview';
 /* ── Shared multi-quarter selection helpers ──────────────────
    Used by every data tab's quarter filter (Overview, Analytics,
    Pivot, Creatives, Trends) so they behave identically. */
-const ALL_QS = ['Q1','Q2','Q3'];
+const ALL_QS = ['Q1','Q2','Q3','Q4'];
 /* Returns the new selected-quarters array after clicking `q`, preserving
-   Q1<Q2<Q3 order — or null if the click should be ignored (can't deselect
+   Q1<Q2<Q3<Q4 order — or null if the click should be ignored (can't deselect
    the last remaining quarter). */
 function toggleQuarter(current, q) {
   const isActive = current.includes(q);
@@ -3785,7 +3792,7 @@ function toggleQuarter(current, q) {
   return isActive ? current.filter(x => x !== q)
                   : ALL_QS.filter(x => current.includes(x) || x === q);
 }
-function qsLabel(qs) { return qs.length === 3 ? 'Q1 + Q2 + Q3' : qs.join(' + '); }
+function qsLabel(qs) { return qs.join(' + '); }
 /* Local-calendar-date ISO string (YYYY-MM-DD) — deliberately avoids
    Date.toISOString(), which converts to UTC and can shift the date near
    midnight depending on the browser's timezone offset. Matches against
@@ -4578,12 +4585,12 @@ function computeStages(qSel, mktSel, dateFrom, dateTo) {
 /* ── KPI render ─────────────────────────────────────────── */
 function renderOvKpis(t, qSel, prevQ) {
   // QoQ delta pills only make sense against a single prior quarter — so they
-  // show only when exactly one quarter is selected (Q2 vs Q1, Q3 vs Q2). With
+  // show only when exactly one quarter is selected (Q2 vs Q1, Q3 vs Q2, Q4 vs Q3). With
   // multiple quarters selected there's no single baseline, so deltas stay 0
   // (and the pills hide themselves when delta === 0).
   let deltas = { imps:0, clicks:0, ctr:0, gmOrd:0, gmLpvr:0, gmCvr:0, spend:0, cpc:0 };
   const qKeys = normQs(qSel);
-  const prevOf = { Q2:'Q1', Q3:'Q2' };
+  const prevOf = { Q2:'Q1', Q3:'Q2', Q4:'Q3' };
   if (qKeys.length === 1 && prevOf[qKeys[0]]) {
     const p = attrFilterActive(ovAttr) ? ovAttrTotals(prevOf[qKeys[0]], 'all') : computeTotals(prevOf[qKeys[0]], 'all');
     deltas.imps   = (t.imps   - p.imps)   / (p.imps   || 1);
@@ -5487,7 +5494,7 @@ function renderAnalytics() {
 
 /* ── XLSX export (two sheets: By Stage + By Creative) ─────── */
 function exportAnXlsx() {
-  const q   = anState.qs.length === 3 ? 'All' : anState.qs.join('-');
+  const q   = anState.qs.length === ALL_QS.length ? 'All' : anState.qs.join('-');
   const mkt = anState.mkt !== 'all' ? anState.mkt : 'All';
   const ver = anState.offer !== 'all'
     ? '_' + String(offerLabel(anState.offer)).replace(/[^\w.-]+/g, '-')
@@ -6054,7 +6061,7 @@ async function vfLoadVersionData() {
         \`Creative Offer Name\` as creative,
         \`${VF_FIELD}\` as version,${VF_METRIC_COLS}
       FROM \`crk-dco-dash.reporting_data.deliveries_view\`
-      WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
+      WHERE \`Flight\` IN ('Q1','Q2','Q3','Q4') AND \`Segment\` IS NOT NULL
         AND \`${VF_FIELD}\` IS NOT NULL
       GROUP BY q, mkt, stage, creative, version
     `);
@@ -6088,7 +6095,7 @@ async function vfFetchVersionDaily(version) {
           TRIM(\`Segment\`) as stage,
           \`Creative Offer Name\` as creative,${VF_METRIC_COLS}
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
-        WHERE \`Flight\` IN ('Q1','Q2','Q3') AND \`Segment\` IS NOT NULL
+        WHERE \`Flight\` IN ('Q1','Q2','Q3','Q4') AND \`Segment\` IS NOT NULL
           AND \`${VF_FIELD}\` = ${bqLiteral(version)}
         GROUP BY day, q, mkt, stage, creative
         ORDER BY day
@@ -8676,7 +8683,7 @@ function oneSheetPrevSegmentsMonthlyPaced(prevQ, mktSel) {
    total when day-level data isn't loaded. */
 function oneSheetResolveComparison(qSel, mktSel, dateFrom, dateTo) {
   const qKeys = normQs(qSel);
-  const prevOf = { Q2:'Q1', Q3:'Q2' };
+  const prevOf = { Q2:'Q1', Q3:'Q2', Q4:'Q3' };
   let prevQ;
   if (qKeys.length === 1) {
     prevQ = prevOf[qKeys[0]];
@@ -9271,7 +9278,7 @@ function generateOneSheet() {
 }
 
 function _generateOneSheet() {
-  const qSel     = typeof ovQs       !== 'undefined' ? ovQs       : ['Q1','Q2','Q3'];
+  const qSel     = typeof ovQs       !== 'undefined' ? ovQs       : [...ALL_QS];
   const mktSel   = typeof ovMkt      !== 'undefined' ? ovMkt      : 'all';
   const dateFrom = typeof ovDateFrom !== 'undefined' ? ovDateFrom : null;
   const dateTo   = typeof ovDateTo   !== 'undefined' ? ovDateTo   : null;
@@ -9446,7 +9453,7 @@ function trIsGoodDirection(direction, pct) {
   return direction === 'down' ? pct <= 0 : pct >= 0;
 }
 
-const TR_QS = ['Q1','Q2','Q3'];
+const TR_QS = [...ALL_QS];
 
 /* Calendar bounds for each flight, used to detect which quarter (if any) is
    currently live and how many days it's been running — see
@@ -9455,6 +9462,7 @@ const TR_QUARTER_BOUNDS = {
   Q1: { start: '2026-01-01', end: '2026-03-31' },
   Q2: { start: '2026-04-01', end: '2026-06-30' },
   Q3: { start: '2026-07-01', end: '2026-09-30' },
+  Q4: { start: '2026-10-01', end: '2026-12-31' },
 };
 
 /* LPVR pixel counts aren't selected by the BigQuery daily query (see
@@ -9497,7 +9505,7 @@ function trGetValClipped(q, mkt, metric, daysLive) {
   return pvAggregate(rows, metric);
 }
 
-let trState   = { view:'metric', metrics:['imps'], mkt:'all', gran:'quarterly', quarters:['Q1','Q2','Q3'], version:'all', stage:'all', offer:'all', initiative:'all', creativeType:'all', dateFrom:null, dateTo:null };
+let trState   = { view:'metric', metrics:['imps'], mkt:'all', gran:'quarterly', quarters:[...ALL_QS], version:'all', stage:'all', offer:'all', initiative:'all', creativeType:'all', dateFrom:null, dateTo:null };
 let trDailyData = [];
 let trDailyLoaded = false;
 let trDailyAttempted = false;
@@ -10151,7 +10159,7 @@ async function tryLoadTrendDailyData() {
           SUM(\`CKT_bNON_HISPANIC_ORDER Count\`) as gmOrd,
           SUM(\`Total Cost\`) as spend
         FROM \`crk-dco-dash.reporting_data.deliveries_view\`
-        WHERE \`Flight\` IN ('Q1','Q2','Q3')
+        WHERE \`Flight\` IN ('Q1','Q2','Q3','Q4')
         GROUP BY day, q, mkt
         ORDER BY day
       `);
@@ -11068,7 +11076,7 @@ const GLOSSARY_TERMS = [
     def:'An audience bucket in the DCO decision tree. Each segment reflects a user\'s position in the purchase funnel (e.g., Homepage Visitor, Cart Abandoner, Order) and determines which set of creatives is eligible to serve.',
   },
   { term:'Flight', cat:'creative',
-    def:'A quarterly campaign period. Q1 = Jan–Mar, Q2 = Apr–Jun, Q3 = Jul–Sep. Each flight has its own trafficking matrix and creative set.',
+    def:'A quarterly campaign period. Q1 = Jan–Mar, Q2 = Apr–Jun, Q3 = Jul–Sep, Q4 = Oct–Dec. Each flight has its own trafficking matrix and creative set.',
   },
   { term:'Decision Tree', cat:'creative',
     def:'The logic structure that maps audience signals to creative versions in a DCO campaign. Conditions are defined in a decision tree spreadsheet and determine which creative offer serves for each segment.',
