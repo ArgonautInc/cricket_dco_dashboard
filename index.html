@@ -1735,7 +1735,7 @@ svg { display: block; }
         <input type="text" id="globalSearch" placeholder="Search creatives, segments…"/>
       </div>
       <div class="refresh-chip" id="refreshChip" role="status" aria-live="polite"></div>
-      <button class="header-lookup-btn" id="lookupUploadBtn" title="The DCO trafficking matrix loads for everyone from Cloud Storage (lookup-table/ folder). Use this to try a file in your browser only — it's replaced by the cloud copy at your next sign-in.">
+      <button class="header-lookup-btn" id="lookupUploadBtn" title="The DCO trafficking matrix loads for everyone from Cloud Storage (lookups/ folder). Use this to try a file in your browser only — it's replaced by the cloud copy at your next sign-in.">
         <svg-icon name="upload" size="12"></svg-icon> Lookup Table
       </button>
       <div class="offer-map-chip" id="lookupChip" style="display:none">
@@ -4066,12 +4066,13 @@ function stageCanonicalKey(stage, creative) {
    and punctuation stripped, since the matrix and BigQuery don't always
    agree on either.
 
-   Source: every .xlsx/.csv in LOOKUP_CLOUD_PREFIX of the delivery bucket,
-   loaded for everyone on sign-in (the dashboard's service account is
+   Source: every .xlsx/.csv in LOOKUP_CLOUD_PREFIX of the delivery bucket
+   (files without the columns above are skipped), loaded for everyone on
+   sign-in (the dashboard's service account is
    read-only, so files are added there through the Cloud Storage console).
    The header upload button applies a file in this browser only, until the
    next sign-in finds files in the cloud folder. */
-const LOOKUP_CLOUD_PREFIX = 'lookup-table/';
+const LOOKUP_CLOUD_PREFIX = 'lookups/';
 const LOOKUP_ATTRS_KEY = 'crkt_lookup_attrs_v1';
 const CREATIVE_TYPES = ['Character-Led', 'Text-Led', 'Product-Led', 'In-Situ'];
 const CREATIVE_TYPE_OTHER = 'Other';
@@ -11145,7 +11146,7 @@ const GLOSSARY_TERMS = [
     def:'The expected export format for Performance Scoring uploads. Required columns: Creative Id, Publisher, Funnel, Ad Type, Date Breakdown, Impressions, Clicks, Landing Page Visits, Total Device Orders. Optional: 100% Video Completes (or VCOMP), VV25 (or Video Views To 25 Percent), Social Engagements (or Engagements).',
   },
   { term:'Lookup Table', cat:'scoring',
-    def:'The DCO trafficking matrix (.xlsx/.csv), loaded for everyone on sign-in from the lookup-table/ folder of the crk-dco-bucket-daily-performance Cloud Storage bucket (newer files override older ones). The Lookup Table button in the header tries a file in your browser only, until the next sign-in. Its Initiative and Creative Name columns become the Initiative and Creative Type filters on Overview, Trends, Pivot, Performance Data and Fatigue. Matched to delivery rows on Segment + Creative Offer Name (falling back to Creative Offer Name alone), and to crosstab rows on Creative ID. Creative Type falls back to the "Text-Led"/"Character-Led"/"Product-Led" token in the Creative Offer Name when no table is loaded; Initiative shows as Unassigned.',
+    def:'The DCO trafficking matrix (.xlsx/.csv), loaded for everyone on sign-in from the lookups/ folder of the crk-dco-bucket-daily-performance Cloud Storage bucket (newer files override older ones). The Lookup Table button in the header tries a file in your browser only, until the next sign-in. Its Initiative and Creative Name columns become the Initiative and Creative Type filters on Overview, Trends, Pivot, Performance Data and Fatigue. Matched to delivery rows on Segment + Creative Offer Name (falling back to Creative Offer Name alone), and to crosstab rows on Creative ID. Creative Type falls back to the "Text-Led"/"Character-Led"/"Product-Led" token in the Creative Offer Name when no table is loaded; Initiative shows as Unassigned.',
   },
   { term:'Dataset Type', cat:'scoring',
     def:'Daily, Monthly, or Summary — chosen explicitly at upload time (not auto-detected). Daily is one row per creative × publisher × funnel × date; Monthly is aggregated to month; Summary is full-period totals with no date breakdown. Each is stored and scored independently.',
